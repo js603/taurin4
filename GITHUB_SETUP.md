@@ -57,10 +57,19 @@ Workflow가 repository 이름을 기준으로 Vite `base`, PWA `start_url`, `sco
 
 Windows installer는 코드서명 전이므로 SmartScreen 경고가 표시될 수 있습니다.
 
+Windows job은 WiX v3 MSI가 요구하는 VBScript 기능이 보장되는
+`windows-2022` runner를 사용합니다. NSIS와 MSI는 별도 단계로 빌드해
+실패 지점이 로그에 분리되며, 두 설치 파일 모두 생성되어야 artifact를 업로드합니다.
+
 Android debug APK는 실제 테스트 단말 설치용입니다.
 
+Android job은 Node 24 호환 `setup-android@v4`와 `setup-java@v5`를 사용하고,
+삭제된 legacy Android SDK `tools` 패키지를 요청하지 않습니다.
+
 iOS는 Apple 정책상 실기기 설치 및 App Store 배포에 코드서명이 필수입니다.
-Secret이 없을 때는 unsigned iOS 산출물을 생성합니다.
+Secret이 없을 때는 CI 프로젝트 생성 전용 placeholder Team ID로 unsigned iOS
+산출물을 생성합니다. 이 값은 서명에 사용되지 않으며, signed job은 실제
+`APPLE_DEVELOPMENT_TEAM` secret 없이는 즉시 실패합니다.
 
 ## 4. Android signed APK/AAB
 
