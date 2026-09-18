@@ -1,0 +1,33 @@
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote@latest",
+        "https://api.githubcopilot.com/mcp/",
+        "--header",
+        "Authorization: Bearer ${GITHUB_TOKEN}"
+      ],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    },
+    "maestro": {
+      "command": "npx",
+      "args": ["-y", "@luxurylabs/maestro-mcp@latest"]
+    },
+    "tauri": {
+      "command": "npx",
+      "args": ["-y", "@hypothesi/tauri-mcp-server@latest"]
+    }
+  }
+}
