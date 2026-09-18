@@ -1,11 +1,18 @@
 import { useMemo, useState } from "react";
-import { GameEngine } from "../application/gameEngine";
-import { PHASE_LABELS, ROLE_COUNTS } from "../domain/rules";
-import type { GamePhase, GameState, Player, Testimony } from "../domain/types";
+import { TrialSession } from "../application/trialSession";
+import {
+  TRIAL_PHASE_LABELS,
+  type TrialIntentResult,
+  type TrialPhase,
+  type TrialPlayer,
+  type TrialSessionState,
+  type TrialTestimony,
+} from "../application/trialSessionTypes";
+import { MEDIEVAL_TRIAL_V01 } from "../domain/rules";
 
 const INITIAL_SEED = 20260918;
 
-function phaseActionLabel(phase: GamePhase): string {
+function phaseActionLabel(phase: TrialPhase): string {
   switch (phase) {
     case "opening-night":
       return "대연회장 문 열기";
@@ -24,15 +31,15 @@ function phaseActionLabel(phase: GamePhase): string {
   }
 }
 
-function getPlayer(state: GameState, playerId: string): Player | undefined {
+function getPlayer(state: TrialSessionState, playerId: string): TrialPlayer | undefined {
   return state.players.find((player) => player.id === playerId);
 }
 
-function formatVotes(state: GameState, playerId: string): string {
+function formatVotes(state: TrialSessionState, playerId: string): string {
   return String(state.accusationVotes.find((vote) => vote.playerId === playerId)?.count ?? 0);
 }
 
-function TestimonyCard({ testimony }: { testimony: Testimony }) {
+function TestimonyCard({ testimony }: { testimony: TrialTestimony }) {
   return (
     <article className={`testimony testimony--${testimony.reliability}`}>
       <div className="testimony__mark" aria-hidden="true">
@@ -53,7 +60,7 @@ function SeatCard({
   voteCount,
   onSelect,
 }: {
-  player: Player;
+  player: TrialPlayer;
   selected: boolean;
   disabled: boolean;
   voteCount: string;
@@ -80,25 +87,25 @@ function SeatCard({
 }
 
 export function MedievalTrialPage() {
-  const [engine, setEngine] = useState(() => new GameEngine(INITIAL_SEED));
-  const [state, setState] = useState<GameState>(() => engine.getState());
+  const [engine, setEngine] = useState(() => new TrialSession(INITIAL_SEED));
+  const [state, setState] = useState<TrialSessionState>(() => engine.getState());
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const human = useMemo(() => getPlayer(state, state.playerId), [state]);
   const defendants = state.defendants
     .map((playerId) => getPlayer(state, playerId))
-    .filter((player): player is Player => Boolean(player));
+    .filter((player): player is TrialPlayer => Boolean(player));
   const currentSelection = selectedPlayerId ?? defendants[0]?.id ?? null;
 
-  function commit(result: { state: GameState; error: string | null }) {
+  function commit(result: TrialIntentResult) {
     setState(result.state);
     setError(result.error);
     if (!result.error) setSelectedPlayerId(null);
   }
 
   function resetGame() {
-    const nextEngine = new GameEngine(INITIAL_SEED);
+    const nextEngine = new TrialSession(INITIAL_SEED);
     setEngine(nextEngine);
     setState(nextEngine.getState());
     setSelectedPlayerId(null);
@@ -143,7 +150,7 @@ export function MedievalTrialPage() {
             </span>
             <span>
               <small>현재 장면</small>
-              <strong>{PHASE_LABELS[state.phase]}</strong>
+              <strong>{TRIAL_PHASE_LABELS[state.phase]}</strong>
             </span>
           </div>
           <button className="quiet-button" type="button" onClick={resetGame}>
@@ -182,7 +189,9 @@ export function MedievalTrialPage() {
                   player={player}
                   selected={player.id === selectedPlayerId || player.id === currentSelection}
                   disabled={
-                    (state.phase !== "accusation" && state.phase !== "verdict") || player.isHuman
+                    (state.phase !== "accusation" && state.phase !== "verdict") ||
+                    player.isHuman ||
+                    (state.phase === "verdict" && !state.defendants.includes(player.id))
                   }
                   voteCount={state.phase === "accusation" ? formatVotes(state, player.id) : "0"}
                   onSelect={setSelectedPlayerId}
@@ -232,7 +241,7 @@ export function MedievalTrialPage() {
           </div>
 
           <div className="story-block">
-            <p className="story-block__eyebrow">{PHASE_LABELS[state.phase]}</p>
+            <p className="story-block__eyebrow">{TRIAL_PHASE_LABELS[state.phase]}</p>
             <h2>{state.currentPrompt}</h2>
             <p className="story-block__body">
               {state.phase === "resolution" && state.resolution
@@ -282,13 +291,13 @@ export function MedievalTrialPage() {
                 <p className="section-label">판결 기록</p>
                 <h3>
                   {state.resolution?.text ??
-                    (state.winner === "commoners"
+                    (state.winner === "residents"
                       ? "성 안에 평화가 돌아왔다."
                       : "어둠이 승리했다.")}
                 </h3>
                 <p>
                   {state.winner
-                    ? state.winner === "commoners"
+                    ? state.winner === "residents"
                       ? "주민들이 성문을 지켰다."
                       : "살인자들이 성의 운명을 움켜쥐었다."
                     : "아직 마지막 장은 닫히지 않았다."}
@@ -338,19 +347,19 @@ export function MedievalTrialPage() {
             <div className="role-counts">
               <span>
                 <i className="role-dot role-dot--blood" /> 살인자{" "}
-                <strong>{ROLE_COUNTS.murderer}</strong>
+                <strong>{MEDIEVAL_TRIAL_V01.roleCount.murderer}</strong>
               </span>
               <span>
                 <i className="role-dot role-dot--iron" /> 집행관{" "}
-                <strong>{ROLE_COUNTS.bailiff}</strong>
+                <strong>{MEDIEVAL_TRIAL_V01.roleCount.investigator}</strong>
               </span>
               <span>
                 <i className="role-dot role-dot--herb" /> 약제사{" "}
-                <strong>{ROLE_COUNTS.apothecary}</strong>
+                <strong>{MEDIEVAL_TRIAL_V01.roleCount.apothecary}</strong>
               </span>
               <span>
                 <i className="role-dot role-dot--parchment" /> 평민{" "}
-                <strong>{ROLE_COUNTS.commoner}</strong>
+                <strong>{MEDIEVAL_TRIAL_V01.roleCount.commoner}</strong>
               </span>
             </div>
           </section>

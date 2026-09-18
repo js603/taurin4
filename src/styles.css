@@ -923,9 +923,12 @@ button:focus-visible {
   .hall-panel {
     order: 1;
   }
+  .side-rail--left .status-card:not(.status-card--player) {
+    order: 2;
+  }
   .side-rail--right {
     display: grid;
-    order: 2;
+    order: 3;
     grid-template-columns: 1fr;
   }
   .status-card:not(.status-card--player) {

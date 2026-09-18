@@ -15,5 +15,11 @@
     "src/features/medieval-trial/**/*.ts",
     "tests/**/*.ts",
     "types/**/*.d.ts"
+  ],
+  "exclude": [
+    "src/features/medieval-trial/application/trialSession.ts",
+    "src/features/medieval-trial/application/trialSessionTypes.ts",
+    "src/features/medieval-trial/application/**/*.test.ts",
+    "src/features/medieval-trial/ui/**/*"
   ]
 }

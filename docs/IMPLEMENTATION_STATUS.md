@@ -15,11 +15,15 @@
 - 자동 봇 시뮬레이션
 - lowInfo / baseline / highInfo 민감도 프로필
 - 코어 테스트 7개
+- React `TrialSession` adapter와 결정론 테스트 4개
+- 대연회장 / 상태 표시 / 연대기 화면
+- 토론 → 고발 → 피고석 → 최종 판결 수직 슬라이스
+- 데스크톱 / 태블릿 / 모바일 반응형 레이아웃
+- Web/PWA 프로덕션 빌드
 
 ## 다음 구현
-1. React 화면 상태 adapter
-2. 대연회장 메인 화면
-3. 토론 → 고발 → 변론 → 판결 UI
-4. 묘지 채팅 UI
-5. 로컬 8인 hot-seat / bot playtest
-6. 이후 네트워크 adapter
+1. 역할별 야간 행동 UI
+2. 묘지 채팅 UI
+3. 로컬 8인 hot-seat / bot playtest
+4. 사운드 및 장면 전환 연출
+5. 이후 네트워크 adapter

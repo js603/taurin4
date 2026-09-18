@@ -113,7 +113,7 @@ Actions Variable:
 
 ```json
 {
-  "productName": "taurin4",
+  "productName": "중세재판",
   "identifier": "com.js603.taurin4",
   "version": "0.1.0"
 }

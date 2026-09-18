@@ -1,6 +1,8 @@
-# taurin4
+# 중세재판 · taurin4
 
-GitHub `js603/taurin4` 용으로 사전 설정된 Tauri v2 + React + TypeScript + Vite 멀티플랫폼 기본 설계입니다.
+`중세재판` 게임을 Web/PWA, Windows, Android, iOS에서 공유하는 Tauri v2 + React + TypeScript + Vite 프로젝트입니다. 개발 프로젝트와 저장소 이름은 `taurin4`를 유지합니다.
+
+현재 v0.1은 결정론적 8인 게임 코어와 대연회장 수직 슬라이스(토론 → 고발 → 피고석 → 최종 판결)를 포함합니다.
 
 
 ## Preconfigured GitHub
