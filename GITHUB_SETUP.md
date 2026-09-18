@@ -70,6 +70,8 @@ iOS는 Apple 정책상 실기기 설치 및 App Store 배포에 코드서명이 
 Secret이 없을 때는 CI 프로젝트 생성 전용 placeholder Team ID로 unsigned iOS
 산출물을 생성합니다. 이 값은 서명에 사용되지 않으며, signed job은 실제
 `APPLE_DEVELOPMENT_TEAM` secret 없이는 즉시 실패합니다.
+CI runner에는 XcodeGen과 CocoaPods를 명시적으로 설치하고 버전을 출력한 뒤
+iOS 프로젝트를 초기화합니다.
 
 ## 4. Android signed APK/AAB
 

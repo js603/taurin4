@@ -228,6 +228,9 @@ jobs:
           targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Install Apple project tools
+        shell: bash
+        run: brew install xcodegen cocoapods
       - name: Verify Apple build tools
         shell: bash
         run: |
