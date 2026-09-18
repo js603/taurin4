@@ -60,6 +60,8 @@ Windows installer는 코드서명 전이므로 SmartScreen 경고가 표시될 �
 Windows job은 WiX v3 MSI가 요구하는 VBScript 기능이 보장되는
 `windows-2022` runner를 사용합니다. NSIS와 MSI는 별도 단계로 빌드해
 실패 지점이 로그에 분리되며, 두 설치 파일 모두 생성되어야 artifact를 업로드합니다.
+MSI 언어는 한글 제품명 `중세재판`을 지원하도록 `ko-KR`(code page 949)로
+고정합니다.
 
 Android debug APK는 실제 테스트 단말 설치용입니다.
 
