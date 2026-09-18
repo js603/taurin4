@@ -16,18 +16,18 @@ export default defineConfig({
           VitePWA({
             registerType: "autoUpdate",
             manifest: {
-              name: "taurin4",
-              short_name: "taurin4",
-              description: "One AI-friendly codebase for Web/PWA, Windows, Android and iOS",
-              theme_color: "#111827",
-              background_color: "#111827",
+              name: "중세재판",
+              short_name: "중세재판",
+              description: "성 아그네스 성에서 펼쳐지는 결정론적 추리 재판",
+              theme_color: "#171310",
+              background_color: "#171310",
               display: "standalone",
               start_url: webBasePath,
-              scope: webBasePath
-            }
-          })
+              scope: webBasePath,
+            },
+          }),
         ]
-      : [])
+      : []),
   ],
   clearScreen: false,
   server: {
@@ -38,22 +38,17 @@ export default defineConfig({
       ? {
           protocol: "ws",
           host,
-          port: 1421
+          port: 1421,
         }
       : undefined,
     watch: {
-      ignored: ["**/src-tauri/**"]
-    }
+      ignored: ["**/src-tauri/**"],
+    },
   },
   envPrefix: ["VITE_", "TAURI_ENV_*"],
   build: {
-    target:
-      tauriPlatform === "windows"
-        ? "chrome105"
-        : isTauriBuild
-          ? "safari13"
-          : "es2022",
+    target: tauriPlatform === "windows" ? "chrome105" : isTauriBuild ? "safari13" : "es2022",
     minify: !process.env.TAURI_ENV_DEBUG,
-    sourcemap: !!process.env.TAURI_ENV_DEBUG
-  }
+    sourcemap: !!process.env.TAURI_ENV_DEBUG,
+  },
 });
