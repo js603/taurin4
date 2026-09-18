@@ -1,0 +1,254 @@
+name: Build All + Deploy Pages
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: build-all-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Lint + Test + Web build
+        run: npm run check
+
+  web:
+    name: Web / PWA
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Set GitHub Pages base path
+        shell: bash
+        run: echo "VITE_BASE_PATH=/taurin4/" >> "$GITHUB_ENV"
+      - name: Build Web/PWA
+        run: npm run build
+      - name: Upload downloadable Web/PWA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-pwa
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist/
+
+  deploy-pages:
+    name: Deploy GitHub Pages
+    needs: web
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  windows:
+    name: Windows x64
+    needs: quality
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build MSI + NSIS setup EXE
+        run: npm run tauri -- build --bundles msi,nsis
+      - name: Stage Windows installers
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/windows | Out-Null
+          Get-ChildItem -Path src-tauri/target/release/bundle -Recurse -File |
+            Where-Object { $_.Extension -eq ".msi" -or $_.Name -like "*-setup.exe" } |
+            Copy-Item -Destination artifacts/windows
+          if (-not (Get-ChildItem artifacts/windows -File)) {
+            throw "No Windows installer artifacts found."
+          }
+      - name: Upload Windows installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64-installers
+          path: artifacts/windows/
+          if-no-files-found: error
+          retention-days: 14
+
+  android:
+    name: Android
+    needs: quality
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_SIGNING_ENABLED: ${{ vars.ANDROID_SIGNING_ENABLED }}
+      ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+      - name: Resolve Android NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          if [ ! -d "$ANDROID_HOME/ndk" ] || [ -z "$(ls -A "$ANDROID_HOME/ndk" 2>/dev/null)" ]; then
+            NDK_PACKAGE="$(sdkmanager --list | awk '/^  ndk;[0-9]/{print $1}' | sort -V | tail -n 1)"
+            if [ -z "$NDK_PACKAGE" ]; then
+              echo "Unable to resolve an installed/available Android NDK." >&2
+              exit 1
+            fi
+            sdkmanager "$NDK_PACKAGE"
+          fi
+          NDK_VERSION="$(ls -1 "$ANDROID_HOME/ndk" | sort -V | tail -n 1)"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          echo "Using NDK $NDK_VERSION"
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Initialize Android project
+        run: npm run tauri -- android init --ci
+      - name: Build installable debug APK
+        run: npm run tauri -- android build --debug --apk --ci
+      - name: Stage debug APK
+        run: |
+          python3 scripts/ci/stage_artifacts.py \
+            --dest artifacts/android-debug \
+            "src-tauri/gen/android/app/build/outputs/apk/**/*.apk"
+      - name: Upload Android debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-apk
+          path: artifacts/android-debug/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Validate Android signing secrets
+        if: env.ANDROID_SIGNING_ENABLED == 'true'
+        shell: bash
+        run: |
+          test -n "$ANDROID_KEY_BASE64"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
+          test -n "$ANDROID_STORE_PASSWORD"
+      - name: Configure Android release signing
+        if: env.ANDROID_SIGNING_ENABLED == 'true'
+        run: bash scripts/ci/setup_android_signing.sh
+      - name: Build signed release APK + AAB
+        if: env.ANDROID_SIGNING_ENABLED == 'true'
+        run: npm run tauri -- android build --apk --aab --ci
+      - name: Stage Android release artifacts
+        if: env.ANDROID_SIGNING_ENABLED == 'true'
+        run: |
+          python3 scripts/ci/stage_artifacts.py \
+            --dest artifacts/android-release \
+            "src-tauri/gen/android/app/build/outputs/apk/**/*.apk" \
+            "src-tauri/gen/android/app/build/outputs/bundle/**/*.aab"
+      - name: Upload signed Android release
+        if: env.ANDROID_SIGNING_ENABLED == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release-signed
+          path: artifacts/android-release/
+          if-no-files-found: error
+          retention-days: 14
+
+  ios:
+    name: iOS
+    needs: quality
+    runs-on: macos-latest
+    env:
+      IOS_SIGNING_ENABLED: ${{ vars.IOS_SIGNING_ENABLED }}
+      IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
+      IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+      IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
+      APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Initialize iOS project
+        run: npm run tauri -- ios init --ci
+      - name: Build unsigned iOS archive / IPA
+        run: npm run tauri -- ios build --no-sign --ci
+      - name: Stage unsigned iOS artifacts
+        shell: bash
+        run: |
+          mkdir -p artifacts/ios-unsigned
+          find src-tauri/gen/apple/build -type f -name "*.ipa" -exec cp {} artifacts/ios-unsigned/ \; || true
+          find src-tauri/gen/apple/build -type d -name "*.xcarchive" -print > artifacts/ios-unsigned/ARCHIVE_PATHS.txt || true
+      - name: Upload unsigned iOS build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-unsigned
+          path: |
+            artifacts/ios-unsigned/
+            src-tauri/gen/apple/build/**/*.xcarchive/**
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Validate iOS signing secrets
+        if: env.IOS_SIGNING_ENABLED == 'true'
+        shell: bash
+        run: |
+          test -n "$IOS_CERTIFICATE"
+          test -n "$IOS_CERTIFICATE_PASSWORD"
+          test -n "$IOS_MOBILE_PROVISION"
+      - name: Build signed iOS IPA
+        if: env.IOS_SIGNING_ENABLED == 'true'
+        run: npm run tauri -- ios build --export-method app-store-connect --ci
+      - name: Stage signed IPA
+        if: env.IOS_SIGNING_ENABLED == 'true'
+        run: |
+          python3 scripts/ci/stage_artifacts.py \
+            --dest artifacts/ios-signed \
+            "src-tauri/gen/apple/build/**/*.ipa"
+      - name: Upload signed iOS IPA
+        if: env.IOS_SIGNING_ENABLED == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-signed-ipa
+          path: artifacts/ios-signed/
+          if-no-files-found: error
+          retention-days: 14

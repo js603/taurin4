@@ -1,72 +1,86 @@
-export const ROLE_LABELS = {
-  murderer: "살인자",
-  bailiff: "집행관",
-  apothecary: "약제사",
-  commoner: "평민",
-} as const;
+export type PlayerId = string;
 
-export type Role = keyof typeof ROLE_LABELS;
+export type Role = "murderer" | "investigator" | "apothecary" | "commoner";
+export type Faction = "residents" | "murderers";
 
 export type GamePhase =
-  "opening-night" | "debate" | "accusation" | "defendants" | "verdict" | "resolution" | "ended";
+  | "prologue-night"
+  | "dawn"
+  | "discussion"
+  | "accusation"
+  | "defense"
+  | "verdict"
+  | "night"
+  | "game-over";
 
-export type Winner = "commoners" | "murderers" | null;
+export type TestimonyStrength = "weak" | "medium" | "strong";
 
-export interface Player {
-  id: string;
-  name: string;
-  title: string;
-  role: Role;
-  living: boolean;
-  isHuman: boolean;
+export interface PlayerState {
+  readonly id: PlayerId;
+  readonly seat: number;
+  readonly name: string;
+  readonly role: Role;
+  readonly faction: Faction;
+  alive: boolean;
+  selfProtectionUsed: boolean;
+  lastProtectedTargetId: PlayerId | null;
 }
 
-export interface OpeningAttack {
-  targetId: string;
-  targetName: string;
-  killed: false;
-  description: string;
+export interface NightIntent {
+  readonly murderTargetId: PlayerId;
+  readonly investigationTargetId: PlayerId | null;
+  readonly protectionTargetId: PlayerId | null;
+}
+
+export interface InvestigationResult {
+  readonly day: number;
+  readonly investigatorId: PlayerId;
+  readonly targetId: PlayerId;
+  readonly targetActed: boolean;
 }
 
 export interface Testimony {
-  id: string;
-  speakerId: string;
-  speakerName: string;
-  text: string;
-  reliability: "faint" | "clear" | "strong";
+  readonly id: string;
+  readonly day: number;
+  readonly recipientId: PlayerId;
+  readonly strength: TestimonyStrength;
+  readonly candidateIds: readonly PlayerId[];
+  readonly sourceActorId: PlayerId | null;
 }
 
-export interface VoteTally {
-  playerId: string;
-  count: number;
+export interface NightResolution {
+  readonly day: number;
+  readonly prologue: boolean;
+  readonly murderTargetId: PlayerId;
+  readonly protectedTargetId: PlayerId | null;
+  readonly murderPrevented: boolean;
+  readonly killedPlayerId: PlayerId | null;
+  readonly investigation: InvestigationResult | null;
+  readonly testimonies: readonly Testimony[];
 }
 
-export interface Resolution {
-  kind: "execution" | "deadlock";
-  targetId: string | null;
-  targetName: string | null;
-  text: string;
+export interface AccusationResolution {
+  readonly day: number;
+  readonly votes: Readonly<Record<PlayerId, PlayerId>>;
+  readonly finalists: readonly [PlayerId, PlayerId];
+}
+
+export interface VerdictResolution {
+  readonly day: number;
+  readonly votes: Readonly<Record<PlayerId, PlayerId>>;
+  readonly finalists: readonly [PlayerId, PlayerId];
+  readonly eliminatedPlayerId: PlayerId | null;
+  readonly tied: boolean;
 }
 
 export interface GameState {
-  seed: number;
-  phase: GamePhase;
+  readonly gameId: string;
+  readonly seed: number;
   day: number;
-  night: number;
-  playerId: string;
-  players: Player[];
-  openingAttack: OpeningAttack;
-  testimonies: Testimony[];
-  accusationVotes: VoteTally[];
-  defendants: string[];
-  verdictVotes: VoteTally[];
-  resolution: Resolution | null;
-  winner: Winner;
-  currentPrompt: string;
-  chronicle: string[];
-}
-
-export interface PlayerIntentResult {
-  state: GameState;
-  error: string | null;
+  phase: GamePhase;
+  players: PlayerState[];
+  nightHistory: NightResolution[];
+  accusationHistory: AccusationResolution[];
+  verdictHistory: VerdictResolution[];
+  winner: Faction | null;
 }

@@ -1,260 +1,309 @@
-import {
-  PLAYER_SEATS,
-  ROLE_COUNTS,
-  createOpeningAttack,
-  createTestimonies,
-  determineWinner,
-  livingPlayers,
-  rankVotes,
-} from "../domain/rules";
-import { SeededRandom } from "../domain/seededRandom";
-import type { GameState, Player, PlayerIntentResult, Role, VoteTally } from "../domain/types";
+import { MEDIEVAL_TRIAL_V01, checkWinner, factionOf } from "../domain/rules.js";
+import type { RandomSource } from "../domain/seededRandom.js";
+import type {
+  AccusationResolution,
+  GameState,
+  NightIntent,
+  NightResolution,
+  PlayerId,
+  PlayerState,
+  Role,
+  Testimony,
+  TestimonyStrength,
+  VerdictResolution,
+} from "../domain/types.js";
 
-const HUMAN_PLAYER_ID = "isabel";
+const ROLE_DECK: readonly Role[] = [
+  "murderer",
+  "murderer",
+  "investigator",
+  "apothecary",
+  "commoner",
+  "commoner",
+  "commoner",
+  "commoner",
+];
 
-function cloneState(state: GameState): GameState {
-  return structuredClone(state);
+export function createGame(seed: number, rng: RandomSource): GameState {
+  const roles = rng.shuffle(ROLE_DECK);
+  const players: PlayerState[] = roles.map((role, seat) => ({
+    id: `p${seat + 1}`,
+    seat,
+    name: `Player ${seat + 1}`,
+    role,
+    faction: factionOf(role),
+    alive: true,
+    selfProtectionUsed: false,
+    lastProtectedTargetId: null,
+  }));
+
+  return {
+    gameId: `medieval-trial-${seed}`,
+    seed,
+    day: 0,
+    phase: "prologue-night",
+    players,
+    nightHistory: [],
+    accusationHistory: [],
+    verdictHistory: [],
+    winner: null,
+  };
 }
 
-function voteTally(votes: string[]): VoteTally[] {
-  const counts = new Map<string, number>();
-  for (const vote of votes) counts.set(vote, (counts.get(vote) ?? 0) + 1);
-  return [...counts.entries()].map(([playerId, count]) => ({ playerId, count }));
+function playerById(state: GameState, id: PlayerId): PlayerState {
+  const player = state.players.find((candidate) => candidate.id === id);
+  if (!player) throw new Error(`unknown player: ${id}`);
+  return player;
 }
 
-function roleDeck(random: SeededRandom): Role[] {
-  const roles: Role[] = [];
-  for (const [role, count] of Object.entries(ROLE_COUNTS) as [Role, number][]) {
-    for (let index = 0; index < count; index += 1) roles.push(role);
-  }
-  return random.shuffle(roles);
+function requireAliveRole(state: GameState, role: Role): PlayerState {
+  const player = state.players.find((candidate) => candidate.alive && candidate.role === role);
+  if (!player) throw new Error(`no living ${role}`);
+  return player;
 }
 
-function promptForPhase(state: GameState): string {
-  switch (state.phase) {
-    case "opening-night":
-      return "종이 세 번 울리면 대연회장의 문이 열린다.";
-    case "debate":
-      return "증언의 빈틈을 살피고, 누가 거짓말을 하는지 찾아라.";
-    case "accusation":
-      return "한 사람을 고발하라. 다른 이들의 고발과 함께 피고석이 정해진다.";
-    case "defendants":
-      return "두 사람이 피고석에 섰다. 그들의 마지막 말을 들을 때다.";
-    case "verdict":
-      return "이제 배심의 칼끝을 한 사람에게 향해야 한다.";
-    case "resolution":
-      return "판결은 기록되었다. 다음 종이 울리기 전, 숨을 고르라.";
-    case "ended":
-      return state.winner === "commoners"
-        ? "성 안의 살인자는 모두 드러났다."
-        : "어둠이 성벽 안쪽까지 번졌다.";
-  }
+function assertAliveTarget(state: GameState, id: PlayerId, label: string): PlayerState {
+  const player = playerById(state, id);
+  if (!player.alive) throw new Error(`${label} must target a living player`);
+  return player;
 }
 
-export class GameEngine {
-  private readonly random: SeededRandom;
-  private state: GameState;
+function actedLastNight(state: GameState, playerId: PlayerId): boolean {
+  const player = playerById(state, playerId);
+  return player.role !== "commoner";
+}
 
-  constructor(seed = 240918, playerId = HUMAN_PLAYER_ID) {
-    this.random = new SeededRandom(seed);
-    const roles = roleDeck(this.random);
-    const players: Player[] = PLAYER_SEATS.map((seat, index) => ({
-      ...seat,
-      role: roles[index]!,
-      living: true,
-      isHuman: seat.id === playerId,
-    }));
-    const openingTarget = this.random.pick(players);
+function buildTestimonies(
+  state: GameState,
+  rng: RandomSource,
+  day: number,
+): Testimony[] {
+  const alive = state.players.filter((player) => player.alive);
+  const actors = alive.filter((player) => actedLastNight(state, player.id));
+  const recipientCount = Math.min(
+    alive.length,
+    rng.int(MEDIEVAL_TRIAL_V01.testimonyRecipientsMin, MEDIEVAL_TRIAL_V01.testimonyRecipientsMax),
+  );
+  const recipients = rng.shuffle(alive).slice(0, recipientCount);
 
-    this.state = {
-      seed,
-      phase: "opening-night",
-      day: 0,
-      night: 1,
-      playerId,
-      players,
-      openingAttack: createOpeningAttack(openingTarget),
-      testimonies: [],
-      accusationVotes: [],
-      defendants: [],
-      verdictVotes: [],
-      resolution: null,
-      winner: null,
-      currentPrompt: "종이 세 번 울리면 대연회장의 문이 열린다.",
-      chronicle: [
-        "성 아그네스 성의 대연회장에 여덟 사람이 모였다.",
-        createOpeningAttack(openingTarget).description,
-      ],
+  return recipients.map((recipient, index) => {
+    const roll = rng.next();
+    const strength: TestimonyStrength = roll < 0.6 ? "weak" : roll < 0.9 ? "medium" : "strong";
+    const sourceActor = actors.length > 0 ? rng.pick(actors) : null;
+
+    let candidateIds: PlayerId[] = [];
+    if (sourceActor && strength !== "weak") {
+      const desired = strength === "strong" ? 2 : 3;
+      const decoys = rng
+        .shuffle(alive.filter((player) => player.id !== sourceActor.id && player.id !== recipient.id))
+        .slice(0, Math.max(0, desired - 1));
+      candidateIds = rng.shuffle([sourceActor, ...decoys]).map((player) => player.id);
+    }
+
+    return {
+      id: `d${day}-t${index + 1}-${recipient.id}`,
+      day,
+      recipientId: recipient.id,
+      strength,
+      candidateIds,
+      sourceActorId: sourceActor?.id ?? null,
     };
+  });
+}
+
+export function validateProtection(state: GameState, targetId: PlayerId): void {
+  const apothecary = requireAliveRole(state, "apothecary");
+  const target = assertAliveTarget(state, targetId, "protection");
+
+  if (
+    !MEDIEVAL_TRIAL_V01.consecutiveProtectionAllowed &&
+    apothecary.lastProtectedTargetId === target.id
+  ) {
+    throw new Error("cannot protect the same target on consecutive nights");
   }
 
-  getState(): GameState {
-    return cloneState(this.state);
+  if (target.id === apothecary.id && apothecary.selfProtectionUsed) {
+    throw new Error("self protection has already been used");
+  }
+}
+
+export function resolveNight(
+  state: GameState,
+  intent: NightIntent,
+  rng: RandomSource,
+): NightResolution {
+  if (state.phase !== "prologue-night" && state.phase !== "night") {
+    throw new Error(`cannot resolve night during phase ${state.phase}`);
   }
 
-  advanceOpeningNight(): PlayerIntentResult {
-    if (this.state.phase !== "opening-night")
-      return this.reject("아직 개막의 밤이 끝나지 않았습니다.");
-    this.state.phase = "debate";
-    this.state.day = 1;
-    this.state.testimonies = createTestimonies(this.state.players, ["rowan", "marta", "gareth"]);
-    this.state.chronicle.push(
-      "첫 습격은 살인으로 이어지지 않았다. 그러나 범인은 성 안에 남아 있다.",
-    );
-    this.refreshPrompt();
-    return this.accept();
-  }
+  const murderers = state.players.filter((player) => player.alive && player.role === "murderer");
+  if (murderers.length === 0) throw new Error("no living murderer");
 
-  beginAccusation(): PlayerIntentResult {
-    if (this.state.phase !== "debate") return this.reject("토론이 끝나야 고발할 수 있습니다.");
-    this.state.phase = "accusation";
-    this.refreshPrompt();
-    return this.accept();
-  }
+  const murderTarget = assertAliveTarget(state, intent.murderTargetId, "murder");
+  if (murderTarget.role === "murderer") throw new Error("murderers cannot murder their own faction");
 
-  submitAccusation(targetId: string): PlayerIntentResult {
-    if (this.state.phase !== "accusation") return this.reject("지금은 고발할 때가 아닙니다.");
-    if (!this.isLivingPlayer(targetId) || targetId === this.state.playerId) {
-      return this.reject("살아 있는 다른 인물을 고발해야 합니다.");
+  const investigator = state.players.find((candidate) => candidate.alive && candidate.role === "investigator") ?? null;
+  let investigationTarget: PlayerState | null = null;
+  if (investigator) {
+    if (!intent.investigationTargetId) throw new Error("living investigator requires a target");
+    investigationTarget = assertAliveTarget(state, intent.investigationTargetId, "investigation");
+    if (investigationTarget.id === investigator.id) {
+      throw new Error("investigator cannot investigate self");
     }
-
-    const living = livingPlayers(this.state.players);
-    const botVotes = living
-      .filter((player) => player.id !== this.state.playerId)
-      .map((player, index) => this.chooseAccusation(player, living, index));
-    this.state.accusationVotes = voteTally([targetId, ...botVotes]);
-    const ranked = rankVotes(this.state.accusationVotes, this.state.players);
-    this.state.defendants = ranked.slice(0, 2).map((vote) => vote.playerId);
-    this.state.phase = "defendants";
-    this.state.chronicle.push(
-      `${this.getPlayer(targetId)?.name ?? "누군가"}에 대한 고발이 울려 퍼졌다.`,
-    );
-    this.refreshPrompt();
-    return this.accept();
+  } else if (intent.investigationTargetId) {
+    throw new Error("dead investigator cannot act");
   }
 
-  beginVerdict(): PlayerIntentResult {
-    if (this.state.phase !== "defendants")
-      return this.reject("피고석이 열리기 전에는 판결할 수 없습니다.");
-    this.state.phase = "verdict";
-    this.refreshPrompt();
-    return this.accept();
-  }
+  const apothecary = state.players.find((candidate) => candidate.alive && candidate.role === "apothecary") ?? null;
+  let protectedTarget: PlayerState | null = null;
+  if (apothecary) {
+    if (!intent.protectionTargetId) throw new Error("living apothecary requires a target");
+    validateProtection(state, intent.protectionTargetId);
+    protectedTarget = playerById(state, intent.protectionTargetId);
 
-  submitVerdict(targetId: string): PlayerIntentResult {
-    if (this.state.phase !== "verdict")
-      return this.reject("지금은 최종 판결을 내릴 때가 아닙니다.");
-    if (!this.state.defendants.includes(targetId))
-      return this.reject("피고석에 선 사람만 판결할 수 있습니다.");
-
-    const living = livingPlayers(this.state.players);
-    const botVotes = living
-      .filter((player) => player.id !== this.state.playerId)
-      .map((player, index) => this.chooseVerdict(player, index));
-    this.state.verdictVotes = voteTally([targetId, ...botVotes]);
-    const ranked = rankVotes(this.state.verdictVotes, this.state.players).filter((vote) =>
-      this.state.defendants.includes(vote.playerId),
-    );
-    const top = ranked[0];
-    const second = ranked[1];
-    const isDeadlock = !top || (second !== undefined && top.count === second.count);
-
-    if (isDeadlock) {
-      this.state.resolution = {
-        kind: "deadlock",
-        targetId: null,
-        targetName: null,
-        text: "배심은 결론에 이르지 못했다. 누구도 처형되지 않았다.",
-      };
-    } else {
-      const target = this.getPlayer(top.playerId);
-      if (!target) return this.reject("판결 대상이 사라졌습니다.");
-      target.living = false;
-      this.state.resolution = {
-        kind: "execution",
-        targetId: target.id,
-        targetName: target.name,
-        text: `${target.name}에게 유죄 판결이 내려졌다. 성문 밖으로 끌려갔다.`,
-      };
+    if (protectedTarget.id === apothecary.id) {
+      apothecary.selfProtectionUsed = true;
     }
-
-    this.state.winner = determineWinner(this.state.players);
-    this.state.phase = "resolution";
-    this.state.chronicle.push(this.state.resolution.text);
-    this.refreshPrompt();
-    return this.accept();
+    apothecary.lastProtectedTargetId = protectedTarget.id;
+  } else if (intent.protectionTargetId) {
+    throw new Error("dead apothecary cannot act");
   }
 
-  continueAfterVerdict(): PlayerIntentResult {
-    if (this.state.phase !== "resolution")
-      return this.reject("판결 기록이 끝난 뒤에 다음 밤으로 갈 수 있습니다.");
-    if (this.state.winner) {
-      this.state.phase = "ended";
-      this.refreshPrompt();
-      return this.accept();
-    }
+  const prologue = state.phase === "prologue-night";
+  const protectedFromMurder = protectedTarget?.id === murderTarget.id;
+  const murderPrevented = prologue || protectedFromMurder;
+  const killedPlayerId = murderPrevented ? null : murderTarget.id;
 
-    this.state.night += 1;
-    const living = livingPlayers(this.state.players);
-    const murderers = living.filter((player) => player.role === "murderer");
-    const targets = living.filter((player) => player.role !== "murderer");
-    const victim = targets.length > 0 ? this.random.pick(targets) : null;
-    const protector = living.find((player) => player.role === "apothecary");
-    if (victim && victim.id !== protector?.id) {
-      victim.living = false;
-      this.state.chronicle.push(`둘째 밤, ${victim.name}의 방에서 촛불이 꺼졌다.`);
-    } else if (murderers.length > 0) {
-      this.state.chronicle.push("둘째 밤, 약제사의 약병이 한 목숨을 붙잡았다.");
-    }
-
-    this.state.winner = determineWinner(this.state.players);
-    if (this.state.winner) {
-      this.state.phase = "ended";
-    } else {
-      this.state.day += 1;
-      this.state.phase = "debate";
-      this.state.testimonies = createTestimonies(this.state.players, ["rowan", "marta", "gareth"]);
-    }
-    this.refreshPrompt();
-    return this.accept();
+  if (killedPlayerId) {
+    murderTarget.alive = false;
   }
 
-  private chooseAccusation(player: Player, living: Player[], index: number): string {
-    const suspects = living.filter(
-      (candidate) => candidate.id !== player.id && candidate.id !== this.state.playerId,
-    );
-    const testimonyHint =
-      this.state.testimonies[index % Math.max(this.state.testimonies.length, 1)]?.speakerId;
-    const hinted = suspects.find((candidate) => candidate.id === testimonyHint);
-    return hinted?.id ?? this.random.pick(suspects).id;
+  const day = state.day + 1;
+  const investigation = investigator && investigationTarget
+    ? {
+        day,
+        investigatorId: investigator.id,
+        targetId: investigationTarget.id,
+        targetActed: actedLastNight(state, investigationTarget.id),
+      }
+    : null;
+
+  const resolution: NightResolution = {
+    day,
+    prologue,
+    murderTargetId: murderTarget.id,
+    protectedTargetId: protectedTarget?.id ?? null,
+    murderPrevented,
+    killedPlayerId,
+    investigation,
+    testimonies: buildTestimonies(state, rng, day),
+  };
+
+  state.day = day;
+  state.nightHistory.push(resolution);
+  state.winner = checkWinner(state.players);
+  state.phase = state.winner ? "game-over" : "dawn";
+  return resolution;
+}
+
+function sortedCandidatesByVotes(
+  state: GameState,
+  votes: Readonly<Record<PlayerId, PlayerId>>,
+): PlayerId[] {
+  const alive = state.players.filter((player) => player.alive);
+  const counts = new Map<PlayerId, number>();
+  for (const voter of alive) {
+    const targetId = votes[voter.id];
+    if (!targetId) throw new Error(`missing vote from ${voter.id}`);
+    const target = assertAliveTarget(state, targetId, "vote");
+    if (target.id === voter.id) throw new Error("self vote is not allowed");
+    counts.set(target.id, (counts.get(target.id) ?? 0) + 1);
   }
 
-  private chooseVerdict(player: Player, index: number): string {
-    const candidates = this.state.defendants.filter((id) => id !== player.id);
-    if (candidates.length === 0) return this.state.defendants[0]!;
-    const preference = index % 3 === 0 ? this.state.defendants[0] : this.state.defendants[1];
-    return preference && candidates.includes(preference)
-      ? preference
-      : this.random.pick(candidates);
+  return alive
+    .filter((player) => (counts.get(player.id) ?? 0) > 0)
+    .sort((left, right) => {
+      const difference = (counts.get(right.id) ?? 0) - (counts.get(left.id) ?? 0);
+      return difference !== 0 ? difference : left.seat - right.seat;
+    })
+    .map((player) => player.id);
+}
+
+export function resolveAccusation(
+  state: GameState,
+  votes: Readonly<Record<PlayerId, PlayerId>>,
+): AccusationResolution {
+  if (state.phase !== "accusation") {
+    throw new Error(`cannot resolve accusation during phase ${state.phase}`);
   }
 
-  private isLivingPlayer(playerId: string): boolean {
-    return this.state.players.some((player) => player.id === playerId && player.living);
+  const ranked = sortedCandidatesByVotes(state, votes);
+  if (ranked.length < 2) {
+    throw new Error("accusation must produce two finalists");
   }
 
-  private getPlayer(playerId: string): Player | undefined {
-    return this.state.players.find((player) => player.id === playerId);
+  const finalists = [ranked[0]!, ranked[1]!] as const;
+  const resolution: AccusationResolution = {
+    day: state.day,
+    votes,
+    finalists,
+  };
+  state.accusationHistory.push(resolution);
+  state.phase = "defense";
+  return resolution;
+}
+
+export function beginAccusation(state: GameState): void {
+  if (state.phase !== "dawn" && state.phase !== "discussion") {
+    throw new Error(`cannot begin accusation during phase ${state.phase}`);
+  }
+  state.phase = "accusation";
+}
+
+export function beginVerdict(state: GameState): void {
+  if (state.phase !== "defense") {
+    throw new Error(`cannot begin verdict during phase ${state.phase}`);
+  }
+  state.phase = "verdict";
+}
+
+export function resolveVerdict(
+  state: GameState,
+  finalists: readonly [PlayerId, PlayerId],
+  votes: Readonly<Record<PlayerId, PlayerId>>,
+): VerdictResolution {
+  if (state.phase !== "verdict") {
+    throw new Error(`cannot resolve verdict during phase ${state.phase}`);
   }
 
-  private refreshPrompt(): void {
-    this.state.currentPrompt = promptForPhase(this.state);
+  const [first, second] = finalists;
+  assertAliveTarget(state, first, "verdict");
+  assertAliveTarget(state, second, "verdict");
+
+  let firstVotes = 0;
+  let secondVotes = 0;
+  for (const voter of state.players.filter((player) => player.alive)) {
+    const targetId = votes[voter.id];
+    if (targetId === first) firstVotes += 1;
+    else if (targetId === second) secondVotes += 1;
+    else throw new Error(`verdict vote from ${voter.id} must target a finalist`);
   }
 
-  private accept(): PlayerIntentResult {
-    return { state: this.getState(), error: null };
+  const tied = firstVotes === secondVotes;
+  const eliminatedPlayerId = tied ? null : firstVotes > secondVotes ? first : second;
+  if (eliminatedPlayerId) {
+    playerById(state, eliminatedPlayerId).alive = false;
   }
 
-  private reject(error: string): PlayerIntentResult {
-    return { state: this.getState(), error };
-  }
+  const resolution: VerdictResolution = {
+    day: state.day,
+    votes,
+    finalists,
+    eliminatedPlayerId,
+    tied,
+  };
+  state.verdictHistory.push(resolution);
+  state.winner = checkWinner(state.players);
+  state.phase = state.winner ? "game-over" : "night";
+  return resolution;
 }
