@@ -7,6 +7,7 @@ import {
   resolveVerdict,
 } from "./gameEngine";
 import { Mulberry32 } from "../domain/seededRandom";
+import { joinKoreanAnd, withParticle } from "./koreanGrammar";
 import {
   BOT_PROFILES,
   createSuspicionLedger,
@@ -159,9 +160,8 @@ export class TrialSession {
     this.accusationVotes = tally(votes);
     this.defendants = [...result.finalists];
     this.phase = "defendants";
-    this.chronicle.push(
-      `${this.defendants.map((id) => this.nameOf(id)).join("와 ")}이 고발 표결로 피고석에 섰다.`,
-    );
+    const pair = joinKoreanAnd(this.nameOf(this.defendants[0]!), this.nameOf(this.defendants[1]!));
+    this.chronicle.push(`${withParticle(pair, "이", "가")} 고발 표결로 피고석에 섰다.`);
     return this.accept();
   }
 
@@ -315,7 +315,7 @@ export class TrialSession {
         id: `investigation-${night.day}`,
         speakerId: clue.investigatorId,
         speakerName: this.nameOf(clue.investigatorId),
-        text: `${this.nameOf(clue.targetId)}은 밤에 ${clue.targetActed ? "움직였소. 단, 약제사도 밤에 움직이니 범인이라는 뜻은 아니오." : "움직이지 않았소."}`,
+        text: `${withParticle(this.nameOf(clue.targetId), "은", "는")} 밤에 ${clue.targetActed ? "움직였소. 단, 약제사도 밤에 움직이니 범인이라는 뜻은 아니오." : "움직이지 않았소."}`,
         reliability: "clear",
       });
     }
