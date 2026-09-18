@@ -212,9 +212,6 @@ jobs:
     runs-on: macos-latest
     env:
       IOS_SIGNING_ENABLED: ${{ vars.IOS_SIGNING_ENABLED }}
-      IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
-      IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
-      IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
       # Tauri requires a syntactically valid team during project generation,
       # even for --no-sign. Signed builds still require the real secret below.
       APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM || '0000000000' }}
@@ -260,13 +257,23 @@ jobs:
       - name: Validate iOS signing secrets
         if: env.IOS_SIGNING_ENABLED == 'true'
         shell: bash
+        env:
+          IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
+          SIGNING_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
         run: |
           test -n "$IOS_CERTIFICATE"
           test -n "$IOS_CERTIFICATE_PASSWORD"
           test -n "$IOS_MOBILE_PROVISION"
-          test "$APPLE_DEVELOPMENT_TEAM" != "0000000000"
+          test -n "$SIGNING_DEVELOPMENT_TEAM"
       - name: Build signed iOS IPA
         if: env.IOS_SIGNING_ENABLED == 'true'
+        env:
+          IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
         run: npm run tauri -- ios build --export-method app-store-connect --ci
       - name: Stage signed IPA
         if: env.IOS_SIGNING_ENABLED == 'true'
