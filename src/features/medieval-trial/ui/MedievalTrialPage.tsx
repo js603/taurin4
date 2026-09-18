@@ -11,11 +11,19 @@ import {
 import { MEDIEVAL_TRIAL_V01 } from "../domain/rules";
 
 const INITIAL_SEED = 20260918;
+const ROLE_LABELS = {
+  murderer: "살인자",
+  investigator: "집행관",
+  apothecary: "약제사",
+  commoner: "평민",
+};
 
 function phaseActionLabel(phase: TrialPhase): string {
   switch (phase) {
     case "opening-night":
       return "대연회장 문 열기";
+    case "night":
+      return "밤 행동 확정하기";
     case "debate":
       return "고발을 시작하기";
     case "accusation":
@@ -105,7 +113,7 @@ export function MedievalTrialPage() {
   }
 
   function resetGame() {
-    const nextEngine = new TrialSession(INITIAL_SEED);
+    const nextEngine = new TrialSession(state.seed + 1);
     setEngine(nextEngine);
     setState(nextEngine.getState());
     setSelectedPlayerId(null);
@@ -113,7 +121,13 @@ export function MedievalTrialPage() {
   }
 
   function primaryAction() {
+    if (state.observing && (state.phase === "accusation" || state.phase === "verdict")) {
+      commit(engine.observeVote());
+      return;
+    }
     if (state.phase === "opening-night") commit(engine.advanceOpeningNight());
+    else if (state.phase === "night" && selectedPlayerId)
+      commit(engine.submitNightAction(selectedPlayerId));
     else if (state.phase === "debate") commit(engine.beginAccusation());
     else if (state.phase === "accusation" && selectedPlayerId)
       commit(engine.submitAccusation(selectedPlayerId));
@@ -124,11 +138,18 @@ export function MedievalTrialPage() {
     else if (state.phase === "ended") resetGame();
   }
 
-  const canAct = state.phase !== "accusation" || selectedPlayerId !== null;
+  const canAct =
+    state.observing ||
+    (state.phase !== "accusation" && state.phase !== "night") ||
+    selectedPlayerId !== null;
   const actionLabel =
-    state.phase === "accusation" && !selectedPlayerId
-      ? "고발할 사람을 고르기"
-      : phaseActionLabel(state.phase);
+    state.observing && (state.phase === "accusation" || state.phase === "verdict")
+      ? "봇 표결 관전하기"
+      : state.phase === "night" && !selectedPlayerId
+        ? "밤 행동 대상을 고르기"
+        : state.phase === "accusation" && !selectedPlayerId
+          ? "고발할 사람을 고르기"
+          : phaseActionLabel(state.phase);
 
   return (
     <main className="trial-app">
@@ -172,7 +193,20 @@ export function MedievalTrialPage() {
                 <span>{human?.title}</span>
               </div>
             </div>
-            <p className="player-note">당신의 역할은 아직 다른 이들에게 밝혀지지 않았다.</p>
+            <p className="player-note">
+              당신의 역할: {ROLE_LABELS[state.playerRole]}
+              {state.observing ? " · 사망 후 관전 중" : ""}
+            </p>
+            <p className="player-note">
+              집행관은 밤의 행동 여부를 조사합니다. 약제사는 자신을 한 번만, 같은 사람을 연속으로는
+              보호할 수 없습니다. 개막의 밤은 자동 진행되며 사망자는 없습니다. 증언·조사 결과는 자동
+              공개될 수 있습니다.
+            </p>
+            {state.privateNotes.map((note, index) => (
+              <p className="player-note" key={index}>
+                개인 기록 · {note}
+              </p>
+            ))}
           </section>
 
           <section className="status-card">
@@ -189,9 +223,12 @@ export function MedievalTrialPage() {
                   player={player}
                   selected={player.id === selectedPlayerId || player.id === currentSelection}
                   disabled={
-                    (state.phase !== "accusation" && state.phase !== "verdict") ||
-                    player.isHuman ||
-                    (state.phase === "verdict" && !state.defendants.includes(player.id))
+                    state.observing ||
+                    (state.phase === "night"
+                      ? !state.legalNightTargets.includes(player.id)
+                      : (state.phase !== "accusation" && state.phase !== "verdict") ||
+                        (state.phase === "accusation" && player.isHuman) ||
+                        (state.phase === "verdict" && !state.defendants.includes(player.id)))
                   }
                   voteCount={state.phase === "accusation" ? formatVotes(state, player.id) : "0"}
                   onSelect={setSelectedPlayerId}
@@ -246,11 +283,15 @@ export function MedievalTrialPage() {
             <p className="story-block__body">
               {state.phase === "resolution" && state.resolution
                 ? state.resolution.text
-                : state.openingAttack.description}
+                : state.phase === "opening-night"
+                  ? state.openingAttack.description
+                  : state.chronicle.at(-1)}
             </p>
           </div>
 
-          {state.phase === "debate" || state.phase === "opening-night" ? (
+          {["debate", "opening-night", "accusation", "defendants", "verdict"].includes(
+            state.phase,
+          ) ? (
             <div className="testimony-list">
               {state.testimonies.length > 0 ? (
                 state.testimonies.map((testimony) => (
@@ -269,6 +310,7 @@ export function MedievalTrialPage() {
                   className={`defendant-card${defendant.id === currentSelection ? " defendant-card--selected" : ""}`}
                   type="button"
                   key={defendant.id}
+                  disabled={state.observing || state.phase !== "verdict"}
                   onClick={() => setSelectedPlayerId(defendant.id)}
                 >
                   <span className="defendant-card__label">
@@ -276,7 +318,7 @@ export function MedievalTrialPage() {
                   </span>
                   <strong>{defendant.name}</strong>
                   <small>{defendant.title}</small>
-                  <span className="defendant-card__line">최후 변론을 기다리는 중</span>
+                  <span className="defendant-card__line">{state.defenses[defendant.id]}</span>
                 </button>
               ))}
             </div>
@@ -344,6 +386,10 @@ export function MedievalTrialPage() {
 
           <section className="status-card role-count-card">
             <p className="section-label">이 재판의 그림자</p>
+            <p className="player-note">
+              초기 배역 수입니다. 살인자 전원 제거 시 주민 승리, 생존 살인자 수가 주민 이상이면
+              살인자 승리. 고발 동점은 날짜별 순번, 최종 판결 동점은 처형 없이 밤으로 넘어갑니다.
+            </p>
             <div className="role-counts">
               <span>
                 <i className="role-dot role-dot--blood" /> 살인자{" "}

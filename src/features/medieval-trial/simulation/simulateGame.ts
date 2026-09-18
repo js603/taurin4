@@ -42,7 +42,7 @@ export function simulateGame(seed: number, options: SimulationOptions = {}): Sim
   const state = createGame(seed, rng);
   const ledger = createSuspicionLedger(state, rng);
   const config = options.config ?? BOT_PROFILES[options.profile ?? "baseline"];
-  const maxDays = options.maxDays ?? 12;
+  const maxDays = options.maxDays ?? 100;
 
   let firstEliminatedRole: Role | null = null;
   let protectionAttempts = 0;
@@ -52,9 +52,9 @@ export function simulateGame(seed: number, options: SimulationOptions = {}): Sim
   let tiedVerdicts = 0;
 
   while (!state.winner && state.day < maxDays) {
-    const intent = chooseNightIntent(state, rng, config);
+    const intent = chooseNightIntent(state, rng, config, ledger);
     const night = resolveNight(state, intent, rng);
-    if (night.protectedTargetId) {
+    if (night.protectedTargetId && !night.prologue) {
       protectionAttempts += 1;
       if (
         !night.prologue &&
@@ -77,10 +77,7 @@ export function simulateGame(seed: number, options: SimulationOptions = {}): Sim
     absorbNightInformation(state, ledger, rng, config);
     state.phase = "discussion";
     beginAccusation(state);
-    const accusation = resolveAccusation(
-      state,
-      chooseAccusationVotes(state, ledger, rng, config),
-    );
+    const accusation = resolveAccusation(state, chooseAccusationVotes(state, ledger, rng, config));
     beginVerdict(state);
     const verdict = resolveVerdict(
       state,
@@ -95,7 +92,8 @@ export function simulateGame(seed: number, options: SimulationOptions = {}): Sim
     }
   }
 
-  if (!state.winner) state.winner = "murderers";
+  if (!state.winner)
+    throw new Error(`simulation exceeded ${maxDays} days (seed ${seed}); no winner fabricated`);
 
   return {
     seed,

@@ -10,11 +10,34 @@ import {
   validateProtection,
 } from "../src/features/medieval-trial/application/gameEngine.js";
 import { Mulberry32 } from "../src/features/medieval-trial/domain/seededRandom.js";
+import { checkWinner } from "../src/features/medieval-trial/domain/rules.js";
 
 function setup(seed = 1) {
   const rng = new Mulberry32(seed);
   return { rng, state: createGame(seed, rng) };
 }
+
+test("victory requires zero murderers or murderer parity", () => {
+  const { state } = setup(3);
+  assert.equal(checkWinner(state.players), null);
+  const residentsWin = state.players.map((p) => ({ ...p, alive: p.role !== "murderer" }));
+  assert.equal(checkWinner(residentsWin), "residents");
+  let residents = 0;
+  const parity = state.players.map((p) => ({
+    ...p,
+    alive: p.role === "murderer" || residents++ < 2,
+  }));
+  assert.equal(checkWinner(parity), "murderers");
+});
+
+test("self protection is usable only once even after an intervening night", () => {
+  const { state } = setup(5);
+  const apothecary = state.players.find((p) => p.role === "apothecary")!;
+  validateProtection(state, apothecary.id);
+  apothecary.selfProtectionUsed = true;
+  apothecary.lastProtectedTargetId = state.players.find((p) => p.id !== apothecary.id)!.id;
+  assert.throws(() => validateProtection(state, apothecary.id), /already been used/);
+});
 
 test("v0.1 distributes 2/1/1/4 roles", () => {
   const { state } = setup(3);
@@ -31,7 +54,9 @@ test("prologue attack never kills", () => {
   const murderer = state.players.find((p) => p.role === "murderer")!;
   const apothecary = state.players.find((p) => p.role === "apothecary")!;
   const target = state.players.find((p) => p.role !== "murderer" && p.id !== apothecary.id)!;
-  const protection = state.players.find((p) => p.id !== target.id && p.id !== apothecary.lastProtectedTargetId)!;
+  const protection = state.players.find(
+    (p) => p.id !== target.id && p.id !== apothecary.lastProtectedTargetId,
+  )!;
 
   const result = resolveNight(
     state,
@@ -108,18 +133,25 @@ test("tied verdict eliminates nobody", () => {
   const protectTarget = state.players.find((p) => p.id !== murderTarget.id)!;
   const investigationTarget = state.players.find((p) => p.id !== investigator.id)!;
 
-  resolveNight(state, {
-    murderTargetId: murderTarget.id,
-    investigationTargetId: investigationTarget.id,
-    protectionTargetId: protectTarget.id === apothecary.lastProtectedTargetId ? apothecary.id : protectTarget.id,
-  }, rng);
+  resolveNight(
+    state,
+    {
+      murderTargetId: murderTarget.id,
+      investigationTargetId: investigationTarget.id,
+      protectionTargetId:
+        protectTarget.id === apothecary.lastProtectedTargetId ? apothecary.id : protectTarget.id,
+    },
+    rng,
+  );
   state.phase = "discussion";
   beginAccusation(state);
 
   const living = state.players.filter((p) => p.alive);
   const first = living[0]!;
   const second = living[1]!;
-  const accusationVotes = Object.fromEntries(living.map((p, i) => [p.id, i % 2 === 0 ? first.id : second.id]));
+  const accusationVotes = Object.fromEntries(
+    living.map((p, i) => [p.id, i % 2 === 0 ? first.id : second.id]),
+  );
   if (accusationVotes[first.id] === first.id) accusationVotes[first.id] = second.id;
   if (accusationVotes[second.id] === second.id) accusationVotes[second.id] = first.id;
   const accusation = resolveAccusation(state, accusationVotes);
@@ -127,7 +159,9 @@ test("tied verdict eliminates nobody", () => {
 
   const finalists = accusation.finalists;
   const verdictVotes: Record<string, string> = {};
-  living.forEach((p, index) => { verdictVotes[p.id] = index < living.length / 2 ? finalists[0] : finalists[1]; });
+  living.forEach((p, index) => {
+    verdictVotes[p.id] = index < living.length / 2 ? finalists[0] : finalists[1];
+  });
   const result = resolveVerdict(state, finalists, verdictVotes);
   assert.equal(result.tied, true);
   assert.equal(result.eliminatedPlayerId, null);

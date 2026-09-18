@@ -1,7 +1,8 @@
-import type { Faction } from "../domain/types";
+import type { Faction, Role } from "../domain/types";
 
 export type TrialPhase =
   | "opening-night"
+  | "night"
   | "debate"
   | "accusation"
   | "defendants"
@@ -50,6 +51,11 @@ export interface TrialSessionState {
   readonly day: number;
   readonly night: number;
   readonly playerId: string;
+  readonly playerRole: Role;
+  readonly observing: boolean;
+  readonly legalNightTargets: readonly string[];
+  readonly privateNotes: readonly string[];
+  readonly defenses: Readonly<Record<string, string>>;
   readonly players: readonly TrialPlayer[];
   readonly openingAttack: TrialOpeningAttack;
   readonly testimonies: readonly TrialTestimony[];
@@ -69,6 +75,7 @@ export interface TrialIntentResult {
 
 export const TRIAL_PHASE_LABELS: Record<TrialPhase, string> = {
   "opening-night": "개막의 밤",
+  night: "밤의 행동",
   debate: "자유 토론",
   accusation: "고발",
   defendants: "피고석",
@@ -76,4 +83,3 @@ export const TRIAL_PHASE_LABELS: Record<TrialPhase, string> = {
   resolution: "판결 기록",
   ended: "재판 종결",
 };
-

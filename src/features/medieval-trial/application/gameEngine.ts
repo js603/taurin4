@@ -25,6 +25,7 @@ const ROLE_DECK: readonly Role[] = [
 ];
 
 export function createGame(seed: number, rng: RandomSource): GameState {
+  if (!Number.isSafeInteger(seed)) throw new Error("seed must be a safe integer");
   const roles = rng.shuffle(ROLE_DECK);
   const players: PlayerState[] = roles.map((role, seat) => ({
     id: `p${seat + 1}`,
@@ -73,11 +74,7 @@ function actedLastNight(state: GameState, playerId: PlayerId): boolean {
   return player.role !== "commoner";
 }
 
-function buildTestimonies(
-  state: GameState,
-  rng: RandomSource,
-  day: number,
-): Testimony[] {
+function buildTestimonies(state: GameState, rng: RandomSource, day: number): Testimony[] {
   const alive = state.players.filter((player) => player.alive);
   const actors = alive.filter((player) => actedLastNight(state, player.id));
   const recipientCount = Math.min(
@@ -95,7 +92,9 @@ function buildTestimonies(
     if (sourceActor && strength !== "weak") {
       const desired = strength === "strong" ? 2 : 3;
       const decoys = rng
-        .shuffle(alive.filter((player) => player.id !== sourceActor.id && player.id !== recipient.id))
+        .shuffle(
+          alive.filter((player) => player.id !== sourceActor.id && player.id !== recipient.id),
+        )
         .slice(0, Math.max(0, desired - 1));
       candidateIds = rng.shuffle([sourceActor, ...decoys]).map((player) => player.id);
     }
@@ -140,9 +139,11 @@ export function resolveNight(
   if (murderers.length === 0) throw new Error("no living murderer");
 
   const murderTarget = assertAliveTarget(state, intent.murderTargetId, "murder");
-  if (murderTarget.role === "murderer") throw new Error("murderers cannot murder their own faction");
+  if (murderTarget.role === "murderer")
+    throw new Error("murderers cannot murder their own faction");
 
-  const investigator = state.players.find((candidate) => candidate.alive && candidate.role === "investigator") ?? null;
+  const investigator =
+    state.players.find((candidate) => candidate.alive && candidate.role === "investigator") ?? null;
   let investigationTarget: PlayerState | null = null;
   if (investigator) {
     if (!intent.investigationTargetId) throw new Error("living investigator requires a target");
@@ -154,7 +155,8 @@ export function resolveNight(
     throw new Error("dead investigator cannot act");
   }
 
-  const apothecary = state.players.find((candidate) => candidate.alive && candidate.role === "apothecary") ?? null;
+  const apothecary =
+    state.players.find((candidate) => candidate.alive && candidate.role === "apothecary") ?? null;
   let protectedTarget: PlayerState | null = null;
   if (apothecary) {
     if (!intent.protectionTargetId) throw new Error("living apothecary requires a target");
@@ -179,14 +181,15 @@ export function resolveNight(
   }
 
   const day = state.day + 1;
-  const investigation = investigator && investigationTarget
-    ? {
-        day,
-        investigatorId: investigator.id,
-        targetId: investigationTarget.id,
-        targetActed: actedLastNight(state, investigationTarget.id),
-      }
-    : null;
+  const investigation =
+    investigator && investigationTarget
+      ? {
+          day,
+          investigatorId: investigator.id,
+          targetId: investigationTarget.id,
+          targetActed: actedLastNight(state, investigationTarget.id),
+        }
+      : null;
 
   const resolution: NightResolution = {
     day,
@@ -211,6 +214,7 @@ function sortedCandidatesByVotes(
   votes: Readonly<Record<PlayerId, PlayerId>>,
 ): PlayerId[] {
   const alive = state.players.filter((player) => player.alive);
+  validateVoters(state, votes);
   const counts = new Map<PlayerId, number>();
   for (const voter of alive) {
     const targetId = votes[voter.id];
@@ -224,7 +228,10 @@ function sortedCandidatesByVotes(
     .filter((player) => (counts.get(player.id) ?? 0) > 0)
     .sort((left, right) => {
       const difference = (counts.get(right.id) ?? 0) - (counts.get(left.id) ?? 0);
-      return difference !== 0 ? difference : left.seat - right.seat;
+      const offset = (state.seed + state.day) % state.players.length;
+      const rank = (player: PlayerState) =>
+        (player.seat - offset + state.players.length) % state.players.length;
+      return difference !== 0 ? difference : rank(left) - rank(right);
     })
     .map((player) => player.id);
 }
@@ -245,7 +252,7 @@ export function resolveAccusation(
   const finalists = [ranked[0]!, ranked[1]!] as const;
   const resolution: AccusationResolution = {
     day: state.day,
-    votes,
+    votes: { ...votes },
     finalists,
   };
   state.accusationHistory.push(resolution);
@@ -277,6 +284,15 @@ export function resolveVerdict(
   }
 
   const [first, second] = finalists;
+  const nomination = state.accusationHistory.at(-1);
+  if (
+    first === second ||
+    nomination?.day !== state.day ||
+    !nomination.finalists.every((id) => finalists.includes(id))
+  ) {
+    throw new Error("verdict finalists must match today's accusation");
+  }
+  validateVoters(state, votes);
   assertAliveTarget(state, first, "verdict");
   assertAliveTarget(state, second, "verdict");
 
@@ -297,8 +313,8 @@ export function resolveVerdict(
 
   const resolution: VerdictResolution = {
     day: state.day,
-    votes,
-    finalists,
+    votes: { ...votes },
+    finalists: [first, second],
     eliminatedPlayerId,
     tied,
   };
@@ -306,4 +322,14 @@ export function resolveVerdict(
   state.winner = checkWinner(state.players);
   state.phase = state.winner ? "game-over" : "night";
   return resolution;
+}
+
+function validateVoters(state: GameState, votes: Readonly<Record<PlayerId, PlayerId>>): void {
+  const ids = state.players.filter((player) => player.alive).map((player) => player.id);
+  if (
+    Object.keys(votes).length !== ids.length ||
+    Object.keys(votes).some((id) => !ids.includes(id))
+  ) {
+    throw new Error("votes must contain exactly the living players");
+  }
 }
