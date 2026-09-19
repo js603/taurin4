@@ -37,6 +37,7 @@ export interface InvestigationResult {
   readonly investigatorId: PlayerId;
   readonly targetId: PlayerId;
   readonly targetActed: boolean;
+  readonly targetIsMurderer: boolean;
 }
 
 export interface Testimony {

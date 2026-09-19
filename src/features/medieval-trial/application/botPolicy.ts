@@ -67,6 +67,42 @@ export interface SuspicionLedger {
   readonly disclosedTestimonyIds: Set<string>;
   readonly disclosedInvestigations: Set<number>;
   readonly publicInvestigators: Set<PlayerId>;
+  readonly claims: PublicClaim[];
+  readonly knownFactions: Map<PlayerId, Map<PlayerId, boolean>>;
+}
+
+export interface PublicClaim {
+  readonly id: string;
+  readonly day: number;
+  readonly speakerId: PlayerId;
+  readonly targetId: PlayerId;
+  readonly guilty: boolean;
+}
+
+export function addPublicClaim(
+  state: GameState,
+  ledger: SuspicionLedger,
+  speakerId: PlayerId,
+  targetId: PlayerId,
+  guilty: boolean,
+): void {
+  if (
+    !state.players.some((p) => p.id === speakerId && p.alive) ||
+    !state.players.some((p) => p.id === targetId && p.alive) ||
+    speakerId === targetId
+  )
+    throw new Error("invalid claim participants");
+  if (ledger.claims.some((c) => c.day === state.day && c.speakerId === speakerId))
+    throw new Error("only one claim per speaker per day");
+  ledger.claims.push({
+    id: `claim-${state.day}-${speakerId}`,
+    day: state.day,
+    speakerId,
+    targetId,
+    guilty,
+  });
+  ledger.publicInvestigators.add(speakerId);
+  ledger.score.set(targetId, (ledger.score.get(targetId) ?? 0) + (guilty ? 1 : -0.65));
 }
 
 export function createSuspicionLedger(state: GameState, rng: RandomSource): SuspicionLedger {
@@ -81,6 +117,8 @@ export function createSuspicionLedger(state: GameState, rng: RandomSource): Susp
     disclosedTestimonyIds: new Set(),
     disclosedInvestigations: new Set(),
     publicInvestigators: new Set(),
+    claims: [],
+    knownFactions: new Map(),
   };
 }
 
@@ -147,6 +185,7 @@ export function absorbNightInformation(
   ledger: SuspicionLedger,
   rng: RandomSource,
   config: BotPolicyConfig,
+  humanId?: PlayerId,
 ): void {
   const night = state.nightHistory.at(-1);
   if (!night || ledger.processedDays.has(night.day)) return;
@@ -156,7 +195,7 @@ export function absorbNightInformation(
     const investigator = state.players.find(
       (player) => player.id === night.investigation!.investigatorId,
     );
-    const delta = night.investigation.targetActed
+    const delta = night.investigation.targetIsMurderer
       ? config.investigatorActedWeight
       : config.investigatorQuietWeight;
     const personal =
@@ -166,22 +205,38 @@ export function absorbNightInformation(
       (personal.get(night.investigation.targetId) ?? 0) + delta,
     );
     ledger.privateScores.set(night.investigation.investigatorId, personal);
+    const knowledge =
+      ledger.knownFactions.get(night.investigation.investigatorId) ?? new Map<PlayerId, boolean>();
+    knowledge.set(night.investigation.targetId, night.investigation.targetIsMurderer);
+    ledger.knownFactions.set(night.investigation.investigatorId, knowledge);
     if (
       investigator?.alive &&
+      investigator.id !== humanId &&
+      state.players.some((p) => p.id === night.investigation!.targetId && p.alive) &&
       investigator.faction === "residents" &&
       rng.next() < config.investigatorShareProbability
     ) {
       ledger.disclosedInvestigations.add(night.day);
+      addPublicClaim(
+        state,
+        ledger,
+        investigator.id,
+        night.investigation.targetId,
+        night.investigation.targetIsMurderer,
+      );
       personal.set(
         night.investigation.targetId,
         (personal.get(night.investigation.targetId) ?? 0) - delta,
       );
       ledger.publicInvestigators.add(investigator.id);
-      ledger.score.set(
-        night.investigation.targetId,
-        (ledger.score.get(night.investigation.targetId) ?? 0) + delta,
-      );
     }
+  }
+
+  // Bluffing uses only the murderer's own team knowledge, not resident roles.
+  const bluffer = state.players.find((p) => p.alive && p.role === "murderer" && p.id !== humanId);
+  if (bluffer && rng.next() < config.murdererTestimonyShareProbability) {
+    const target = rng.pick(state.players.filter((p) => p.alive && p.faction !== "murderers"));
+    addPublicClaim(state, ledger, bluffer.id, target.id, true);
   }
 
   for (const testimony of night.testimonies) {
@@ -216,25 +271,28 @@ export function absorbNightInformation(
 }
 
 function candidateScore(
+  state: GameState,
   ledger: SuspicionLedger,
   voter: PlayerState,
   candidate: PlayerState,
   rng: RandomSource,
   config: BotPolicyConfig,
 ): number {
-  let score = ledger.score.get(candidate.id) ?? 0;
-  score += ledger.privateScores.get(voter.id)?.get(candidate.id) ?? 0;
+  let score = publicSuspicion(state, ledger, candidate.id);
+  const known = ledger.knownFactions.get(voter.id)?.get(candidate.id);
+  if (known !== undefined) score += known ? 20 : -20;
   if (candidate.id === voter.id) score -= 100;
   score += rng.next() * config.voteNoise;
 
   if (voter.role === "murderer") {
-    if (candidate.role === "murderer") score -= 4;
+    if (candidate.role === "murderer") score -= 40;
     else score += config.murdererMisdirectionBonus;
   }
   return score;
 }
 
 function chooseBestCandidate(
+  state: GameState,
   candidates: readonly PlayerState[],
   ledger: SuspicionLedger,
   voter: PlayerState,
@@ -243,7 +301,7 @@ function chooseBestCandidate(
 ): PlayerState {
   const scored = candidates.map((candidate) => ({
     candidate,
-    score: candidateScore(ledger, voter, candidate, rng, config),
+    score: candidateScore(state, ledger, voter, candidate, rng, config),
   }));
   scored.sort(
     (left, right) => right.score - left.score || left.candidate.seat - right.candidate.seat,
@@ -261,7 +319,7 @@ export function chooseAccusationVotes(
   const living = alive(state);
   for (const voter of living) {
     const candidates = living.filter((candidate) => candidate.id !== voter.id);
-    votes[voter.id] = chooseBestCandidate(candidates, ledger, voter, rng, config).id;
+    votes[voter.id] = chooseBestCandidate(state, candidates, ledger, voter, rng, config).id;
   }
   return votes;
 }
@@ -278,7 +336,53 @@ export function chooseVerdictVotes(
   const finalistPlayers = finalists.map((id) => state.players.find((player) => player.id === id)!);
 
   for (const voter of living) {
-    votes[voter.id] = chooseBestCandidate(finalistPlayers, ledger, voter, rng, config).id;
+    const candidate = chooseBestCandidate(state, finalistPlayers, ledger, voter, rng, config);
+    votes[voter.id] =
+      ledger.knownFactions.get(voter.id)?.get(candidate.id) === false ? "pardon" : candidate.id;
   }
   return votes;
+}
+
+export function publicSuspicion(
+  state: GameState,
+  ledger: SuspicionLedger,
+  targetId: PlayerId,
+): number {
+  let score = 0;
+  for (const claim of ledger.claims.filter((c) => c.targetId === targetId)) {
+    const speaker = state.players.find((p) => p.id === claim.speakerId)!;
+    // Roles become public only after death; never consult a living speaker's role.
+    const trust = speaker.alive ? 1 : speaker.role === "investigator" ? 4 : 0;
+    score += (claim.guilty ? 1 : -0.65) * trust;
+  }
+  for (const vote of state.verdictHistory) {
+    const dead = state.players.find((p) => p.id === vote.eliminatedPlayerId);
+    if (dead?.role === "murderer") score += vote.votes[targetId] === dead.id ? -0.3 : 0.2;
+  }
+  return score;
+}
+
+export function publicVoteReason(
+  state: GameState,
+  ledger: SuspicionLedger,
+  targetId: PlayerId,
+): string {
+  if (targetId === "pardon") return "피고를 처형할 만큼의 근거가 부족하여 보류합니다.";
+  const accusations = ledger.claims.filter(
+    (c) =>
+      c.targetId === targetId &&
+      c.guilty &&
+      !state.players.some((p) => p.id === c.speakerId && !p.alive && p.role !== "investigator"),
+  );
+  if (accusations.length)
+    return `공개된 조사 주장 ${accusations.map((c) => c.id).join(", ")}을 근거로 지목합니다. 주장이 사실인지는 아직 별도 판단입니다.`;
+  if (
+    state.verdictHistory.some(
+      (v) =>
+        state.players.some((p) => p.id === v.eliminatedPlayerId && p.role === "murderer") &&
+        v.votes[targetId] !== v.eliminatedPlayerId,
+    )
+  )
+    return "공개된 살인자 처형 때의 투표 이력을 의심합니다. 반대표 자체가 유죄 증거는 아닙니다.";
+  return "직접 공개 증거는 없습니다. 제한된 정보에서의 추측이며, 무죄일 수 있습니다.";
 }

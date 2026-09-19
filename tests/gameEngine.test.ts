@@ -109,9 +109,10 @@ test("apothecary blocks a normal night murder", () => {
 
 test("same target cannot be protected on consecutive nights", () => {
   const { state, rng } = setup(22);
+  state.phase = "night";
   const investigator = state.players.find((p) => p.role === "investigator")!;
   const target = state.players.find((p) => p.role === "commoner")!;
-  const murderTarget = state.players.find((p) => p.role !== "murderer" && p.id !== target.id)!;
+  const murderTarget = state.players.find((p) => p.role === "commoner" && p.id !== target.id)!;
   resolveNight(
     state,
     {
@@ -123,6 +124,42 @@ test("same target cannot be protected on consecutive nights", () => {
   );
   state.phase = "night";
   assert.throws(() => validateProtection(state, target.id), /consecutive/);
+});
+
+test("preparation night preserves protection resources and gives binary faction information", () => {
+  const { state, rng } = setup(17);
+  const apothecary = state.players.find((p) => p.role === "apothecary")!;
+  const murderer = state.players.find((p) => p.role === "murderer")!;
+  const result = resolveNight(
+    state,
+    {
+      murderTargetId: apothecary.id,
+      investigationTargetId: murderer.id,
+      protectionTargetId: apothecary.id,
+    },
+    rng,
+  );
+  assert.equal(apothecary.selfProtectionUsed, false);
+  assert.equal(apothecary.lastProtectedTargetId, null);
+  assert.equal(result.investigation?.targetIsMurderer, true);
+  assert.deepEqual(result.testimonies, []);
+});
+
+test("a plurality without a living majority cannot execute", () => {
+  const { state } = setup(19);
+  state.phase = "accusation";
+  const accused = resolveAccusation(
+    state,
+    Object.fromEntries(state.players.map((p, i) => [p.id, i === 0 ? "p2" : "p1"])),
+  );
+  beginVerdict(state);
+  const votes = Object.fromEntries(
+    state.players.map((p, i) => [p.id, i < 4 ? accused.finalists[0] : "pardon"]),
+  );
+  const result = resolveVerdict(state, accused.finalists, votes);
+  assert.equal(result.tied, false);
+  assert.equal(result.eliminatedPlayerId, null);
+  assert.equal(state.players.filter((p) => p.alive).length, 8);
 });
 
 test("tied verdict eliminates nobody", () => {

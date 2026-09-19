@@ -15,6 +15,8 @@ import {
   chooseNightIntent,
   chooseAccusationVotes,
   chooseVerdictVotes,
+  addPublicClaim,
+  publicVoteReason,
   type SuspicionLedger,
 } from "./botPolicy";
 import type { GameState, NightIntent, PlayerId, PlayerState, Testimony } from "../domain/types";
@@ -45,7 +47,9 @@ const HUMAN_PLAYER_ID = "p7";
 function promptForPhase(phase: TrialPhase, winner: GameState["winner"]): string {
   switch (phase) {
     case "opening-night":
-      return "종이 세 번 울리면 대연회장의 문이 열린다.";
+      return "배역을 확인하세요. 첫 밤에는 아무도 죽지 않습니다.";
+    case "dawn":
+      return "아침 발표를 확인한 뒤 토론을 시작하세요.";
     case "night":
       return "당신의 역할에 따라 밤의 행동 대상을 선택하라.";
     case "debate":
@@ -55,7 +59,7 @@ function promptForPhase(phase: TrialPhase, winner: GameState["winner"]): string 
     case "defendants":
       return "두 사람이 피고석에 섰다. 그들의 마지막 말을 들어라.";
     case "verdict":
-      return "배심의 칼끝을 한 사람에게 향해야 한다.";
+      return "피고 한 명 또는 처형 보류를 선택하세요. 생존자 과반수의 찬성만 처형으로 이어집니다.";
     case "resolution":
       return "판결은 기록되었다. 다음 종이 울리기 전 숨을 고르라.";
     case "ended":
@@ -86,20 +90,32 @@ export class TrialSession {
   private verdictVotes: TrialVoteTally[] = [];
   private resolution: TrialResolution | null = null;
   private readonly chronicle: string[];
+  private readonly names: string[];
+  private pendingAccusations: Record<PlayerId, PlayerId> = {};
+  private accusations: string[] = [];
+  private ballotRecords: string[] = [];
+  private humanDefense: string | null = null;
 
-  constructor(seed = 20260918) {
+  constructor(seed = 20260918, nickname = "당신") {
     this.random = new Mulberry32(seed);
     this.core = createGame(seed, this.random);
     this.ledger = createSuspicionLedger(this.core, this.random);
-    const target = this.random.pick(
-      this.core.players.filter((player) => player.role !== "murderer"),
+    this.names = SEATS.map((seat) => seat.name as string);
+    const nameRandom = new Mulberry32(seed ^ 0x61ac);
+    for (let i = this.names.length - 1; i > 0; i--) {
+      const j = Math.floor(nameRandom.next() * (i + 1));
+      [this.names[i], this.names[j]] = [this.names[j]!, this.names[i]!];
+    }
+    this.names[6] = nickname.trim().slice(0, 16) || "당신";
+    this.names = this.names.map((name, index) =>
+      index !== 6 && name === this.names[6] ? `${name}·${index + 1}` : name,
     );
-    const targetName = this.nameOf(target.id);
     this.openingAttack = {
-      targetId: target.id,
-      targetName,
+      targetId: "",
+      targetName: "",
       killed: false,
-      description: `새벽 종이 울리기 전, 누군가 ${targetName}의 문을 습격했다. 피는 남았지만 목숨은 건졌다.`,
+      description:
+        "8명 중 살인자 2명이 숨어 있습니다. 첫 밤은 준비 단계입니다. 집행관만 진영을 조사하며, 살인과 보호 자원 소모는 없습니다. 이름과 비밀 역할은 서로 무관합니다.",
     };
     this.chronicle = [
       "성 아그네스 성의 대연회장에 여덟 사람이 모였다.",
@@ -125,6 +141,8 @@ export class TrialSession {
       accusationVotes: this.accusationVotes,
       defendants: this.defendants,
       verdictVotes: this.verdictVotes,
+      ballotRecords: this.ballotRecords,
+      accusations: this.accusations,
       resolution: this.resolution,
       winner: this.core.winner,
       currentPrompt: promptForPhase(this.phase, this.core.winner),
@@ -132,18 +150,69 @@ export class TrialSession {
     });
   }
 
-  advanceOpeningNight(): TrialIntentResult {
+  advanceOpeningNight(targetId?: PlayerId): TrialIntentResult {
     if (this.phase !== "opening-night") return this.reject("개막의 밤은 이미 끝났습니다.");
-    resolveNight(this.core, this.createNightIntent(this.openingAttack.targetId), this.random);
+    const needsTarget = this.legalNightTargets().length > 0;
+    if (needsTarget) {
+      if (!targetId || !this.legalNightTargets().includes(targetId))
+        return this.reject("첫 밤에 조사할 다른 생존자를 선택하세요.");
+    }
+    const automatic = this.createNightIntent();
+    const intent = needsTarget ? { ...automatic, investigationTargetId: targetId! } : automatic;
+    resolveNight(this.core, intent, this.random);
     this.publishNightInformation();
-    this.phase = "debate";
-    this.chronicle.push("첫 습격은 살인으로 이어지지 않았다. 그러나 범인은 성 안에 남아 있다.");
+    this.phase = "dawn";
+    this.chronicle.push(
+      "1일 아침 · 준비 밤이 끝났습니다. 사망자는 없습니다. 살인 대상이나 보호 대상은 공개되지 않습니다.",
+    );
     return this.accept();
+  }
+
+  beginDiscussion(): TrialIntentResult {
+    if (this.phase !== "dawn") return this.reject("아침 발표 후에 토론할 수 있습니다.");
+    this.phase = this.core.winner ? "ended" : "debate";
+    return this.accept();
+  }
+
+  claimInvestigation(targetId: PlayerId, guilty: boolean): TrialIntentResult {
+    if (this.phase !== "debate" || !this.isLiving(HUMAN_PLAYER_ID))
+      return this.reject("살아 있는 플레이어만 토론 중 발언할 수 있습니다.");
+    if (
+      !this.isLiving(targetId) ||
+      targetId === HUMAN_PLAYER_ID ||
+      this.ledger.claims.some((c) => c.day === this.core.day && c.speakerId === HUMAN_PLAYER_ID)
+    )
+      return this.reject("자신을 제외한 생존자에 대해 하루 한 번만 조사 주장을 할 수 있습니다.");
+    addPublicClaim(this.core, this.ledger, HUMAN_PLAYER_ID, targetId, guilty);
+    this.refreshClaims();
+    this.chronicle.push(
+      `${this.nameOf(HUMAN_PLAYER_ID)}의 공개 주장: ${this.nameOf(targetId)} — ${guilty ? "살인자" : "주민"}. 진위 미확인.`,
+    );
+    return this.accept();
+  }
+
+  discloseLatestInvestigation(): TrialIntentResult {
+    const result = this.core.nightHistory.at(-1)?.investigation;
+    if (!result || result.investigatorId !== HUMAN_PLAYER_ID)
+      return this.reject("공개할 본인의 최근 조사 결과가 없습니다.");
+    return this.claimInvestigation(result.targetId, result.targetIsMurderer);
   }
 
   beginAccusation(): TrialIntentResult {
     if (this.phase !== "debate") return this.reject("토론이 끝나야 고발할 수 있습니다.");
     beginAccusation(this.core);
+    this.pendingAccusations = chooseAccusationVotes(
+      this.core,
+      this.ledger,
+      this.random,
+      BOT_PROFILES.baseline,
+    );
+    this.accusations = Object.entries(this.pendingAccusations)
+      .filter(([voter]) => voter !== HUMAN_PLAYER_ID)
+      .map(
+        ([voter, target]) =>
+          `${this.nameOf(voter)} → ${this.nameOf(target)}: ${this.reasonFor(target)}`,
+      );
     this.phase = "accusation";
     return this.accept();
   }
@@ -154,14 +223,17 @@ export class TrialSession {
       return this.reject("살아 있는 다른 인물을 고발해야 합니다.");
     }
 
-    const votes = chooseAccusationVotes(this.core, this.ledger, this.random, BOT_PROFILES.baseline);
+    const votes = { ...this.pendingAccusations };
     if (this.isLiving(HUMAN_PLAYER_ID)) votes[HUMAN_PLAYER_ID] = targetId;
     const result = resolveAccusation(this.core, votes);
     this.accusationVotes = tally(votes);
     this.defendants = [...result.finalists];
+    this.recordBallots("고발", votes);
     this.phase = "defendants";
     const pair = joinKoreanAnd(this.nameOf(this.defendants[0]!), this.nameOf(this.defendants[1]!));
-    this.chronicle.push(`${withParticle(pair, "이", "가")} 고발 표결로 피고석에 섰다.`);
+    this.chronicle.push(
+      `${withParticle(pair, "이", "가")} 득표 상위 2명으로 피고가 됐습니다. ${this.defendants.map((id) => `${this.nameOf(id)} ${votes ? Object.values(votes).filter((v) => v === id).length : 0}표`).join(", ")}. 동률은 이번 날 공개된 좌석 순번으로 결정합니다. 고발은 유죄 확정이 아닙니다.`,
+    );
     return this.accept();
   }
 
@@ -172,9 +244,24 @@ export class TrialSession {
     return this.accept();
   }
 
+  submitDefense(choice: "deny" | "evidence"): TrialIntentResult {
+    if (
+      this.phase !== "defendants" ||
+      !this.defendants.includes(HUMAN_PLAYER_ID) ||
+      this.humanDefense
+    )
+      return this.reject("피고로 지목된 날 변론 단계에서 한 번 발언할 수 있습니다.");
+    this.humanDefense =
+      choice === "deny"
+        ? "나는 살인자가 아닙니다. 고발만으로 유죄를 확정하지 마세요."
+        : "고발한 분들은 주장과 확정 사실을 구분해 주세요. 근거가 부족하면 처형을 보류해 주세요.";
+    this.chronicle.push(`${this.nameOf(HUMAN_PLAYER_ID)}의 변론: ${this.humanDefense}`);
+    return this.accept();
+  }
+
   submitVerdict(targetId: PlayerId): TrialIntentResult {
     if (this.phase !== "verdict") return this.reject("지금은 최종 판결을 내릴 때가 아닙니다.");
-    if (!this.defendants.includes(targetId))
+    if (targetId !== "pardon" && !this.defendants.includes(targetId))
       return this.reject("피고석에 선 사람만 판결할 수 있습니다.");
 
     const finalists = [this.defendants[0]!, this.defendants[1]!] as const;
@@ -188,18 +275,19 @@ export class TrialSession {
     if (this.isLiving(HUMAN_PLAYER_ID)) votes[HUMAN_PLAYER_ID] = targetId;
     const result = resolveVerdict(this.core, finalists, votes);
     this.verdictVotes = tally(votes);
-    this.resolution = result.tied
+    this.recordBallots("판결", votes);
+    this.resolution = !result.eliminatedPlayerId
       ? {
           kind: "deadlock",
           targetId: null,
           targetName: null,
-          text: "배심은 결론에 이르지 못했다. 누구도 처형되지 않았다.",
+          text: `처형에 필요한 ${Math.floor(this.core.players.filter((p) => p.alive).length / 2) + 1}표를 얻은 피고가 없습니다. 오늘은 처형을 보류합니다.`,
         }
       : {
           kind: "execution",
           targetId: result.eliminatedPlayerId,
           targetName: result.eliminatedPlayerId ? this.nameOf(result.eliminatedPlayerId) : null,
-          text: `${result.eliminatedPlayerId ? this.nameOf(result.eliminatedPlayerId) : "피고"}에게 유죄 판결이 내려졌다. 성문 밖으로 끌려갔다.`,
+          text: `${this.nameOf(result.eliminatedPlayerId!)} 처형. 공개된 실제 역할: ${this.roleLabel(this.core.players.find((p) => p.id === result.eliminatedPlayerId)!.role)}.`,
         };
     this.phase = "resolution";
     this.chronicle.push(this.resolution.text);
@@ -238,22 +326,30 @@ export class TrialSession {
     const result = resolveNight(this.core, intent, this.random);
     if (result.killedPlayerId) {
       this.chronicle.push(
-        `${this.night}번째 밤, ${this.nameOf(result.killedPlayerId)}의 방에서 촛불이 꺼졌다.`,
+        `${this.core.day}일 아침 · 밤의 습격으로 ${this.nameOf(result.killedPlayerId)} 사망. 공개 역할: ${this.roleLabel(this.core.players.find((p) => p.id === result.killedPlayerId)!.role)}. 범인과 행동 대상은 공개되지 않습니다.`,
       );
     } else {
-      this.chronicle.push(`${this.night}번째 밤, 약제사의 약병이 한 목숨을 붙잡았다.`);
+      this.chronicle.push(
+        `${this.core.day}일 아침 · 사망자 없음. 보호 대상과 약제사의 신원은 공개하지 않습니다.`,
+      );
     }
+    const announcement = this.chronicle.at(-1)!;
     this.publishNightInformation();
+    this.chronicle.push(announcement);
     this.accusationVotes = [];
     this.defendants = [];
     this.verdictVotes = [];
     this.resolution = null;
-    this.phase = this.core.winner ? "ended" : "debate";
+    this.humanDefense = null;
+    this.accusations = [];
+    this.phase = "dawn";
     return this.accept();
   }
 
   private legalNightTargets(): PlayerId[] {
     const human = this.core.players.find((player) => player.id === HUMAN_PLAYER_ID)!;
+    if (this.phase !== "night" && this.phase !== "opening-night") return [];
+    if (this.phase === "opening-night" && human.role !== "investigator") return [];
     if (!human.alive || human.role === "commoner") return [];
     return this.core.players
       .filter(
@@ -282,7 +378,7 @@ export class TrialSession {
     for (const night of this.core.nightHistory) {
       if (night.investigation?.investigatorId === human.id) {
         notes.push(
-          `${night.day}일 조사: ${this.nameOf(night.investigation.targetId)} — ${night.investigation.targetActed ? "밤에 행동함 (범인 확정 아님)" : "밤에 행동하지 않음"}`,
+          `${night.day}일 비공개 조사: ${this.nameOf(night.investigation.targetId)} — ${night.investigation.targetIsMurderer ? "살인자 진영" : "주민 진영"}. 이 결과는 당신만 확인했습니다. 공개 발언은 다른 사람에게는 검증되지 않은 주장입니다.`,
         );
       }
       for (const testimony of night.testimonies.filter((item) => item.recipientId === human.id))
@@ -292,10 +388,20 @@ export class TrialSession {
   }
 
   private defenseFor(playerId: PlayerId): string {
-    const clue = this.testimonies.find((item) => item.speakerId === playerId);
-    return clue
-      ? `내가 밝힌 것은 이것뿐이오. ${clue.text}`
-      : "밤의 움직임만으로 범인이라 단정하지 마시오. 공개된 증언을 서로 대조해 주시오.";
+    const voters = Object.entries(this.core.accusationHistory.at(-1)?.votes ?? {})
+      .filter(([, target]) => target === playerId)
+      .map(([voter]) => this.nameOf(voter));
+    const allegations = this.ledger.claims
+      .filter((c) => c.targetId === playerId && c.guilty)
+      .map((c) => this.nameOf(c.speakerId));
+    const speech =
+      playerId === HUMAN_PLAYER_ID
+        ? (this.humanDefense ??
+          "아직 변론하지 않았습니다. 아래에서 발언을 선택하거나 침묵할 수 있습니다.")
+        : allegations.length
+          ? `“${allegations.join(", ")}의 조사 주장을 부인합니다. 사칭일 수 있습니다. 나는 살인자가 아닙니다.”`
+          : "“나를 살인자라고 확인한 공개 정보가 없습니다. 표가 많다는 이유만으로 처형하지 마세요.”";
+    return `${voters.join(", ") || "동률 순번"}의 고발로 ${this.accusationVotes.find((v) => v.playerId === playerId)?.count ?? 0}표를 받았습니다. ${speech} 변론 자체는 진실을 보증하지 않습니다.`;
   }
 
   private createNightIntent(forcedMurderTargetId?: PlayerId): NightIntent {
@@ -304,22 +410,47 @@ export class TrialSession {
   }
 
   private publishNightInformation(): void {
-    absorbNightInformation(this.core, this.ledger, this.random, BOT_PROFILES.baseline);
-    const night = this.core.nightHistory.at(-1)!;
-    this.testimonies = night.testimonies
-      .filter((item) => this.ledger.disclosedTestimonyIds.has(item.id))
-      .map((item) => this.toTrialTestimony(item));
-    if (night.investigation && this.ledger.disclosedInvestigations.has(night.day)) {
-      const clue = night.investigation;
-      this.testimonies.push({
-        id: `investigation-${night.day}`,
-        speakerId: clue.investigatorId,
-        speakerName: this.nameOf(clue.investigatorId),
-        text: `${withParticle(this.nameOf(clue.targetId), "은", "는")} 밤에 ${clue.targetActed ? "움직였소. 단, 약제사도 밤에 움직이니 범인이라는 뜻은 아니오." : "움직이지 않았소."}`,
-        reliability: "clear",
-      });
+    absorbNightInformation(
+      this.core,
+      this.ledger,
+      this.random,
+      BOT_PROFILES.baseline,
+      HUMAN_PLAYER_ID,
+    );
+    this.refreshClaims();
+    for (const clue of this.testimonies.filter((c) => c.id.startsWith(`claim-${this.core.day}-`)))
+      this.chronicle.push(`${clue.speakerName}: ${clue.text}`);
+  }
+
+  private refreshClaims(): void {
+    this.testimonies = this.ledger.claims.map((claim) => ({
+      id: claim.id,
+      speakerId: claim.speakerId,
+      speakerName: this.nameOf(claim.speakerId),
+      text: `${claim.day}일 · “나는 집행관이며 ${this.nameOf(claim.targetId)} 조사 결과는 ${claim.guilty ? "살인자" : "주민"}입니다.” 검증되지 않은 주장 · 사칭 가능`,
+      reliability: "faint",
+    }));
+  }
+
+  private reasonFor(target: PlayerId): string {
+    let reason = publicVoteReason(this.core, this.ledger, target);
+    for (const claim of this.ledger.claims)
+      reason = reason.replaceAll(claim.id, `${claim.day}일 ${this.nameOf(claim.speakerId)}의 주장`);
+    return reason;
+  }
+
+  private recordBallots(kind: string, votes: Record<PlayerId, PlayerId>): void {
+    for (const [voter, target] of Object.entries(votes)) {
+      const line = `${this.core.day}일 ${kind} · ${this.nameOf(voter)} → ${target === "pardon" ? "처형 보류" : this.nameOf(target)}`;
+      this.ballotRecords.push(line);
+      this.chronicle.push(line);
     }
-    for (const clue of this.testimonies) this.chronicle.push(`${clue.speakerName}: ${clue.text}`);
+  }
+
+  private roleLabel(role: PlayerState["role"]): string {
+    return { murderer: "살인자", investigator: "집행관", apothecary: "약제사", commoner: "평민" }[
+      role
+    ];
   }
 
   observeVote(): TrialIntentResult {
@@ -338,15 +469,17 @@ export class TrialSession {
 
   private nameOf(playerId: PlayerId): string {
     const player = this.core.players.find((candidate) => candidate.id === playerId);
-    return player ? SEATS[player.seat]!.name : "이름 없는 자";
+    return player ? this.names[player.seat]! : "이름 없는 자";
   }
 
   private toTrialPlayer(player: PlayerState): TrialPlayer {
-    const seat = SEATS[player.seat]!;
     return {
       id: player.id,
-      name: seat.name,
-      title: seat.title,
+      name: this.nameOf(player.id),
+      title:
+        !player.alive || this.core.winner
+          ? this.roleLabel(player.role)
+          : `좌석 ${player.seat + 1} · 역할 비공개`,
       living: player.alive,
       isHuman: player.id === HUMAN_PLAYER_ID,
     };

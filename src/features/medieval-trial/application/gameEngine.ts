@@ -8,8 +8,6 @@ import type {
   PlayerId,
   PlayerState,
   Role,
-  Testimony,
-  TestimonyStrength,
   VerdictResolution,
 } from "../domain/types.js";
 
@@ -74,42 +72,6 @@ function actedLastNight(state: GameState, playerId: PlayerId): boolean {
   return player.role !== "commoner";
 }
 
-function buildTestimonies(state: GameState, rng: RandomSource, day: number): Testimony[] {
-  const alive = state.players.filter((player) => player.alive);
-  const actors = alive.filter((player) => actedLastNight(state, player.id));
-  const recipientCount = Math.min(
-    alive.length,
-    rng.int(MEDIEVAL_TRIAL_V01.testimonyRecipientsMin, MEDIEVAL_TRIAL_V01.testimonyRecipientsMax),
-  );
-  const recipients = rng.shuffle(alive).slice(0, recipientCount);
-
-  return recipients.map((recipient, index) => {
-    const roll = rng.next();
-    const strength: TestimonyStrength = roll < 0.6 ? "weak" : roll < 0.9 ? "medium" : "strong";
-    const sourceActor = actors.length > 0 ? rng.pick(actors) : null;
-
-    let candidateIds: PlayerId[] = [];
-    if (sourceActor && strength !== "weak") {
-      const desired = strength === "strong" ? 2 : 3;
-      const decoys = rng
-        .shuffle(
-          alive.filter((player) => player.id !== sourceActor.id && player.id !== recipient.id),
-        )
-        .slice(0, Math.max(0, desired - 1));
-      candidateIds = rng.shuffle([sourceActor, ...decoys]).map((player) => player.id);
-    }
-
-    return {
-      id: `d${day}-t${index + 1}-${recipient.id}`,
-      day,
-      recipientId: recipient.id,
-      strength,
-      candidateIds,
-      sourceActorId: sourceActor?.id ?? null,
-    };
-  });
-}
-
 export function validateProtection(state: GameState, targetId: PlayerId): void {
   const apothecary = requireAliveRole(state, "apothecary");
   const target = assertAliveTarget(state, targetId, "protection");
@@ -131,6 +93,7 @@ export function resolveNight(
   intent: NightIntent,
   rng: RandomSource,
 ): NightResolution {
+  void rng; // Baseline v0.2 generates no random witness evidence.
   if (state.phase !== "prologue-night" && state.phase !== "night") {
     throw new Error(`cannot resolve night during phase ${state.phase}`);
   }
@@ -163,10 +126,10 @@ export function resolveNight(
     validateProtection(state, intent.protectionTargetId);
     protectedTarget = playerById(state, intent.protectionTargetId);
 
-    if (protectedTarget.id === apothecary.id) {
+    if (state.phase !== "prologue-night" && protectedTarget.id === apothecary.id) {
       apothecary.selfProtectionUsed = true;
     }
-    apothecary.lastProtectedTargetId = protectedTarget.id;
+    if (state.phase !== "prologue-night") apothecary.lastProtectedTargetId = protectedTarget.id;
   } else if (intent.protectionTargetId) {
     throw new Error("dead apothecary cannot act");
   }
@@ -188,6 +151,7 @@ export function resolveNight(
           investigatorId: investigator.id,
           targetId: investigationTarget.id,
           targetActed: actedLastNight(state, investigationTarget.id),
+          targetIsMurderer: investigationTarget.role === "murderer",
         }
       : null;
 
@@ -199,7 +163,7 @@ export function resolveNight(
     murderPrevented,
     killedPlayerId,
     investigation,
-    testimonies: buildTestimonies(state, rng, day),
+    testimonies: [],
   };
 
   state.day = day;
@@ -302,11 +266,14 @@ export function resolveVerdict(
     const targetId = votes[voter.id];
     if (targetId === first) firstVotes += 1;
     else if (targetId === second) secondVotes += 1;
-    else throw new Error(`verdict vote from ${voter.id} must target a finalist`);
+    else if (targetId !== "pardon")
+      throw new Error(`verdict vote from ${voter.id} must target a finalist or pardon`);
   }
 
   const tied = firstVotes === secondVotes;
-  const eliminatedPlayerId = tied ? null : firstVotes > secondVotes ? first : second;
+  const majority = Math.floor(state.players.filter((p) => p.alive).length / 2) + 1;
+  const eliminatedPlayerId =
+    Math.max(firstVotes, secondVotes) < majority ? null : firstVotes > secondVotes ? first : second;
   if (eliminatedPlayerId) {
     playerById(state, eliminatedPlayerId).alive = false;
   }

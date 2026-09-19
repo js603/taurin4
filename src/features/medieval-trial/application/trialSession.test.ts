@@ -16,7 +16,9 @@ describe("TrialSession", () => {
         const result = (() => {
           switch (state.phase) {
             case "opening-night":
-              return session.advanceOpeningNight();
+              return session.advanceOpeningNight(state.legalNightTargets[0]);
+            case "dawn":
+              return session.beginDiscussion();
             case "debate":
               return session.beginAccusation();
             case "accusation":
@@ -71,7 +73,10 @@ describe("TrialSession", () => {
   it("moves through debate, accusation, defendants, and verdict", () => {
     const session = new TrialSession(7);
 
-    expect(session.advanceOpeningNight().state.phase).toBe("debate");
+    expect(session.advanceOpeningNight(session.getState().legalNightTargets[0]).state.phase).toBe(
+      "dawn",
+    );
+    expect(session.beginDiscussion().state.phase).toBe("debate");
     expect(session.beginAccusation().state.phase).toBe("accusation");
     const accusation = session.submitAccusation("p1");
     expect(accusation.error).toBeNull();
@@ -96,7 +101,8 @@ describe("TrialSession", () => {
   it("reproduces the complete first-day result for the same seed", () => {
     function firstDay(seed: number) {
       const session = new TrialSession(seed);
-      session.advanceOpeningNight();
+      session.advanceOpeningNight(session.getState().legalNightTargets[0]);
+      session.beginDiscussion();
       session.beginAccusation();
       const accusation = session.submitAccusation("p1");
       session.beginVerdict();
@@ -104,5 +110,45 @@ describe("TrialSession", () => {
     }
 
     expect(firstDay(91)).toEqual(firstDay(91));
+  });
+
+  it("keeps human investigations private until an explicit, irreversible daily claim", () => {
+    let session = new TrialSession(0);
+    for (let seed = 1; session.getState().playerRole !== "investigator"; seed++)
+      session = new TrialSession(seed);
+    const target = session.getState().legalNightTargets[0]!;
+    expect(session.advanceOpeningNight().error).not.toBeNull();
+    const dawn = session.advanceOpeningNight(target).state;
+    expect(dawn.privateNotes).toHaveLength(1);
+    expect(dawn.testimonies.some((t) => t.speakerId === dawn.playerId)).toBe(false);
+    session.beginDiscussion();
+    expect(session.claimInvestigation(target, true).error).toBeNull();
+    const before = session.getState();
+    expect(session.claimInvestigation(target, false).error).not.toBeNull();
+    expect(session.getState()).toEqual(before);
+    expect(before.testimonies.find((t) => t.speakerId === before.playerId)?.text).toContain(
+      "사칭 가능",
+    );
+  });
+
+  it("publishes frozen accusations and complete ballots, and permits pardon", () => {
+    const session = new TrialSession(7, "새이름");
+    expect(session.getState().players.find((p) => p.isHuman)?.name).toBe("새이름");
+    expect(session.getState().openingAttack.targetId).toBe("");
+    session.advanceOpeningNight(session.getState().legalNightTargets[0]);
+    session.beginDiscussion();
+    const announced = session.beginAccusation().state;
+    expect(announced.accusations).toHaveLength(7);
+    expect(session.getState()).toEqual(announced);
+    const result = session.submitAccusation("p1").state;
+    expect(result.ballotRecords).toHaveLength(8);
+    expect(result.defenses[result.defendants[0]!]).toContain("표를 받았습니다");
+    session.beginVerdict();
+    const verdict = session.submitVerdict("pardon");
+    expect(verdict.error).toBeNull();
+    expect(verdict.state.ballotRecords).toHaveLength(16);
+    expect(verdict.state.ballotRecords.some((line) => line.includes("새이름 → 처형 보류"))).toBe(
+      true,
+    );
   });
 });

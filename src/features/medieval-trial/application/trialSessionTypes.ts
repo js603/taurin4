@@ -3,6 +3,7 @@ import type { Faction, Role } from "../domain/types";
 export type TrialPhase =
   | "opening-night"
   | "night"
+  | "dawn"
   | "debate"
   | "accusation"
   | "defendants"
@@ -62,6 +63,8 @@ export interface TrialSessionState {
   readonly accusationVotes: readonly TrialVoteTally[];
   readonly defendants: readonly string[];
   readonly verdictVotes: readonly TrialVoteTally[];
+  readonly ballotRecords: readonly string[];
+  readonly accusations: readonly string[];
   readonly resolution: TrialResolution | null;
   readonly winner: Faction | null;
   readonly currentPrompt: string;
@@ -76,6 +79,7 @@ export interface TrialIntentResult {
 export const TRIAL_PHASE_LABELS: Record<TrialPhase, string> = {
   "opening-night": "개막의 밤",
   night: "밤의 행동",
+  dawn: "아침 사건 발표",
   debate: "자유 토론",
   accusation: "고발",
   defendants: "피고석",

@@ -1,5 +1,7 @@
 # Gameplay and bot policy — 2026-09-18
 
+> Historical v0.1 scope, not a current completion claim. See [v0.2 foundations and limitations](MAFIA_FOUNDATIONS_V02.md).
+
 ## Implemented scope
 
 Existing React trial-hall design is preserved. Game rules remain in the core;

@@ -1061,3 +1061,54 @@ button:focus-visible {
     animation-duration: 0.01ms !important;
   }
 }
+
+.trial-setup {
+  max-width: 760px;
+  margin: 30px auto;
+  line-height: 1.8;
+  padding: 28px;
+}
+.trial-app select,
+.trial-app input {
+  max-width: 100%;
+  padding: 10px;
+  margin: 8px;
+  border: 1px solid #a58b65;
+  border-radius: 5px;
+  background: #231f20;
+  color: #f5ebd7;
+  font: inherit;
+}
+.trial-app button:focus-visible,
+.trial-app select:focus-visible,
+.trial-app input:focus-visible {
+  outline: 3px solid #edc57b;
+  outline-offset: 3px;
+}
+.testimony-list {
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.chronicle-list {
+  max-height: 650px;
+  overflow-y: auto;
+}
+.hall-scene {
+  min-height: 180px;
+  max-height: 220px;
+  overflow: hidden;
+}
+@media (max-width: 760px) {
+  .hall-scene {
+    display: none;
+  }
+  .trial-setup {
+    margin: 12px auto;
+    padding: 18px;
+  }
+  .testimony-list .quiet-button {
+    display: block;
+    margin: 10px 0;
+    min-height: 44px;
+  }
+}

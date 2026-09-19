@@ -57,8 +57,12 @@ export function createBalanceReport(results: readonly SimulationResult[]): Balan
     murdererWinRate: round4(murdererWins / games),
     averageDays: round4(totalDays / games),
     firstEliminationByRole,
-    protectionSuccessRate: round4(protectionAttempts === 0 ? 0 : protectionSuccesses / protectionAttempts),
-    investigationsOnMurdererRate: round4(investigations === 0 ? 0 : investigationsOnMurderers / investigations),
+    protectionSuccessRate: round4(
+      protectionAttempts === 0 ? 0 : protectionSuccesses / protectionAttempts,
+    ),
+    investigationsOnMurdererRate: round4(
+      investigations === 0 ? 0 : investigationsOnMurderers / investigations,
+    ),
     averageTiedVerdicts: round4(tiedVerdicts / games),
   };
 }
@@ -66,7 +70,7 @@ export function createBalanceReport(results: readonly SimulationResult[]): Balan
 export function formatBalanceReport(report: BalanceReport): string {
   const pct = (value: number) => `${(value * 100).toFixed(2)}%`;
   return [
-    "중세재판 v0.1 — Balance Simulation",
+    "중세재판 v0.2 — Balance Simulation (all bots, not human play)",
     `Games: ${report.games.toLocaleString()}`,
     `Residents: ${pct(report.residentWinRate)}`,
     `Murderers: ${pct(report.murdererWinRate)}`,
