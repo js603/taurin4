@@ -102,6 +102,7 @@ npm run check
 
 - GitHub: https://github.com/js603/taurin4
 - Development branch: `submain`
+- Play URL: https://js603.github.io/taurin4/submain/
 - Production/base branch: `main`
 
 ## AI Coding Contract
