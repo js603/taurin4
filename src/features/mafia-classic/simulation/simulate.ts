@@ -148,8 +148,6 @@ export function simulateBotGame(seed: number, maxActions = 5000): SimulationResu
       case "WIN_CHECK":
         throw new Error("automatic phase leaked out of dispatch: " + state.phase);
 
-      case "GAME_OVER":
-        break;
     }
   }
 
