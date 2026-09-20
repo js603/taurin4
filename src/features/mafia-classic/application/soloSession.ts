@@ -629,7 +629,7 @@ export function proposeNight(state: SoloMafiaSession): SoloMafiaSession {
     ? human(state)
     : aliveBots(state)[Math.floor(random01(state.seed, state.actionCounter * 83) * aliveBots(state).length)]!;
   const botVotes = prepareBotNightVotes(state);
-  let next = pushTalk(
+  const next = pushTalk(
     withCounter(state),
     proposer.id,
     proposer.name,
