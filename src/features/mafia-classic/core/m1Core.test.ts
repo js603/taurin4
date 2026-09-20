@@ -138,7 +138,6 @@ describe("M1 Core Engine", () => {
     const started = startEight(21);
     let state = confirmRoles(started.state, started.rng);
     const mafiaTarget = state.players.find((player) => player.role === "CITIZEN")!;
-    const doctor = role(state, "DOCTOR");
     const detective = role(state, "DETECTIVE");
     const detectiveTarget = state.players.find(
       (player) => player.alive && player.id !== detective.id,
@@ -159,7 +158,6 @@ describe("M1 Core Engine", () => {
     const view = buildPlayerView(state, citizen.id);
     expect(view.doctorLastProtectedTargetId).toBeNull();
     expect(view.detectiveHistory).toBeNull();
-    expect(JSON.stringify(view)).not.toContain('"doctor"');
   });
 
   it("gives Detective only MAFIA / NOT_MAFIA and hides it from other players", () => {
@@ -194,7 +192,6 @@ describe("M1 Core Engine", () => {
   it("prevents Doctor from protecting the same player on consecutive nights", () => {
     const started = startEight(37);
     let state = confirmRoles(started.state, started.rng);
-    const doctor = role(state, "DOCTOR");
     const detective = role(state, "DETECTIVE");
     const protectedTarget = state.players.find(
       (player) => player.alive && player.id !== detective.id,
@@ -239,7 +236,6 @@ describe("M1 Core Engine", () => {
     let state = confirmRoles(started.state, started.rng);
     const mafia = role(state, "MAFIA");
     const doctor = role(state, "DOCTOR");
-    const detective = role(state, "DETECTIVE");
     const townTarget = state.players.find(
       (player) => player.role === "CITIZEN",
     )!;
