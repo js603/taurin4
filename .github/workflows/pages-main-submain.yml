@@ -45,6 +45,7 @@ jobs:
         working-directory: source-main
         env:
           VITE_BASE_PATH: /taurin4/
+          VITE_DISABLE_PWA: "true"
         run: |
           npm install --no-audit --no-fund
           npm run build
@@ -53,6 +54,7 @@ jobs:
         working-directory: source-submain
         env:
           VITE_BASE_PATH: /taurin4/submain/
+          VITE_DISABLE_PWA: "true"
         run: |
           npm install --no-audit --no-fund
           npm run build
@@ -64,7 +66,25 @@ jobs:
           mkdir -p pages/submain
           cp -R source-main/dist/. pages/
           cp -R source-submain/dist/. pages/submain/
+          cat > pages/sw.js <<'EOF'
+/* One-time GitHub Pages service-worker cleanup for multi-branch previews. */
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (event) => {
+  event.waitUntil((async () => {
+    await self.registration.unregister();
+    const clients = await self.clients.matchAll({ type: "window" });
+    for (const client of clients) {
+      if ("navigate" in client) {
+        client.navigate(client.url);
+      }
+    }
+  })());
+});
+
+EOF
           touch pages/.nojekyll
+          printf 'main\n' > pages/BRANCH.txt
+          printf 'submain\n' > pages/submain/BRANCH.txt
           test -f pages/index.html
           test -f pages/submain/index.html
 
