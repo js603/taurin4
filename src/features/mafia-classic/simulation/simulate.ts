@@ -3,7 +3,7 @@ import { createLobbyGame } from "../core/gameState.js";
 import { assertGameStateInvariants } from "../core/invariants.js";
 import { buildPlayerView } from "../core/playerView.js";
 import { Mulberry32 } from "../core/random.js";
-import type { GameAction, GamePhase, GameState, Winner } from "../core/types.js";
+import type { GameAction, GamePhase, Winner } from "../core/types.js";
 import {
   chooseBotNightTarget,
   chooseBotNomination,
