@@ -1,1 +1,5 @@
-import { MafiaClassicPage } from "./features/mafia-classic/ui/MafiaClassicPage";\n\nexport default function App() {\n  return <MafiaClassicPage />;\n}\n
+import { MafiaClassicPage } from "./features/mafia-classic/ui/MafiaClassicPage";
+
+export default function App() {
+  return <MafiaClassicPage />;
+}
