@@ -24,6 +24,9 @@ jobs:
       - name: Full project check
         run: npm run check
 
+      - name: M1 headless 1,000-game simulation
+        run: npm run mafia:m1:sim
+
       - name: Build submain Web preview
         env:
           VITE_BASE_PATH: /taurin4/submain/
