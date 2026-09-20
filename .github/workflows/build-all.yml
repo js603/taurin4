@@ -1,4 +1,4 @@
-name: Build All + Deploy Pages
+name: Build All
 
 on:
   push:
@@ -7,8 +7,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: build-all-${{ github.ref }}
@@ -39,8 +37,6 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
       - name: Set GitHub Pages base path
         shell: bash
         run: echo "VITE_BASE_PATH=/taurin4/" >> "$GITHUB_ENV"
@@ -53,23 +49,6 @@ jobs:
           path: dist/
           if-no-files-found: error
           retention-days: 14
-      - name: Upload GitHub Pages artifact
-        uses: actions/upload-pages-artifact@v4
-        with:
-          path: dist/
-
-  deploy-pages:
-    name: Deploy GitHub Pages
-    needs: web
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v4
-
   windows:
     name: Windows x64
     needs: quality
