@@ -471,7 +471,7 @@ export function MafiaClassicPage() {
             </div>
           ) : null}
 
-          {dayAction === "accusation" && votes.length === 0 && voteIndex === 0 ? (
+          {dayAction === "accusation" && voteIndex === -1 ? (
             <div className="action-card">
               <span className="action-label">ACCUSATION</span>
               <label>
