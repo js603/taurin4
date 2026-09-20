@@ -1,5 +1,1 @@
-import { MedievalTrialPage } from "./features/medieval-trial/ui/MedievalTrialPage";
-
-export default function App() {
-  return <MedievalTrialPage />;
-}
+import { MafiaClassicPage } from "./features/mafia-classic/ui/MafiaClassicPage";\n\nexport default function App() {\n  return <MafiaClassicPage />;\n}\n
