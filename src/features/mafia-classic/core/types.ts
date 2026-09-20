@@ -104,6 +104,7 @@ export interface GameState {
   readonly pendingExecutionId: PlayerId | null;
   readonly phaseConfirmations: readonly PlayerId[];
   readonly investigationResults: Readonly<Record<PlayerId, readonly InvestigationResult[]>>;
+  readonly doctorLastProtectedTargetId: PlayerId | null;
   readonly publicEvents: readonly PublicEvent[];
   readonly winner: Winner;
   readonly revision: number;
