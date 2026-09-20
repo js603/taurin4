@@ -1,5 +1,8 @@
 declare const process: {
   argv: string[];
+  stdout: {
+    write(chunk: string): void;
+  };
 };
 
 declare module "node:assert/strict" {
