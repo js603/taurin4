@@ -1,0 +1,42 @@
+name: Submain Mafia CI
+
+on:
+  push:
+    branches: ["submain"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: submain-mafia-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Full project check
+        run: npm run check
+
+      - name: Build submain Web preview
+        env:
+          VITE_BASE_PATH: /taurin4/
+        run: npm run build
+
+      - name: Upload Web preview artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: submain-web-preview
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
