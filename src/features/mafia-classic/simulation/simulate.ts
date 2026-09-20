@@ -1,5 +1,6 @@
 import { dispatchAction } from "../core/engine.js";
 import { createLobbyGame } from "../core/gameState.js";
+import { assertGameStateInvariants } from "../core/invariants.js";
 import { buildPlayerView } from "../core/playerView.js";
 import { Mulberry32 } from "../core/random.js";
 import type { GameAction, GamePhase, GameState, Winner } from "../core/types.js";
@@ -20,26 +21,6 @@ export interface SimulationResult {
 }
 
 const NAMES = ["JS", "MINHO", "SOYOUNG", "JUN", "HANA", "DOYUN", "YUNA", "TAEHO"] as const;
-
-function assertCoreInvariants(state: GameState): void {
-  const ids = state.players.map((player) => player.id);
-  if (new Set(ids).size !== ids.length) throw new Error("duplicate player id");
-  if (state.winner && state.phase !== "GAME_OVER") throw new Error("winner outside GAME_OVER");
-  if (state.phase === "GAME_OVER" && !state.winner) throw new Error("GAME_OVER without winner");
-
-  for (const player of state.players) {
-    if (!player.alive && player.deathCause === null) throw new Error("dead player without cause");
-    if (player.alive && player.deathCause !== null) throw new Error("living player with death cause");
-  }
-
-  for (const [voterId, vote] of Object.entries(state.votes)) {
-    const voter = state.players.find((player) => player.id === voterId);
-    if (!voter) throw new Error("vote from unknown player");
-    if (state.phase === "DAY_VOTE" && vote.confirmed && !voter.alive) {
-      throw new Error("dead player confirmed a day vote");
-    }
-  }
-}
 
 export function simulateBotGame(seed: number, maxActions = 5000): SimulationResult {
   const engineRng = new Mulberry32(seed ^ 0x51f15e);
@@ -65,7 +46,7 @@ export function simulateBotGame(seed: number, maxActions = 5000): SimulationResu
     state = result.state;
     actions += 1;
     phases.add(state.phase);
-    assertCoreInvariants(state);
+    assertGameStateInvariants(state);
     if (actions > maxActions) throw new Error("simulation exceeded maxActions");
   };
 
