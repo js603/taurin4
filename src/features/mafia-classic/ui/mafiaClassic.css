@@ -1,727 +1,968 @@
 :root {
-  --mafia-black: #07090d;
-  --mafia-panel: rgba(15, 18, 24, 0.92);
-  --mafia-line: rgba(255, 255, 255, 0.1);
-  --mafia-paper: #e8dfcf;
-  --mafia-muted: #918d87;
-  --mafia-red: #a51f2b;
-  --mafia-red-hot: #e13d4c;
-  --mafia-cold: #a9b9ca;
+  --mf-bg: #07090d;
+  --mf-panel: rgba(15, 18, 24, 0.92);
+  --mf-panel-soft: rgba(18, 21, 28, 0.7);
+  --mf-line: rgba(255, 255, 255, 0.09);
+  --mf-paper: #e8dfcf;
+  --mf-muted: #918d87;
+  --mf-muted-2: #666b73;
+  --mf-red: #a51f2b;
+  --mf-red-hot: #df4351;
+  --mf-cold: #8294aa;
+  --mf-green: #8ea48e;
 }
 
 body {
-  background: #07090d;
+  margin: 0;
+  background: var(--mf-bg);
 }
 
-.mafia-app {
+button,
+input,
+select {
+  font: inherit;
+}
+
+.mafia-root {
   min-height: 100vh;
-  padding: clamp(18px, 3vw, 42px);
-  color: var(--mafia-paper);
+  box-sizing: border-box;
+  color: var(--mf-paper);
   background:
-    radial-gradient(circle at 50% -10%, rgba(123, 19, 31, 0.24), transparent 34rem),
-    linear-gradient(180deg, #0b0d12 0%, #06070a 62%, #0b090b 100%);
-  font-family: "Trebuchet MS", Arial, sans-serif;
+    radial-gradient(circle at 50% -10%, rgba(126, 19, 33, 0.19), transparent 34rem),
+    linear-gradient(180deg, #0b0d12 0%, #07090d 58%, #09080b 100%);
+  font-family: Inter, Pretendard, "Noto Sans KR", Arial, sans-serif;
 }
 
-.mafia-app::before {
+.mafia-root::before {
   position: fixed;
   inset: 0;
-  pointer-events: none;
   content: "";
-  opacity: 0.25;
+  pointer-events: none;
+  opacity: 0.22;
   background-image:
     repeating-linear-gradient(0deg, transparent 0 3px, rgba(255, 255, 255, 0.018) 4px),
     radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.03) 0 1px, transparent 1px);
   background-size: auto, 17px 17px;
 }
 
-.mafia-app button,
-.mafia-app input,
-.mafia-app select {
-  font: inherit;
-}
-
-.mafia-app button:focus-visible,
-.mafia-app input:focus-visible,
-.mafia-app select:focus-visible {
-  outline: 2px solid #ef5c69;
-  outline-offset: 3px;
-}
-
-.mafia-app--setup,
-.centered-stage {
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  gap: 24px;
-}
-
-.mafia-hero {
-  width: min(760px, 100%);
-  text-align: center;
-}
-
-.mafia-hero h1,
-.secret-card h1,
-.ritual-card h1,
-.end-panel h1 {
-  margin: 4px 0 14px;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(54px, 12vw, 128px);
-  font-weight: 400;
-  letter-spacing: 0.12em;
-  line-height: 0.9;
-}
-
-.mafia-hero p:last-child,
-.secret-card > p,
-.ritual-card > p,
-.end-panel > p {
-  max-width: 650px;
-  margin: 0 auto;
-  color: var(--mafia-muted);
-  line-height: 1.7;
-}
-
-.mafia-kicker,
-.panel-heading span,
-.action-label,
-.mafia-footer {
+.eyebrow {
+  margin: 0 0 10px;
+  color: #a94a55;
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 900;
   letter-spacing: 0.18em;
   text-transform: uppercase;
 }
 
-.mafia-kicker {
-  margin: 0 0 10px;
-  color: #b9545f;
-}
-
-.mafia-panel,
-.secret-card,
-.ritual-card {
-  position: relative;
-  z-index: 1;
-  border: 1px solid var(--mafia-line);
-  border-radius: 14px;
-  background:
-    linear-gradient(145deg, rgba(24, 28, 36, 0.96), rgba(9, 11, 15, 0.96));
-  box-shadow:
-    0 28px 80px rgba(0, 0, 0, 0.46),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-
-.setup-panel {
-  width: min(760px, 100%);
-  padding: 22px;
-}
-
-.panel-heading {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.panel-heading span {
-  color: #746f6c;
-}
-
-.panel-heading h2 {
-  margin: 4px 0 0;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 24px;
-  font-weight: 400;
-}
-
-.name-grid {
+.mafia-setup {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.name-row {
-  display: grid;
-  grid-template-columns: 34px 1fr 34px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(330px, 0.85fr);
+  gap: clamp(26px, 6vw, 90px);
   align-items: center;
-  gap: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 9px;
-  padding: 6px;
-  background: rgba(255, 255, 255, 0.025);
+  padding: clamp(24px, 5vw, 72px);
 }
 
-.name-row > span,
-.seat-number {
-  color: #676b72;
-  font-size: 11px;
-  text-align: center;
-}
-
-.name-row input,
-.mafia-app select {
-  min-width: 0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 7px;
-  padding: 10px 11px;
-  background: #0b0e13;
-  color: var(--mafia-paper);
-}
-
-.remove-button {
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: #74777d;
-  font-size: 20px;
-}
-
-.remove-button:hover:not(:disabled) {
-  color: var(--mafia-red-hot);
-}
-
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.4;
-}
-
-.danger-button,
-.night-button,
-.ghost-button,
-.text-button {
-  border-radius: 8px;
-  padding: 11px 15px;
-  transition:
-    transform 150ms ease,
-    filter 150ms ease,
-    border-color 150ms ease;
-}
-
-.danger-button {
-  border: 1px solid #c13744;
-  background: linear-gradient(180deg, #ae2936, #70141f);
-  color: #fff3f3;
-  font-weight: 800;
-  box-shadow: 0 10px 30px rgba(157, 21, 35, 0.23);
-}
-
-.danger-button--wide {
-  width: 100%;
-  margin-top: 16px;
-}
-
-.night-button {
-  border: 1px solid #49576b;
-  background: linear-gradient(180deg, #293443, #151b24);
-  color: #e0e9f3;
-  font-weight: 800;
-}
-
-.ghost-button {
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.035);
-  color: #c4c1bc;
-}
-
-.text-button {
-  border: 0;
-  background: transparent;
-  color: #88847f;
-}
-
-.danger-button:hover:not(:disabled),
-.night-button:hover:not(:disabled),
-.ghost-button:hover:not(:disabled) {
-  filter: brightness(1.16);
-  transform: translateY(-1px);
-}
-
-.rule-note {
-  margin: 14px 0 0;
-  color: #686561;
-  font-size: 11px;
-  line-height: 1.6;
-  text-align: center;
-}
-
-.secret-card,
-.ritual-card {
-  width: min(620px, calc(100vw - 32px));
-  padding: clamp(28px, 7vw, 70px);
-  text-align: center;
-}
-
-.secret-card h1 {
-  font-size: clamp(42px, 8vw, 76px);
-}
-
-.role-card {
-  display: grid;
-  min-height: 230px;
-  place-items: center;
-  align-content: center;
-  gap: 14px;
-  margin: 18px 0;
-  border-radius: 16px;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
-}
-
-.role-card span {
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.25em;
-}
-
-.role-card strong {
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(45px, 9vw, 86px);
-  font-weight: 400;
-  letter-spacing: 0.08em;
-}
-
-.role-card--black {
-  border: 1px solid #444852;
-  background:
-    radial-gradient(circle at 50% 30%, rgba(176, 25, 41, 0.15), transparent 45%),
-    #06070a;
-  color: #e4e0db;
-}
-
-.role-card--red {
-  border: 1px solid #ba5861;
-  background: linear-gradient(145deg, #a22b37, #5b111b);
-  color: #fff0e8;
-}
-
-.secret-copy {
-  margin-bottom: 20px !important;
-}
-
-.sunrise-stage {
-  background:
-    radial-gradient(circle at 50% 75%, rgba(179, 49, 35, 0.22), transparent 36rem),
-    linear-gradient(#05070b, #141218);
-}
-
-.silent-count {
-  margin: 28px 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.11);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.11);
-  padding: 18px;
-  color: #d23c48;
-  font-size: clamp(20px, 5vw, 36px);
-  font-weight: 900;
-  letter-spacing: 0.16em;
-}
-
-.ritual-card h1 {
-  font-size: clamp(28px, 7vw, 54px);
-}
-
-.night-stage {
-  background:
-    radial-gradient(circle at 50% 30%, rgba(43, 64, 91, 0.25), transparent 40rem),
-    #05070a;
-}
-
-.paper-note {
-  margin: 20px auto;
-  border-radius: 3px;
-  padding: 42px 20px;
-  background: #d9d0be;
-  color: #14100e;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(30px, 7vw, 58px);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-  transform: rotate(-1deg);
-}
-
-.paper-note--mafia {
-  color: #831a24;
-}
-
-.mafia-select {
-  width: 100%;
-  margin: 4px 0 18px;
-}
-
-.mafia-header,
-.mafia-layout,
-.mafia-footer {
+.mafia-title-block,
+.setup-card,
+.private-card-shell,
+.table-header,
+.public-strip,
+.seat-rail,
+.game-surface,
+.chronicle-drawer,
+.table-footer {
   position: relative;
   z-index: 1;
-  width: min(1450px, 100%);
-  margin: 0 auto;
 }
 
-.mafia-header {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 18px;
-  border-bottom: 1px solid var(--mafia-line);
-  padding-bottom: 18px;
+.mafia-title-block {
+  max-width: 760px;
 }
 
-.mafia-header h1 {
+.mafia-title-block h1,
+.private-card-shell > h1 {
   margin: 0;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(33px, 5vw, 64px);
+  font-size: clamp(68px, 13vw, 170px);
   font-weight: 400;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.09em;
+  line-height: 0.82;
 }
 
-.heartbeat {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #bdb7b1;
-  font-size: 11px;
-  letter-spacing: 0.12em;
+.lead {
+  max-width: 620px;
+  margin: 26px 0 0;
+  color: #aaa49e;
+  font-size: clamp(15px, 2vw, 20px);
+  line-height: 1.75;
 }
 
-.heartbeat span {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--mafia-red-hot);
-  box-shadow: 0 0 0 0 rgba(225, 61, 76, 0.55);
-  animation: heartbeat 1.45s infinite;
-}
-
-@keyframes heartbeat {
-  0%, 42%, 100% {
-    box-shadow: 0 0 0 0 rgba(225, 61, 76, 0.48);
-    transform: scale(1);
-  }
-  12% {
-    box-shadow: 0 0 0 9px rgba(225, 61, 76, 0);
-    transform: scale(1.25);
-  }
-  22% {
-    transform: scale(0.94);
-  }
-  30% {
-    transform: scale(1.15);
-  }
-}
-
-.mafia-layout {
-  display: grid;
-  grid-template-columns: minmax(190px, 0.72fr) minmax(420px, 1.65fr) minmax(220px, 0.8fr);
-  gap: 16px;
-  padding: 20px 0;
-}
-
-.roster-panel,
-.log-panel,
-.discussion-panel {
-  padding: 18px;
-}
-
-.roster-list {
-  display: grid;
-  gap: 5px;
-}
-
-.roster-row {
-  display: grid;
-  grid-template-columns: 32px 1fr;
-  align-items: center;
-  gap: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
-  padding: 9px 0;
-}
-
-.roster-row strong,
-.roster-row small {
-  display: block;
-}
-
-.roster-row strong {
-  color: #d9d5cf;
-  font-size: 13px;
-}
-
-.roster-row small {
-  margin-top: 2px;
-  color: #65686d;
-  font-size: 10px;
-}
-
-.roster-row.is-dead {
-  opacity: 0.42;
-  filter: grayscale(1);
-}
-
-.phase-banner {
-  min-height: 230px;
-  display: grid;
-  align-content: center;
-  border-radius: 10px;
-  padding: clamp(24px, 5vw, 54px);
+.setup-card,
+.private-card-shell,
+.game-surface,
+.chronicle-drawer {
+  border: 1px solid var(--mf-line);
+  border-radius: 18px;
   background:
-    linear-gradient(90deg, rgba(3, 4, 7, 0.85), rgba(16, 18, 25, 0.36), rgba(3, 4, 7, 0.85)),
-    radial-gradient(circle at 50% 120%, rgba(158, 25, 39, 0.31), transparent 50%),
-    #11151d;
-  text-align: center;
+    linear-gradient(145deg, rgba(23, 27, 35, 0.96), rgba(9, 11, 15, 0.97));
+  box-shadow:
+    0 34px 90px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
-.phase-banner > span {
-  color: #a7434e;
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.2em;
+.setup-card {
+  display: grid;
+  gap: 18px;
+  padding: clamp(22px, 4vw, 36px);
 }
 
-.phase-banner h2 {
-  margin: 10px 0;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(34px, 5vw, 58px);
-  font-weight: 400;
-}
-
-.phase-banner p {
-  max-width: 570px;
-  margin: 0 auto;
-  color: #8b8986;
-  font-size: 13px;
-  line-height: 1.7;
-}
-
-.reveal-strip {
-  margin-top: 12px;
-  border-left: 3px solid var(--mafia-red);
-  padding: 13px 15px;
-  background: rgba(160, 27, 41, 0.09);
-  color: #cbbeb6;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.day-actions,
-.split-actions {
+.mode-badge {
   display: flex;
-  justify-content: center;
-  gap: 10px;
-  margin-top: 18px;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--mf-line);
+  padding-bottom: 14px;
+  color: var(--mf-muted);
+  font-size: 10px;
+  letter-spacing: 0.11em;
 }
 
-.action-card,
-.vote-card {
-  margin-top: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 10px;
-  padding: 20px;
-  background: rgba(4, 6, 9, 0.64);
+.mode-badge strong {
+  color: #d9d5ce;
 }
 
-.action-card {
+.field-label {
   display: grid;
-  gap: 10px;
-}
-
-.action-card label,
-.vote-card label {
-  display: grid;
-  gap: 6px;
-  color: #88847e;
-  font-size: 11px;
+  gap: 8px;
+  color: #aaa49e;
+  font-size: 12px;
   font-weight: 700;
 }
 
-.action-card p,
-.vote-card p {
-  color: #8b8986;
+.field-label input,
+.field-label select,
+.night-note-card select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 10px;
+  padding: 12px 13px;
+  background: #0a0d12;
+  color: var(--mf-paper);
+}
+
+.rule-summary {
+  border-left: 2px solid #7d202c;
+  padding: 3px 0 3px 14px;
+}
+
+.rule-summary strong {
+  font-size: 12px;
+}
+
+.rule-summary p {
+  margin: 7px 0 0;
+  color: var(--mf-muted);
   font-size: 12px;
   line-height: 1.65;
 }
 
-.action-label {
-  color: #a23d48;
+.primary-action,
+.soft-action,
+.pressure-action,
+.danger-action,
+.night-action,
+.text-action {
+  border-radius: 10px;
+  transition:
+    transform 140ms ease,
+    filter 140ms ease,
+    border-color 140ms ease;
 }
 
-.vote-card {
+.primary-action,
+.soft-action,
+.pressure-action,
+.danger-action,
+.night-action {
+  min-height: 44px;
+  padding: 11px 15px;
+  font-weight: 800;
+}
+
+.primary-action {
+  border: 1px solid #b83c49;
+  background: linear-gradient(180deg, #a82936, #68141d);
+  color: #fff5f2;
+}
+
+.soft-action {
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.04);
+  color: #d0ccc5;
+}
+
+.pressure-action {
+  border: 1px solid rgba(175, 70, 83, 0.5);
+  background: rgba(116, 32, 43, 0.18);
+  color: #f0d2d5;
+}
+
+.danger-action {
+  border: 1px solid #c53e4c;
+  background: linear-gradient(180deg, #b22f3d, #751722);
+  color: #fff6f4;
+}
+
+.night-action {
+  border: 1px solid #4b5c71;
+  background: linear-gradient(180deg, #2b3746, #171d26);
+  color: #e2eaf2;
+}
+
+.text-action {
+  border: 0;
+  padding: 8px 4px;
+  background: transparent;
+  color: #8d8a86;
+}
+
+.primary-action:hover:not(:disabled),
+.soft-action:hover:not(:disabled),
+.pressure-action:hover:not(:disabled),
+.danger-action:hover:not(:disabled),
+.night-action:hover:not(:disabled) {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.36;
+}
+
+.wide {
+  width: 100%;
+}
+
+.error-copy {
+  margin: 0;
+  color: #ff8d98;
+  font-size: 12px;
+}
+
+.private-stage {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 22px;
+}
+
+.private-card-shell {
+  width: min(650px, 100%);
+  box-sizing: border-box;
+  padding: clamp(28px, 7vw, 72px);
   text-align: center;
 }
 
-.vote-card h2 {
-  margin: 5px 0;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 40px;
-  font-weight: 400;
+.private-card-shell > h1 {
+  font-size: clamp(50px, 9vw, 86px);
+  letter-spacing: 0.03em;
 }
 
-.log-panel ol {
+.private-help {
+  max-width: 540px;
+  margin: 18px auto 24px;
+  color: var(--mf-muted);
+  line-height: 1.7;
+}
+
+.identity-card {
   display: grid;
-  gap: 12px;
-  max-height: 640px;
+  min-height: 280px;
+  place-items: center;
+  align-content: center;
+  gap: 15px;
+  margin: 22px 0;
+  border-radius: 16px;
+  box-shadow: 0 26px 80px rgba(0, 0, 0, 0.48);
+}
+
+.identity-card span {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.24em;
+}
+
+.identity-card strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(50px, 10vw, 92px);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+}
+
+.identity-card--black {
+  border: 1px solid #484c54;
+  background:
+    radial-gradient(circle at 50% 25%, rgba(170, 28, 43, 0.13), transparent 46%),
+    #05070a;
+}
+
+.identity-card--red {
+  border: 1px solid #ae515b;
+  background: linear-gradient(145deg, #a72d39, #5c121b);
+  color: #fff1e8;
+}
+
+.sunrise-stage-v2 {
+  background:
+    radial-gradient(circle at 50% 80%, rgba(177, 47, 36, 0.18), transparent 35rem),
+    linear-gradient(#05070b, #121116);
+}
+
+.sunrise-shell > h1 {
+  margin-bottom: 24px;
+  font-size: clamp(34px, 7vw, 62px);
+}
+
+.sunrise-sequence {
+  display: grid;
+  gap: 13px;
+  margin: 25px 0;
+  border-top: 1px solid var(--mf-line);
+  border-bottom: 1px solid var(--mf-line);
+  padding: 20px 0;
+}
+
+.sunrise-sequence span {
+  color: #99948d;
+  font-size: clamp(18px, 4vw, 30px);
+}
+
+.sunrise-sequence strong {
+  color: #d04451;
+  font-size: clamp(22px, 5vw, 38px);
+  letter-spacing: 0.12em;
+}
+
+.secret-team {
+  margin: 24px 0;
+  border: 1px solid rgba(183, 61, 75, 0.3);
+  border-radius: 12px;
+  padding: 18px;
+  background: rgba(112, 24, 35, 0.1);
+}
+
+.secret-team span,
+.secret-team strong,
+.secret-team p {
+  display: block;
+}
+
+.secret-team span {
+  color: #a6626a;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+}
+
+.secret-team strong {
+  margin-top: 7px;
+  font-size: 24px;
+}
+
+.secret-team p {
+  margin: 8px 0 0;
+  color: #8e8882;
+  font-size: 12px;
+}
+
+.honest-wait {
+  border-color: rgba(126, 149, 177, 0.24);
+  background: rgba(65, 83, 105, 0.08);
+}
+
+.table-stage {
+  padding: 20px clamp(12px, 3vw, 34px) 28px;
+}
+
+.table-header,
+.public-strip,
+.seat-rail,
+.game-surface,
+.chronicle-drawer,
+.table-footer {
+  width: min(1180px, 100%);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.table-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 8px 2px 15px;
+}
+
+.table-header h1 {
   margin: 0;
-  padding: 0;
-  overflow: auto;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(38px, 6vw, 64px);
+  font-weight: 400;
+  letter-spacing: 0.05em;
+}
+
+.header-state {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+  font-size: 10px;
+  letter-spacing: 0.11em;
+}
+
+.header-state span {
+  color: #9e555e;
+}
+
+.header-state strong {
+  color: #d7d2cc;
+}
+
+.public-strip {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--mf-line);
+  border-radius: 12px;
+  background: var(--mf-line);
+}
+
+.public-strip > div,
+.my-card-peek {
+  padding: 11px 13px;
+  background: rgba(9, 12, 17, 0.88);
+}
+
+.public-strip span,
+.my-card-peek summary {
+  color: #676b72;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.public-strip strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+}
+
+.my-card-peek {
+  min-width: 120px;
+}
+
+.my-card-peek summary {
+  cursor: pointer;
   list-style: none;
 }
 
-.log-panel li {
+.my-card-peek > strong {
+  margin-top: 5px;
+}
+
+.role-black {
+  color: #c9cbd0 !important;
+}
+
+.role-red {
+  color: #e25a65 !important;
+}
+
+.seat-rail {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.seat-chip {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(15, 18, 24, 0.68);
+  color: #d8d3cd;
+  text-align: left;
+}
+
+.seat-chip > span {
+  color: #5f646d;
+  font-size: 9px;
+}
+
+.seat-chip strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seat-chip small {
+  overflow: hidden;
+  color: #6f737a;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seat-chip--selected {
+  border-color: rgba(218, 67, 81, 0.7);
+  background: rgba(110, 27, 37, 0.2);
+}
+
+.seat-chip--human {
+  border-color: rgba(120, 143, 171, 0.35);
+}
+
+.seat-chip--dead {
+  opacity: 0.42;
+  filter: grayscale(1);
+}
+
+.game-surface {
+  margin-top: 12px;
+  overflow: hidden;
+}
+
+.phase-context {
+  padding: clamp(22px, 4vw, 42px);
+  background:
+    radial-gradient(circle at 50% 110%, rgba(143, 24, 37, 0.21), transparent 54%),
+    linear-gradient(180deg, rgba(24, 28, 36, 0.45), rgba(9, 11, 15, 0.15));
+  text-align: center;
+}
+
+.phase-context > span,
+.decision-kicker,
+.result-card > span {
+  color: #a54b56;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+}
+
+.phase-context h2 {
+  margin: 8px 0 7px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(30px, 5vw, 48px);
+  font-weight: 400;
+}
+
+.phase-context p {
+  max-width: 680px;
+  margin: 0 auto;
+  color: var(--mf-muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.conversation {
+  display: grid;
+  gap: 2px;
+  max-height: 430px;
+  overflow: auto;
+  border-top: 1px solid var(--mf-line);
+  border-bottom: 1px solid var(--mf-line);
+  padding: 8px 14px;
+  background: rgba(3, 5, 8, 0.34);
+}
+
+.talk-line {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 10px;
+  padding: 10px 4px;
+}
+
+.speaker-mark {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  color: #7a7f88;
+  font-size: 8px;
+}
+
+.talk-line strong {
+  color: #cbc6bf;
+  font-size: 11px;
+}
+
+.talk-line p {
+  margin: 3px 0 0;
+  color: #8f8b85;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.talk-line--pressure p {
+  color: #c19a9f;
+}
+
+.talk-line--defense p {
+  color: #a9b7c8;
+}
+
+.talk-line--result {
+  border-left: 2px solid #922936;
+  padding-left: 11px;
+  background: rgba(110, 24, 35, 0.06);
+}
+
+.talk-line--system .speaker-mark {
+  border-color: transparent;
+}
+
+.talk-line--system strong {
+  color: #8e5a60;
+}
+
+.action-dock,
+.decision-card,
+.result-card {
+  padding: clamp(18px, 3vw, 28px);
+}
+
+.selected-target {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.selected-target span {
+  color: #686c73;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.selected-target strong {
+  font-size: 17px;
+}
+
+.action-row,
+.secondary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.action-row > button {
+  flex: 1 1 140px;
+}
+
+.secondary-actions {
+  align-items: center;
+  border-top: 1px solid var(--mf-line);
+  margin-top: 13px;
+  padding-top: 10px;
+}
+
+.secondary-actions .night-action {
+  margin-left: auto;
+}
+
+.spectator-note {
+  margin: 0 0 12px;
+  color: #8e8a84;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.decision-card,
+.result-card {
+  max-width: 720px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.decision-card > p,
+.result-card > p {
+  color: var(--mf-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.decision-card h3,
+.result-card h3 {
+  margin: 8px 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(38px, 7vw, 70px);
+  font-weight: 400;
+}
+
+.vote-focus,
+.night-decision,
+.night-note-card,
+.night-result-card {
+  padding-top: 30px;
+  padding-bottom: 34px;
+}
+
+.night-note-card select {
+  margin: 10px 0 14px;
+}
+
+.honest-note {
+  width: min(360px, 90%);
+  margin: 18px auto;
+  border-radius: 5px;
+  padding: 34px 16px;
+  background: #d9d0be;
+  color: #201915;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(34px, 8vw, 58px);
+  box-shadow: 0 20px 55px rgba(0, 0, 0, 0.4);
+  transform: rotate(-0.7deg);
+}
+
+.result-card {
+  display: grid;
+  justify-items: center;
+  gap: 9px;
+}
+
+.result-card > strong {
+  color: #d7d0c8;
+}
+
+.result-card--danger {
+  background: radial-gradient(circle, rgba(135, 23, 36, 0.11), transparent 60%);
+}
+
+.final-result {
+  max-width: 860px;
+}
+
+.final-reveal {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 14px 0;
+}
+
+.final-reveal > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--mf-line);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.final-reveal span {
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.chronicle-drawer {
+  margin-top: 12px;
+  padding: 0;
+  box-shadow: none;
+}
+
+.chronicle-drawer summary {
+  cursor: pointer;
+  padding: 13px 15px;
+  color: #7f7c77;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.chronicle-drawer ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  border-top: 1px solid var(--mf-line);
+  padding: 13px 15px 16px;
+  list-style: none;
+}
+
+.chronicle-drawer li {
   display: grid;
   grid-template-columns: 30px 1fr;
   gap: 8px;
 }
 
-.log-panel li > span {
-  color: #a33945;
-  font-size: 10px;
+.chronicle-drawer li span {
+  color: #a4434e;
+  font-size: 9px;
   font-weight: 900;
 }
 
-.log-panel li p {
+.chronicle-drawer li p {
   margin: 0;
-  color: #85817c;
+  color: #7e7b77;
   font-size: 11px;
-  line-height: 1.55;
+  line-height: 1.5;
 }
 
-.mafia-footer {
+.table-footer {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  border-top: 1px solid var(--mafia-line);
-  padding-top: 13px;
-  color: #55585e;
+  margin-top: 10px;
+  padding: 8px 2px;
+  color: #50545b;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
 }
 
-.mafia-error {
-  color: #ff8b95;
-  font-size: 12px;
+.danger-text {
+  color: #7f444b;
 }
 
-.floating-error {
-  position: fixed;
-  right: 18px;
-  bottom: 18px;
-  z-index: 20;
-  max-width: 420px;
-  border: 1px solid rgba(255, 87, 102, 0.34);
-  border-radius: 8px;
-  padding: 12px 14px;
-  background: #2c1015;
-}
-
-.end-panel {
-  width: min(760px, 100%);
-  padding: clamp(28px, 6vw, 58px);
-  text-align: center;
-}
-
-.end-panel h1 {
-  font-size: clamp(46px, 9vw, 92px);
-}
-
-.reveal-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px;
-  margin: 24px 0;
-  text-align: left;
-}
-
-.reveal-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 7px;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.reveal-row span {
-  color: #8f8b85;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-}
-
-.reveal-row.is-mafia {
-  border-color: rgba(190, 43, 58, 0.45);
-  background: rgba(152, 24, 38, 0.1);
-}
-
-@media (max-width: 1050px) {
-  .mafia-layout {
-    grid-template-columns: 220px 1fr;
+@media (max-width: 780px) {
+  .mafia-setup {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 24px 14px;
   }
 
-  .log-panel {
+  .mafia-title-block h1 {
+    font-size: clamp(66px, 24vw, 110px);
+  }
+
+  .lead {
+    margin-top: 18px;
+    font-size: 14px;
+  }
+
+  .setup-card {
+    padding: 20px;
+  }
+
+  .table-stage {
+    padding: 10px 8px 22px;
+  }
+
+  .table-header {
+    align-items: flex-start;
+  }
+
+  .table-header h1 {
+    font-size: 38px;
+  }
+
+  .public-strip {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .my-card-peek {
     grid-column: 1 / -1;
   }
 
-  .log-panel ol {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    max-height: none;
-  }
-}
-
-@media (max-width: 720px) {
-  .mafia-app {
-    padding: 16px 12px 24px;
-  }
-
-  .mafia-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .mafia-layout {
+  .seat-rail {
     display: flex;
-    flex-direction: column;
+    overflow-x: auto;
+    padding-bottom: 3px;
+    scroll-snap-type: x proximity;
   }
 
-  .discussion-panel {
-    order: 1;
+  .seat-chip {
+    min-width: 132px;
+    scroll-snap-align: start;
   }
 
-  .roster-panel {
-    order: 2;
+  .phase-context {
+    padding: 22px 14px;
   }
 
-  .log-panel {
-    order: 3;
+  .conversation {
+    max-height: 46vh;
+    padding: 6px 10px;
   }
 
-  .roster-list,
-  .name-grid,
-  .reveal-grid,
-  .log-panel ol {
+  .action-dock,
+  .decision-card,
+  .result-card {
+    padding: 16px 12px 18px;
+  }
+
+  .action-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .action-row > button {
+    min-width: 0;
+  }
+
+  .secondary-actions {
+    display: grid;
     grid-template-columns: 1fr;
   }
 
-  .day-actions,
-  .split-actions {
-    flex-direction: column;
+  .secondary-actions .night-action {
+    width: 100%;
+    margin-left: 0;
   }
 
-  .danger-button,
-  .night-button,
-  .ghost-button {
-    min-height: 46px;
+  .final-reveal {
+    grid-template-columns: 1fr;
   }
 
-  .mafia-footer {
+  .table-footer {
     align-items: flex-start;
     flex-direction: column;
+    gap: 4px;
+  }
+}
+
+@media (max-width: 430px) {
+  .mode-badge {
+    flex-direction: column;
+  }
+
+  .public-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .my-card-peek {
+    grid-column: auto;
+  }
+
+  .action-row {
+    grid-template-columns: 1fr;
+  }
+
+  .private-card-shell {
+    padding: 24px 16px;
+  }
+
+  .identity-card {
+    min-height: 220px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .heartbeat span {
-    animation: none;
-  }
-
-  .danger-button,
-  .night-button,
-  .ghost-button {
+  .primary-action,
+  .soft-action,
+  .pressure-action,
+  .danger-action,
+  .night-action {
     transition: none;
   }
 }
