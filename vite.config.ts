@@ -5,7 +5,7 @@ import { VitePWA } from "vite-plugin-pwa";
 const host = process.env.TAURI_DEV_HOST;
 const tauriPlatform = process.env.TAURI_ENV_PLATFORM;
 const isTauriBuild = Boolean(tauriPlatform);
-const webBasePath = process.env.VITE_BASE_PATH || "/taurin4/";
+const webBasePath = process.env.VITE_BASE_PATH || "/taurin4/submain/";
 
 export default defineConfig({
   base: isTauriBuild ? "/" : webBasePath,
@@ -16,11 +16,11 @@ export default defineConfig({
           VitePWA({
             registerType: "autoUpdate",
             manifest: {
-              name: "중세재판",
-              short_name: "중세재판",
-              description: "성 아그네스 성에서 펼쳐지는 결정론적 추리 재판",
-              theme_color: "#171310",
-              background_color: "#171310",
+              name: "MAFIA · Original Rules",
+              short_name: "MAFIA",
+              description: "Dimma Davidoff Original Mafia rules digital adaptation",
+              theme_color: "#07090d",
+              background_color: "#07090d",
               display: "standalone",
               start_url: webBasePath,
               scope: webBasePath,
