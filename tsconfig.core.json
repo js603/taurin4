@@ -9,10 +9,15 @@
     "skipLibCheck": true,
     "outDir": ".core-dist",
     "rootDir": ".",
-    "lib": ["ES2022", "DOM"]
+    "lib": [
+      "ES2022",
+      "DOM"
+    ]
   },
   "include": [
     "src/features/medieval-trial/**/*.ts",
+    "src/features/mafia-classic/core/**/*.ts",
+    "src/features/mafia-classic/simulation/**/*.ts",
     "tests/**/*.ts",
     "types/**/*.d.ts"
   ],
@@ -20,6 +25,8 @@
     "src/features/medieval-trial/application/trialSession.ts",
     "src/features/medieval-trial/application/trialSessionTypes.ts",
     "src/features/medieval-trial/application/**/*.test.ts",
-    "src/features/medieval-trial/ui/**/*"
+    "src/features/medieval-trial/ui/**/*",
+    "src/features/mafia-classic/core/**/*.test.ts",
+    "src/features/mafia-classic/ui/**/*"
   ]
 }
