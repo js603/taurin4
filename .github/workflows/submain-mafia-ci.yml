@@ -8,10 +8,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: submain-mafia-ci-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   quality:
     runs-on: ubuntu-latest
