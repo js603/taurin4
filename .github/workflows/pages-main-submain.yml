@@ -2,7 +2,11 @@ name: Deploy Main + Submain Pages
 
 on:
   push:
-    branches: ["main", "submain"]
+    branches: ["main"]
+  workflow_run:
+    workflows: ["Submain Mafia CI"]
+    types: [completed]
+    branches: ["submain"]
   workflow_dispatch:
 
 permissions:
@@ -16,6 +20,7 @@ concurrency:
 
 jobs:
   build-and-deploy:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages
