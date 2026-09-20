@@ -2,7 +2,11 @@
   "compilerOptions": {
     "target": "ES2022",
     "useDefineForClassFields": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "allowJs": false,
     "skipLibCheck": true,
     "esModuleInterop": true,
@@ -15,8 +19,15 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "types": ["vite/client"]
+    "types": [
+      "vite/client"
+    ]
   },
-  "include": ["src"],
-  "exclude": ["src/features/medieval-trial/simulation/cli.ts"]
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "src/features/medieval-trial/simulation/cli.ts",
+    "src/features/mafia-classic/simulation/cli.ts"
+  ]
 }
