@@ -3,6 +3,7 @@ import { dispatchAction } from "./engine";
 import { createLobbyGame } from "./gameState";
 import { buildPlayerView } from "./playerView";
 import { Mulberry32 } from "./random";
+import { calculateWinner, resolveVote } from "./resolvers";
 import type { GameAction, GameState, PlayerState } from "./types";
 import { simulateMany } from "../simulation/simulate";
 
@@ -323,6 +324,116 @@ describe("M1 Core Engine", () => {
     );
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("GAME_OVER");
+  });
+
+  it("resolves a tied final day vote as no execution", () => {
+    const started = startEight(81);
+    const players = started.state.players;
+    const votes = Object.fromEntries(
+      players.map((player, index) => [
+        player.id,
+        {
+          targetId: index < 4 ? players[0]!.id : players[1]!.id,
+          confirmed: true,
+        },
+      ]),
+    );
+    const result = resolveVote({
+      ...started.state,
+      phase: "VOTE_RESULT",
+      nominations: {
+        [players[2]!.id]: players[0]!.id,
+        [players[3]!.id]: players[1]!.id,
+      },
+      votes,
+    });
+    expect(result.voteResult?.executionTargetId).toBeNull();
+  });
+
+  it("uses the v1 win conditions: no Mafia => Town, Mafia parity => Mafia", () => {
+    const started = startEight(83);
+    const townWinState: GameState = {
+      ...started.state,
+      players: started.state.players.map((player) =>
+        player.alignment === "MAFIA"
+          ? { ...player, alive: false, deathCause: "FORCED" as const, deathDay: 1 }
+          : player,
+      ),
+    };
+    expect(calculateWinner(townWinState)).toBe("TOWN");
+
+    const mafia = started.state.players.filter((player) => player.alignment === "MAFIA");
+    const town = started.state.players.filter((player) => player.alignment === "TOWN");
+    const parityState: GameState = {
+      ...started.state,
+      players: started.state.players.map((player) => {
+        const survives =
+          mafia.some((candidate) => candidate.id === player.id) ||
+          town.slice(0, 2).some((candidate) => candidate.id === player.id);
+        return survives
+          ? player
+          : { ...player, alive: false, deathCause: "FORCED" as const, deathDay: 1 };
+      }),
+    };
+    expect(calculateWinner(parityState)).toBe("MAFIA");
+  });
+
+  it("requires Mafia revote on first tie and fails the attack on a second tie", () => {
+    const started = startEight(89);
+    let state = confirmRoles(started.state, started.rng);
+    const mafia = state.players.filter((player) => player.role === "MAFIA");
+    const town = state.players.filter((player) => player.alignment === "TOWN");
+    const doctor = role(state, "DOCTOR");
+    const detective = role(state, "DETECTIVE");
+    const detectiveTarget = town.find((player) => player.id !== detective.id)!;
+    const doctorTarget = town.find(
+      (player) => player.id !== town[0]!.id && player.id !== town[1]!.id,
+    )!;
+
+    state = send(
+      state,
+      { type: "SELECT_NIGHT_TARGET", playerId: mafia[0]!.id, targetId: town[0]!.id },
+      started.rng,
+    );
+    state = send(state, { type: "CONFIRM_NIGHT_ACTION", playerId: mafia[0]!.id }, started.rng);
+    state = send(
+      state,
+      { type: "SELECT_NIGHT_TARGET", playerId: mafia[1]!.id, targetId: town[1]!.id },
+      started.rng,
+    );
+    state = send(state, { type: "CONFIRM_NIGHT_ACTION", playerId: mafia[1]!.id }, started.rng);
+    state = send(
+      state,
+      { type: "SELECT_NIGHT_TARGET", playerId: doctor.id, targetId: doctorTarget.id },
+      started.rng,
+    );
+    state = send(state, { type: "CONFIRM_NIGHT_ACTION", playerId: doctor.id }, started.rng);
+    state = send(
+      state,
+      { type: "SELECT_NIGHT_TARGET", playerId: detective.id, targetId: detectiveTarget.id },
+      started.rng,
+    );
+    state = send(state, { type: "CONFIRM_NIGHT_ACTION", playerId: detective.id }, started.rng);
+
+    expect(state.phase).toBe("NIGHT_ACTION");
+    expect(state.nightActions.mafiaRevoteRound).toBe(1);
+
+    state = send(
+      state,
+      { type: "SELECT_NIGHT_TARGET", playerId: mafia[0]!.id, targetId: town[0]!.id },
+      started.rng,
+    );
+    state = send(state, { type: "CONFIRM_NIGHT_ACTION", playerId: mafia[0]!.id }, started.rng);
+    state = send(
+      state,
+      { type: "SELECT_NIGHT_TARGET", playerId: mafia[1]!.id, targetId: town[1]!.id },
+      started.rng,
+    );
+    state = send(state, { type: "CONFIRM_NIGHT_ACTION", playerId: mafia[1]!.id }, started.rng);
+
+    expect(state.phase).toBe("DAWN");
+    expect(state.nightActions.mafiaTarget).toBeNull();
+    expect(state.players.filter((player) => !player.alive)).toHaveLength(0);
   });
 
   it("completes a headless simulation batch without illegal actions", () => {
