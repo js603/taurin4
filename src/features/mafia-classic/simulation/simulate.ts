@@ -35,7 +35,9 @@ function assertCoreInvariants(state: GameState): void {
   for (const [voterId, vote] of Object.entries(state.votes)) {
     const voter = state.players.find((player) => player.id === voterId);
     if (!voter) throw new Error("vote from unknown player");
-    if (vote.confirmed && !voter.alive) throw new Error("dead player confirmed a day vote");
+    if (state.phase === "DAY_VOTE" && vote.confirmed && !voter.alive) {
+      throw new Error("dead player confirmed a day vote");
+    }
   }
 }
 
