@@ -197,7 +197,11 @@ describe("M1 Core Engine", () => {
       (player) => player.alive && player.id !== detective.id,
     )!;
     const mafiaTarget = state.players.find(
-      (player) => player.alive && player.alignment === "TOWN" && player.id !== protectedTarget.id,
+      (player) =>
+        player.alive &&
+        player.alignment === "TOWN" &&
+        player.id !== protectedTarget.id &&
+        player.id !== detective.id,
     )!;
 
     state = completeNightWithTargets(
