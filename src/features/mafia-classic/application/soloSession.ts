@@ -52,6 +52,8 @@ export interface SoloVoteResult {
 
 export interface SoloNightResult {
   readonly shotCount: number;
+  readonly targetIds: readonly string[];
+  readonly targetNames: readonly string[];
   readonly murderedPlayerId: string | null;
   readonly murderedPlayerName: string | null;
   readonly unanimous: boolean;
@@ -740,8 +742,13 @@ export function submitNightNote(
     ? state.core.players.find((player) => player.id === result.murderedPlayerId) ?? null
     : null;
 
+  const targetNames = result.mafiaTargetIds.map(
+    (targetId) => state.core.players.find((player) => player.id === targetId)?.name ?? "UNKNOWN",
+  );
   const nightResult: SoloNightResult = {
     shotCount: result.shotCount,
+    targetIds: result.mafiaTargetIds,
+    targetNames,
     murderedPlayerId: result.murderedPlayerId,
     murderedPlayerName: murdered?.name ?? null,
     unanimous: result.unanimous,
@@ -760,11 +767,15 @@ export function submitNightNote(
       ? "총성은 0발입니다. 살아 있는 Mafia는 없습니다."
       : result.unanimous && murdered
         ? result.shotCount +
-          "발의 Mafia 쪽지가 같은 이름을 가리켰습니다. " +
+          "장의 Mafia 쪽지가 모두 " +
+          murdered.name +
+          "을(를) 가리켰습니다. " +
           murdered.name +
           "이(가) 제거되었습니다."
         : result.shotCount +
-          "발의 Mafia 쪽지가 서로 다른 이름을 가리켰습니다. 아무도 제거되지 않았습니다.";
+          "장의 Mafia 쪽지: " +
+          targetNames.join(", ") +
+          ". 표적이 갈려 아무도 제거되지 않았습니다.";
 
   next = pushTalk(next, null, "진행", resultText, "result");
   return next;
