@@ -74,8 +74,20 @@ function availableActionTypes(state: GameState, playerId: PlayerId): GameAction[
       return player.roleConfirmed ? [] : ["CONFIRM_ROLE"];
     case "NIGHT_ACTION":
       if (!player.alive) return [];
-      if (player.role === "MAFIA" || player.role === "DOCTOR" || player.role === "DETECTIVE") {
-        return ["SELECT_NIGHT_TARGET", "CONFIRM_NIGHT_ACTION"];
+      if (player.role === "MAFIA") {
+        return state.nightActions.mafiaVotes[player.id]?.confirmed
+          ? []
+          : ["SELECT_NIGHT_TARGET", "CONFIRM_NIGHT_ACTION"];
+      }
+      if (player.role === "DOCTOR") {
+        return state.nightActions.doctor.confirmed
+          ? []
+          : ["SELECT_NIGHT_TARGET", "CONFIRM_NIGHT_ACTION"];
+      }
+      if (player.role === "DETECTIVE") {
+        return state.nightActions.detective.confirmed
+          ? []
+          : ["SELECT_NIGHT_TARGET", "CONFIRM_NIGHT_ACTION"];
       }
       return [];
     case "DAWN":
