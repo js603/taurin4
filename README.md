@@ -1,8 +1,6 @@
-# 중세재판 · taurin4
+# taurin4
 
-`중세재판` 게임을 Web/PWA, Windows, Android, iOS에서 공유하는 Tauri v2 + React + TypeScript + Vite 프로젝트입니다. 개발 프로젝트와 저장소 이름은 `taurin4`를 유지합니다.
-
-현재 규칙 개정 v0.2는 시작 안내·무작위 배역·아침 발표·선택형 공개 주장·근거가 표시되는 고발·과반수 판결/보류를 포함합니다. [상세 규칙·마피아 비교·검증과 한계](docs/MAFIA_FOUNDATIONS_V02.md)를 먼저 확인하세요. AI는 규칙 기반이며 자연어 토론 모델은 아닙니다.
+GitHub `js603/taurin4` 용으로 사전 설정된 Tauri v2 + React + TypeScript + Vite 멀티플랫폼 기본 설계입니다.
 
 
 ## Preconfigured GitHub
@@ -129,11 +127,8 @@ AI에게 작업시키기 전에:
 
 iOS 실기기/App Store 배포와 Android Play Store용 release에는 지속적인 코드서명 키가 필요합니다.
 
+## Preserved preview branch
 
-## GitHub Pages 플레이 주소
-
-- main: https://js603.github.io/taurin4/
-- submain · Original Mafia: https://js603.github.io/taurin4/submain/
-
-Pages는 `.github/workflows/pages-main-submain.yml`이 두 브랜치를 함께 빌드하여 배포합니다.
-따라서 main과 submain 중 어느 쪽을 Push해도 다른 플레이 주소를 보존합니다.
+`main`은 `595b799`의 Taurin4 기본 앱을 복원한 개발 기준선입니다. 기존 실험 작업은
+`submain`에 보존되며 `https://js603.github.io/taurin4/submain/`에서 별도로 배포됩니다.
+루트 Pages 주소에는 `main`의 기본 앱만 배포됩니다.

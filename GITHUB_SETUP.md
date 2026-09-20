@@ -13,7 +13,7 @@
 main Push
   ├─ Quality Gate
   ├─ Web/PWA -> downloadable artifact
-  ├─ GitHub Pages -> automatic deploy
+  ├─ GitHub Pages -> separate automatic deploy workflow
   ├─ Windows -> MSI + NSIS setup EXE
   ├─ Android -> installable debug APK
   │             + optional signed APK/AAB
@@ -53,16 +53,13 @@ Workflow가 repository 이름을 기준으로 Vite `base`, PWA `start_url`, `sco
 
 다운로드:
 
-`Actions -> Build All + Deploy Pages -> Run -> Artifacts`
+`Actions -> Build All -> Run -> Artifacts`
 
 Windows installer는 코드서명 전이므로 SmartScreen 경고가 표시될 수 있습니다.
 
 Windows job은 WiX v3 MSI가 요구하는 VBScript 기능이 보장되는
 `windows-2022` runner를 사용합니다. NSIS와 MSI는 별도 단계로 빌드해
 실패 지점이 로그에 분리되며, 두 설치 파일 모두 생성되어야 artifact를 업로드합니다.
-MSI 언어는 한글 제품명 `중세재판`을 지원하도록 `ko-KR`(code page 949)로
-고정합니다.
-
 Android debug APK는 실제 테스트 단말 설치용입니다.
 
 Android job은 Node 24 호환 `setup-android@v4`와 `setup-java@v5`를 사용하고,
@@ -126,7 +123,7 @@ Actions Variable:
 
 ```json
 {
-  "productName": "중세재판",
+  "productName": "taurin4",
   "identifier": "com.js603.taurin4",
   "version": "0.1.0"
 }
@@ -135,4 +132,6 @@ Actions Variable:
 ## 7. Workflow
 
 - `.github/workflows/build-all.yml`: main Push 전체 파이프라인
+- `.github/workflows/pages-main-submain.yml`: main 기본 세팅과 보존된 submain 미리보기 배포
+- `.github/workflows/submain-mafia-ci.yml`: 보존된 submain 전용 검증
 - `.github/workflows/pull-request.yml`: PR lint/test/web build

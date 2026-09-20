@@ -17,6 +17,5 @@
     "jsx": "react-jsx",
     "types": ["vite/client"]
   },
-  "include": ["src"],
-  "exclude": ["src/features/medieval-trial/simulation/cli.ts"]
+  "include": ["src"]
 }
