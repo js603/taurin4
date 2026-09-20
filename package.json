@@ -28,7 +28,9 @@
     "ios:init": "tauri ios init",
     "ios:dev": "tauri ios dev",
     "ios:build:unsigned": "tauri ios build --no-sign",
-    "ios:build:release": "tauri ios build --export-method app-store-connect"
+    "ios:build:release": "tauri ios build --export-method app-store-connect",
+    "mafia:m1:sim": "npm run core:build && node .core-dist/src/features/mafia-classic/simulation/cli.js --games 1000 --seed 20260921",
+    "mafia:m1:sim:10k": "npm run core:build && node .core-dist/src/features/mafia-classic/simulation/cli.js --games 10000 --seed 20260921"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",
