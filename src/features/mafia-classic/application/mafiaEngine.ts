@@ -32,6 +32,7 @@ export interface DayVoteResult {
 export interface NightResult {
   state: MafiaGameState;
   shotCount: number;
+  mafiaTargetIds: readonly string[];
   murderedPlayerId: string | null;
   unanimous: boolean;
 }
@@ -218,6 +219,7 @@ export function resolveMafiaNight(
   if (shotCount === 0) {
     return {
       shotCount: 0,
+      mafiaTargetIds: [],
       murderedPlayerId: null,
       unanimous: false,
       state: {
@@ -246,6 +248,7 @@ export function resolveMafiaNight(
   if (!unanimous) {
     return {
       shotCount,
+      mafiaTargetIds: targets as string[],
       murderedPlayerId: null,
       unanimous: false,
       state: {
@@ -275,6 +278,7 @@ export function resolveMafiaNight(
 
   return {
     shotCount,
+    mafiaTargetIds: targets as string[],
     murderedPlayerId,
     unanimous: true,
     state: {
