@@ -29,26 +29,52 @@ CI contract:
 
 Workflow 수정 시 `GITHUB_SETUP.md`도 갱신한다.
 
+## Mafia M1 Core Contract
 
-## Mafia V2 운영 규칙
+`src/features/mafia-classic`의 규칙 구현은 사용자가 제공한 **Mafia Game Specification v1**을 Single Source of Truth로 취급한다.
 
-`src/features/mafia-classic` 변경 시 다음을 반드시 지킨다.
+구조:
 
-1. 게임 진행의 source of truth는 application session의 명시적 `phase`다.
-2. React의 index, modal open 여부, animation flag로 phase를 암묵적으로 표현하지 않는다.
-3. 모든 phase는 최소 하나의 합법적인 exit transition을 가져야 한다.
-4. 한 명의 테스터가 GitHub Pages에서 AI와 라운드를 끝까지 진행할 수 있어야 한다.
-5. Honest AI는 공개 정보만 사용한다. 다른 플레이어의 alignment를 읽어 의사결정하면 안 된다.
-6. Mafia AI는 자신의 진영과 Mafia 동료 정체만 추가로 사용할 수 있다.
-7. 제거된 플레이어는 발언/고발/표결/Night note를 제출할 수 없다.
-8. 피고는 자신의 낮 제거 표결에 참여하지 않는다.
-9. 제거된 사람의 alignment는 라운드 종료 전 UI/로그에 공개하지 않는다.
-10. Mafia Night는 생존자 과반 동의가 있어야 시작된다.
-11. 살아 있는 Mafia 수는 Night의 이름 쪽지 수가 공개된 뒤에만 갱신한다.
-12. 기능 변경 후 `soloSession.test.ts`에서 전체 흐름 회귀를 검증한다.
-13. 플레이 중 공개 기록에는 공개 정보만 저장한다.
-14. 긴장 연출은 진행 명확성보다 우선하지 않는다.
-15. Mafia UI는 대시보드가 아니라 대화와 현재 결정을 중심으로 구성한다.
+```text
+Player Input
+→ Action
+→ Action Validator
+→ Game Engine
+→ GameState
+→ PlayerView Builder
+→ UI
+```
 
-상세 결함 기록:
-`docs/mafia/EXPERT_AUDIT_V02.md`
+절대 규칙:
+
+1. UI, React state, modal, animation handler가 GameState를 직접 변경하지 않는다.
+2. 클라이언트와 봇은 `GameAction`만 보낸다. `SET_PHASE`, `KILL_PLAYER`, `SET_WINNER` 같은 권한은 없다.
+3. 모든 Action은 phase, alive/dead, role, permission, completion state를 Validator에서 검증한다.
+4. GameState는 서버/호스트의 authoritative state다.
+5. 클라이언트에는 GameState를 직접 보내지 않는다. 반드시 `buildPlayerView(playerId)` 결과만 전달한다.
+6. CSS 숨김으로 비밀정보를 보호하지 않는다. 허가되지 않은 데이터 자체를 PlayerView에 넣지 않는다.
+7. 봇은 인간과 같은 Action API를 사용하며, 의사결정은 자기 PlayerView만 사용한다.
+8. 사망자는 생존자에게 영향을 주는 Action을 실행할 수 없다.
+9. v1 기본 게임은 8인: Mafia 2, Detective 1, Doctor 1, Citizen 4다.
+10. v1은 ROLE_REVEAL 이후 NIGHT 1부터 시작한다.
+11. Mafia 공격은 생존 비-Mafia만 가능하다. 1차 동률은 재선택, 2차 동률은 공격 실패다.
+12. Doctor는 자신 포함 생존자를 보호할 수 있지만 같은 플레이어를 2일 연속 보호할 수 없다.
+13. Detective는 자신 외 생존자를 조사하며 결과는 MAFIA / NOT_MAFIA만 본인에게 공개한다.
+14. 밤 행동 결과는 NIGHT_RESOLVE에서 동시에 처리한다.
+15. 사망 시 역할은 공개한다.
+16. Day Vote는 생존자만 가능하며 자기 자신에게 투표할 수 있다.
+17. 지목된 후보 + 처형하지 않음만 투표할 수 있다.
+18. 최다 득표 단독 1명만 처형한다. 최다 득표 동률은 처형 없음이다.
+19. Town 승리: 생존 Mafia 0.
+20. Mafia 승리: 생존 Mafia 수 >= 생존 Town 수.
+21. winner가 정해진 뒤에는 GAME_OVER 외 상태로 이동하지 않는다.
+22. 모든 성공 Action은 replay에 기록한다.
+23. Core 변경 후 `npm run mafia:m1:sim` 1,000판을 통과해야 한다.
+24. M1 Core가 승인되기 전에는 Mafia UI를 고도화하지 않는다.
+25. 소스 문서에 정의되지 않은 규칙은 임의로 발명하지 않는다. 특히 5~7명/9~10명의 역할 배분은 별도 확정 전까지 구현하지 않는다.
+
+M1 core:
+- `src/features/mafia-classic/core/`
+- `src/features/mafia-classic/simulation/`
+
+현재 UI/application의 이전 V2 구현은 legacy adapter 대상이며 M1 Core의 규칙 기준이 아니다.
