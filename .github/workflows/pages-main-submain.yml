@@ -66,22 +66,18 @@ jobs:
           mkdir -p pages/submain
           cp -R source-main/dist/. pages/
           cp -R source-submain/dist/. pages/submain/
-          cat > pages/sw.js <<'EOF'
-/* One-time GitHub Pages service-worker cleanup for multi-branch previews. */
-self.addEventListener("install", () => self.skipWaiting());
-self.addEventListener("activate", (event) => {
-  event.waitUntil((async () => {
-    await self.registration.unregister();
-    const clients = await self.clients.matchAll({ type: "window" });
-    for (const client of clients) {
-      if ("navigate" in client) {
-        client.navigate(client.url);
-      }
-    }
-  })());
-});
-
-EOF
+          printf '%s\n' \
+            '/* GitHub Pages cleanup worker: removes the old root-scope PWA registration. */' \
+            'self.addEventListener("install", () => self.skipWaiting());' \
+            'self.addEventListener("activate", (event) => {' \
+            '  event.waitUntil((async () => {' \
+            '    await self.registration.unregister();' \
+            '    const clients = await self.clients.matchAll({ type: "window" });' \
+            '    for (const client of clients) {' \
+            '      if ("navigate" in client) client.navigate(client.url);' \
+            '    }' \
+            '  })());' \
+            '});' > pages/sw.js
           touch pages/.nojekyll
           printf 'main\n' > pages/BRANCH.txt
           printf 'submain\n' > pages/submain/BRANCH.txt
