@@ -582,10 +582,10 @@ export function MafiaClassicPage() {
             <h3>{session.lastNight.shotCount} SHOTS</h3>
             <p>
               {session.lastNight.shotCount === 0
-                ? "총성이 없습니다."
+                ? "이름이 적힌 Mafia 쪽지가 없습니다."
                 : session.lastNight.unanimous
                   ? "모든 Mafia 쪽지가 같은 이름을 가리켰습니다."
-                  : "Mafia 쪽지의 이름이 갈렸습니다."}
+                  : "공개된 Mafia 쪽지: " + session.lastNight.targetNames.join(" · ")}
             </p>
             {session.lastNight.murderedPlayerName ? (
               <strong>{session.lastNight.murderedPlayerName} 제거 · 정체 비공개</strong>
