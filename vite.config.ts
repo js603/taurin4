@@ -15,6 +15,9 @@ export default defineConfig({
       ? [
           VitePWA({
             registerType: "autoUpdate",
+            workbox: {
+              navigateFallbackDenylist: [/^\/taurin4\/submain(?:\/|$)/],
+            },
             manifest: {
               name: "중세재판",
               short_name: "중세재판",
