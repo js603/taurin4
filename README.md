@@ -128,3 +128,12 @@ AI에게 작업시키기 전에:
 - ios-signed-ipa
 
 iOS 실기기/App Store 배포와 Android Play Store용 release에는 지속적인 코드서명 키가 필요합니다.
+
+
+## GitHub Pages 플레이 주소
+
+- main: https://js603.github.io/taurin4/
+- submain · Original Mafia: https://js603.github.io/taurin4/submain/
+
+Pages는 `.github/workflows/pages-main-submain.yml`이 두 브랜치를 함께 빌드하여 배포합니다.
+따라서 main과 submain 중 어느 쪽을 Push해도 다른 플레이 주소를 보존합니다.
