@@ -5,13 +5,14 @@ import { VitePWA } from "vite-plugin-pwa";
 const host = process.env.TAURI_DEV_HOST;
 const tauriPlatform = process.env.TAURI_ENV_PLATFORM;
 const isTauriBuild = Boolean(tauriPlatform);
+const disablePwa = process.env.VITE_DISABLE_PWA === "true";
 const webBasePath = process.env.VITE_BASE_PATH || "/taurin4/";
 
 export default defineConfig({
   base: isTauriBuild ? "/" : webBasePath,
   plugins: [
     react(),
-    ...(!isTauriBuild
+    ...(!isTauriBuild && !disablePwa
       ? [
           VitePWA({
             registerType: "autoUpdate",
