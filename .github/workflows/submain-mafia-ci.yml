@@ -30,7 +30,7 @@ jobs:
 
       - name: Build submain Web preview
         env:
-          VITE_BASE_PATH: /taurin4/
+          VITE_BASE_PATH: /taurin4/submain/
         run: npm run build
 
       - name: Upload Web preview artifact
