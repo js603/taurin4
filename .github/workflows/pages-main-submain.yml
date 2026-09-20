@@ -1,0 +1,78 @@
+name: Deploy Main + Submain Pages
+
+on:
+  push:
+    branches: ["main", "submain"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          path: source-main
+
+      - name: Checkout submain
+        uses: actions/checkout@v5
+        with:
+          ref: submain
+          path: source-submain
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Build main site
+        working-directory: source-main
+        env:
+          VITE_BASE_PATH: /taurin4/
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+
+      - name: Build submain Mafia preview
+        working-directory: source-submain
+        env:
+          VITE_BASE_PATH: /taurin4/submain/
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+
+      - name: Assemble Pages tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p pages/submain
+          cp -R source-main/dist/. pages/
+          cp -R source-submain/dist/. pages/submain/
+          touch pages/.nojekyll
+          test -f pages/index.html
+          test -f pages/submain/index.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: pages/
+
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
