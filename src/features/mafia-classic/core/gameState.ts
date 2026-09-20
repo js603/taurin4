@@ -64,6 +64,7 @@ export function createLobbyGame(
     pendingExecutionId: null,
     phaseConfirmations: [],
     investigationResults: {},
+    doctorLastProtectedTargetId: null,
     publicEvents: [],
     winner: null,
     revision: 0,
@@ -118,21 +119,4 @@ export function findPlayer(state: GameState, playerId: string): PlayerState | nu
 
 export function playerByRole(state: GameState, role: Role): PlayerState | null {
   return state.players.find((player) => player.alive && player.role === role) ?? null;
-}
-
-export function lastDoctorTarget(state: GameState): string | null {
-  const doctor = state.players.find((player) => player.role === "DOCTOR");
-  if (!doctor) return null;
-
-  for (let index = state.replay.length - 1; index >= 0; index -= 1) {
-    const entry = state.replay[index]!;
-    if (
-      entry.action.type === "SELECT_NIGHT_TARGET" &&
-      entry.action.playerId === doctor.id &&
-      entry.revisionBefore < state.revision
-    ) {
-      return entry.action.targetId;
-    }
-  }
-  return null;
 }
