@@ -1,4 +1,4 @@
-name: Submain Mafia CI
+name: Submain Original Mafia CI
 
 on:
   push:
@@ -24,13 +24,13 @@ jobs:
       - name: Full project check
         run: npm run check
 
-      - name: M1 headless 1,000-game simulation
-        run: npm run mafia:m1:sim
+      - name: Original Mafia rule tests
+        run: npm run mafia:original:test
 
-      - name: M2 screen contract validation
-        run: npm run mafia:m2:contracts
+      - name: Original Mafia chat 1,000-game Gate
+        run: npm run mafia:original:sim
 
-      - name: M3 visual shell boundary validation
+      - name: Chat-first local runtime and UI boundary
         run: npm run mafia:m3:ui
 
       - name: Build submain Web preview
@@ -41,7 +41,7 @@ jobs:
       - name: Upload Web preview artifact
         uses: actions/upload-artifact@v4
         with:
-          name: submain-web-preview
+          name: submain-original-mafia-web-preview
           path: dist/
           if-no-files-found: error
           retention-days: 7
