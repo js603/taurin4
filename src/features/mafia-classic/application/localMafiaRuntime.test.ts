@@ -5,70 +5,86 @@ import {
   type LocalMafiaSnapshot,
 } from "./localMafiaRuntime";
 
-function firstLegalTarget(snapshot: LocalMafiaSnapshot): string {
-  const { view, contract } = snapshot;
-  const alive = view.players.filter((player) => player.alive);
+function firstLivingOther(snapshot: LocalMafiaSnapshot): string {
+  return snapshot.view.players.find(
+    (player) => player.alive && player.id !== snapshot.view.self.id,
+  )!.id;
+}
 
-  switch (contract.targetPolicy) {
-    case "ALIVE_PLAYER":
-      return alive[0]!.id;
-    case "ALIVE_NON_MAFIA": {
-      const mafiaIds = new Set(view.mafiaMembers?.map((member) => member.id) ?? []);
-      return alive.find((player) => !mafiaIds.has(player.id))!.id;
-    }
-    case "ALIVE_EXCEPT_SELF":
-      return alive.find((player) => player.id !== view.self.id)!.id;
-    case "DOCTOR_LEGAL_TARGET":
-      return alive.find((player) => player.id !== view.doctorLastProtectedTargetId)!.id;
-    case "NOMINEE_OR_NO_EXECUTION":
-      return alive.find((player) => view.nominations.includes(player.id))?.id ?? "";
-    case "NONE":
-      return "";
-  }
+function firstNightTarget(snapshot: LocalMafiaSnapshot): string {
+  const mafiaIds = new Set(snapshot.view.mafiaMembers?.map((member) => member.id) ?? []);
+  return snapshot.view.players.find(
+    (player) => player.alive && !mafiaIds.has(player.id),
+  )!.id;
 }
 
 function nextHumanAction(snapshot: LocalMafiaSnapshot): HumanActionIntent | null {
-  const actions = snapshot.view.availableActions;
+  const { view } = snapshot;
+  const actions = view.availableActions;
 
   if (actions.includes("START_GAME")) return { type: "START_GAME" };
-  if (actions.includes("SET_READY") && !snapshot.view.self.ready) {
+  if (actions.includes("SET_READY") && !view.self.ready) {
     return { type: "SET_READY", ready: true };
   }
   if (actions.includes("CONFIRM_ROLE")) return { type: "CONFIRM_ROLE" };
-  if (actions.includes("CONFIRM_NIGHT_ACTION")) return { type: "CONFIRM_NIGHT_ACTION" };
-  if (actions.includes("SELECT_NIGHT_TARGET")) {
-    return { type: "SELECT_NIGHT_TARGET", targetId: firstLegalTarget(snapshot) };
-  }
-  if (actions.includes("CONFIRM_RESULT")) return { type: "CONFIRM_RESULT" };
-  if (actions.includes("END_DISCUSSION")) return { type: "END_DISCUSSION" };
+  if (actions.includes("CONFIRM_SUNRISE")) return { type: "CONFIRM_SUNRISE" };
 
-  if (actions.includes("END_NOMINATION") && snapshot.view.ownNominationTargetId !== null) {
-    return { type: "END_NOMINATION" };
+  if (actions.includes("CALL_GUILTY_VOTE")) {
+    return { type: "CALL_GUILTY_VOTE" };
   }
-  if (actions.includes("NOMINATE_PLAYER")) {
-    return { type: "NOMINATE_PLAYER", targetId: firstLegalTarget(snapshot) };
+  if (actions.includes("CAST_GUILTY_VOTE")) {
+    return { type: "CAST_GUILTY_VOTE", guilty: true };
   }
-  if (actions.includes("END_NOMINATION")) return { type: "END_NOMINATION" };
+  if (actions.includes("CAST_NIGHT_PROPOSAL_VOTE")) {
+    return { type: "CAST_NIGHT_PROPOSAL_VOTE", agree: true };
+  }
+  if (actions.includes("SUBMIT_NIGHT_NOTE")) {
+    return view.self.role === "MAFIA"
+      ? {
+          type: "SUBMIT_NIGHT_NOTE",
+          note: { kind: "TARGET", targetId: firstNightTarget(snapshot) },
+        }
+      : { type: "SUBMIT_NIGHT_NOTE", note: { kind: "HONEST" } };
+  }
 
-  if (actions.includes("CONFIRM_VOTE")) return { type: "CONFIRM_VOTE" };
-  if (actions.includes("SELECT_VOTE")) {
-    const targetId = firstLegalTarget(snapshot);
-    return { type: "SELECT_VOTE", targetId: targetId || null };
+  if (view.phase === "DAY_DISCUSSION" && actions.includes("SEND_CHAT")) {
+    if (view.day % 2 === 1 && actions.includes("PROPOSE_MAFIA_NIGHT")) {
+      return { type: "PROPOSE_MAFIA_NIGHT" };
+    }
+    if (actions.includes("ACCUSE_PLAYER")) {
+      return { type: "ACCUSE_PLAYER", targetId: firstLivingOther(snapshot) };
+    }
+  }
+
+  if (view.phase === "ACCUSATION" && actions.includes("SEND_CHAT")) {
+    return {
+      type: "SEND_CHAT",
+      channel: "PUBLIC",
+      text: "고발 근거와 반론을 게임 안에서 확인합니다.",
+    };
+  }
+
+  if (!view.self.alive && actions.includes("SEND_CHAT")) {
+    return {
+      type: "SEND_CHAT",
+      channel: "DEAD",
+      text: "사망자 채팅 테스트",
+    };
   }
 
   return null;
 }
 
-describe("M3 LocalMafiaRuntime", () => {
-  it("keeps GameState behind PlayerView + ScreenContract", () => {
+describe("Original LocalMafiaRuntime", () => {
+  it("keeps authoritative state behind Original PlayerView + ScreenContract", () => {
     const runtime = new LocalMafiaRuntime("테스터", 20260921);
     const snapshot = runtime.snapshot();
 
     expect(snapshot.view.phase).toBe("LOBBY");
     expect(snapshot.contract.id).toBe("LOBBY");
     expect(Object.prototype.hasOwnProperty.call(snapshot, "state")).toBe(false);
-    expect(Object.prototype.hasOwnProperty.call(snapshot.view, "nightActions")).toBe(false);
-    expect(Object.prototype.hasOwnProperty.call(snapshot.view, "votes")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(snapshot.view, "nightNotes")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(snapshot.view, "replay")).toBe(false);
   });
 
   it("lets bots become ready while the human remains the authoritative starter", () => {
@@ -85,23 +101,71 @@ describe("M3 LocalMafiaRuntime", () => {
     expect(snapshot.view.availableActions).toContain("START_GAME");
   });
 
-  it("finishes 20 local M3 sessions using only human intents and bot actions", () => {
+  it("moves from role reveal through SUNRISE into authoritative DAY chat", () => {
+    const runtime = new LocalMafiaRuntime("테스터", 111);
+    let snapshot = runtime.snapshot();
+
+    snapshot = runtime.act({ type: "SET_READY", ready: true }).snapshot;
+    snapshot = runtime.act({ type: "START_GAME" }).snapshot;
+    expect(snapshot.view.phase).toBe("ROLE_REVEAL");
+
+    snapshot = runtime.act({ type: "CONFIRM_ROLE" }).snapshot;
+    expect(snapshot.view.phase).toBe("SUNRISE");
+    expect(snapshot.contract.id).toBe("SUNRISE");
+
+    snapshot = runtime.act({ type: "CONFIRM_SUNRISE" }).snapshot;
+    expect(snapshot.view.phase).toBe("DAY_DISCUSSION");
+    expect(snapshot.contract.id).toBe("DAY_CHAT");
+    expect(snapshot.view.availableActions).toContain("SEND_CHAT");
+
+    const result = runtime.act({
+      type: "SEND_CHAT",
+      channel: "PUBLIC",
+      text: "게임 내부 채팅으로 의심을 이야기합니다.",
+    });
+    expect(result.ok).toBe(true);
+    expect(result.snapshot.view.chat.some((entry) => entry.text?.includes("게임 내부 채팅"))).toBe(true);
+  });
+
+  it("finishes 20 local Original sessions without offline intervention", () => {
     for (let game = 0; game < 20; game += 1) {
       const runtime = new LocalMafiaRuntime("테스터", 1000 + game * 97);
       let snapshot = runtime.snapshot();
+      let lastDayActionKey = "";
 
-      for (let step = 0; step < 200; step += 1) {
+      for (let step = 0; step < 500; step += 1) {
         if (snapshot.view.phase === "GAME_OVER") break;
 
-        const intent = nextHumanAction(snapshot);
+        let intent = nextHumanAction(snapshot);
+
+        if (
+          snapshot.view.phase === "ACCUSATION" &&
+          snapshot.view.accusation?.accuserId === snapshot.view.self.id &&
+          snapshot.view.availableActions.includes("CALL_GUILTY_VOTE")
+        ) {
+          intent = { type: "CALL_GUILTY_VOTE" };
+        }
+
+        if (
+          snapshot.view.phase === "DAY_DISCUSSION" &&
+          snapshot.view.self.alive &&
+          snapshot.view.availableActions.includes("PROPOSE_MAFIA_NIGHT")
+        ) {
+          const key = snapshot.view.day + ":" + snapshot.view.revision;
+          if (lastDayActionKey !== key) {
+            intent = { type: "PROPOSE_MAFIA_NIGHT" };
+            lastDayActionKey = key;
+          }
+        }
+
         if (!intent) {
           throw new Error(
-            "M3_LOCAL_STALL: " +
+            "ORIGINAL_LOCAL_STALL: " +
               snapshot.view.phase +
               " / " +
               snapshot.contract.id +
-              " / " +
-              snapshot.contract.mode,
+              " / actions=" +
+              snapshot.view.availableActions.join(","),
           );
         }
 
@@ -111,7 +175,7 @@ describe("M3 LocalMafiaRuntime", () => {
       }
 
       expect(snapshot.view.phase).toBe("GAME_OVER");
-      expect(snapshot.view.winner === "TOWN" || snapshot.view.winner === "MAFIA").toBe(true);
+      expect(snapshot.view.winner === "HONEST" || snapshot.view.winner === "MAFIA").toBe(true);
       expect(snapshot.contract.id).toBe("GAME_OVER");
       expect(snapshot.view.availableActions).toEqual([]);
     }
