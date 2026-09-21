@@ -166,12 +166,6 @@ function MainStage({ snapshot }: { snapshot: LocalMafiaSnapshot }) {
           <strong>{view.self.role ? ROLE_LABEL[view.self.role] : "UNKNOWN"}</strong>
         </div>
         <p>{view.self.role ? ROLE_COPY[view.self.role] : ""}</p>
-        {view.self.role === "MAFIA" && view.mafiaMembers ? (
-          <div className="m3-secret-line">
-            <span>동료</span>
-            <strong>{view.mafiaMembers.map((member) => member.name).join(" · ")}</strong>
-          </div>
-        ) : null}
       </div>
     );
   }
@@ -538,8 +532,15 @@ export function MafiaClassicPage() {
 
   const { view, contract } = snapshot;
   const aliveCount = view.players.filter((player) => player.alive).length;
-  const recentEvents = [...view.publicEvents].reverse().slice(0, 6);
-  const mafiaIds = new Set(view.mafiaMembers?.map((member) => member.id) ?? []);
+  const mayShowPublicEvents = contract.visibleFields.includes("publicEvents");
+  const recentEvents = mayShowPublicEvents
+    ? [...view.publicEvents].reverse().slice(0, 6)
+    : [];
+  const mafiaIds = new Set(
+    contract.visibleFields.includes("mafiaMembers")
+      ? (view.mafiaMembers?.map((member) => member.id) ?? [])
+      : [],
+  );
 
   return (
     <main className={"m3-shell m3-shell--" + contract.id.toLowerCase().replaceAll("_", "-")}>
@@ -615,24 +616,26 @@ export function MafiaClassicPage() {
             <MainStage snapshot={snapshot} />
           </div>
 
-          <section className="m3-context">
-            <div className="m3-section-head">
-              <span>PUBLIC CONTEXT</span>
-              <strong>{view.publicEvents.length}</strong>
-            </div>
-            {recentEvents.length ? (
-              <div className="m3-event-list">
-                {recentEvents.map((event) => (
-                  <article key={event.seq}>
-                    <span>{String(event.seq).padStart(2, "0")}</span>
-                    <p>{publicEventText(snapshot, event)}</p>
-                  </article>
-                ))}
+          {mayShowPublicEvents ? (
+            <section className="m3-context">
+              <div className="m3-section-head">
+                <span>PUBLIC CONTEXT</span>
+                <strong>{view.publicEvents.length}</strong>
               </div>
-            ) : (
-              <p className="m3-empty-context">아직 공개 사건이 없습니다.</p>
-            )}
-          </section>
+              {recentEvents.length ? (
+                <div className="m3-event-list">
+                  {recentEvents.map((event) => (
+                    <article key={event.seq}>
+                      <span>{String(event.seq).padStart(2, "0")}</span>
+                      <p>{publicEventText(snapshot, event)}</p>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="m3-empty-context">아직 공개 사건이 없습니다.</p>
+              )}
+            </section>
+          ) : null}
 
           <ActionArea snapshot={snapshot} onAction={act} />
 
