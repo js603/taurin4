@@ -440,7 +440,6 @@ describe("M1 Core Engine", () => {
     const started = startEight(97);
     let state = confirmRoles(started.state, started.rng);
     const mafia = role(state, "MAFIA");
-    const doctor = role(state, "DOCTOR");
     const detective = role(state, "DETECTIVE");
     const protectedTarget = state.players.find(
       (player) => player.alive && player.alignment === "TOWN" && player.id !== detective.id,
