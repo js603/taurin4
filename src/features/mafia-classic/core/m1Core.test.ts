@@ -3,7 +3,7 @@ import { dispatchAction } from "./engine";
 import { createLobbyGame } from "./gameState";
 import { buildPlayerView } from "./playerView";
 import { Mulberry32 } from "./random";
-import { calculateWinner, resolveVote } from "./resolvers";
+import { calculateWinner, resolveVote, resolveWinCheck } from "./resolvers";
 import type { GameAction, GameState, PlayerState } from "./types";
 import { simulateMany } from "../simulation/simulate";
 
@@ -436,10 +436,69 @@ describe("M1 Core Engine", () => {
     expect(state.players.filter((player) => !player.alive)).toHaveLength(0);
   });
 
-  it("completes a headless simulation batch without illegal actions", () => {
+  it("skips DAY_VOTE when nomination closes with no candidates", () => {
+    const started = startEight(97);
+    let state = confirmRoles(started.state, started.rng);
+    const mafia = role(state, "MAFIA");
+    const doctor = role(state, "DOCTOR");
+    const detective = role(state, "DETECTIVE");
+    const protectedTarget = state.players.find(
+      (player) => player.alive && player.alignment === "TOWN" && player.id !== detective.id,
+    )!;
+
+    state = completeNightWithTargets(
+      state,
+      started.rng,
+      protectedTarget.id,
+      protectedTarget.id,
+      mafia.id,
+    );
+    state = confirmPublicResult(state, started.rng);
+    expect(state.phase).toBe("DAY_DISCUSSION");
+
+    state = send(state, { type: "END_DISCUSSION", playerId: state.hostId }, started.rng);
+    expect(state.phase).toBe("NOMINATION");
+
+    state = send(state, { type: "END_NOMINATION", playerId: state.hostId }, started.rng);
+    expect(state.phase).toBe("NIGHT_ACTION");
+    expect(state.night).toBe(2);
+  });
+
+  it("reveals every role through PlayerView after GAME_OVER", () => {
+    const started = startEight(101);
+    let state = started.state;
+    state = {
+      ...state,
+      phase: "WIN_CHECK",
+      players: state.players.map((player) =>
+        player.alignment === "MAFIA"
+          ? { ...player, alive: false, deathCause: "FORCED" as const, deathDay: 1 }
+          : player,
+      ),
+    };
+
+    state = resolveWinCheck(state, "DAWN");
+    expect(state.phase).toBe("GAME_OVER");
+    expect(state.winner).toBe("TOWN");
+
+    for (const viewer of state.players) {
+      const view = buildPlayerView(state, viewer.id);
+      expect(view.players.every((player) => player.publicRole !== null)).toBe(true);
+    }
+  });
+
+  it("reports Gate Mafia-B metrics with zero engine failures", () => {
     const result = simulateMany(50, 20260921);
     expect(result.games).toBe(50);
+    expect(result.completed).toBe(50);
+    expect(result.stalled).toBe(0);
+    expect(result.illegalActions).toBe(0);
+    expect(result.invalidTransitions).toBe(0);
+    expect(result.secretLeaks).toBe(0);
+    expect(result.infiniteLoops).toBe(0);
+    expect(result.otherFailures).toBe(0);
     expect(result.townWins + result.mafiaWins).toBe(50);
     expect(result.maxActions).toBeLessThan(5000);
+    expect(result.passed).toBe(true);
   });
 });
