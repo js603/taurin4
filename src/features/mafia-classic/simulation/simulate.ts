@@ -9,7 +9,11 @@ import {
   chooseBotNomination,
   chooseBotVote,
 } from "./botPolicy.js";
-import { assertAllPlayerViewsSecretSafe } from "./secretLeakAudit.js";
+import { assertPlayerViewSecrecy } from "./secretLeakAudit.js";
+import {
+  assertScreenContract,
+  buildScreenContract,
+} from "../ux/screenContract.js";
 
 export interface SimulationResult {
   readonly seed: number;
@@ -48,7 +52,11 @@ export function simulateBotGame(seed: number, maxActions = 5000): SimulationResu
     actions += 1;
     phases.add(state.phase);
     assertGameStateInvariants(state);
-    assertAllPlayerViewsSecretSafe(state);
+    for (const player of state.players) {
+      const view = buildPlayerView(state, player.id);
+      assertPlayerViewSecrecy(state, player.id, view);
+      assertScreenContract(view, buildScreenContract(view));
+    }
     if (actions > maxActions) throw new Error("INFINITE_LOOP: simulation exceeded maxActions");
   };
 
