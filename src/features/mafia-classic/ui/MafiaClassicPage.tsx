@@ -1,644 +1,653 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
-  accusePlayer,
-  acknowledgeRole,
-  beginVerdictVote,
-  completeSunrise,
-  continueAfterNight,
-  continueAfterVerdict,
-  continueDiscussion,
-  createSoloMafiaSession,
-  humanIsAlive,
-  humanRole,
-  humanStatement,
-  legalHumanNightTargets,
-  letBotAccuse,
-  livingPlayers,
-  mafiaTeammatesForHuman,
-  proposeNight,
-  publicKnownMafiaCount,
-  resolveNightProposal,
-  resolveVerdictVote,
-  submitHumanDefense,
-  submitNightNote,
-  type HumanStatement,
-  type SoloMafiaSession,
-  type SoloPhase,
-} from "../application/soloSession";
+  LocalMafiaRuntime,
+  type HumanActionIntent,
+  type LocalMafiaSnapshot,
+} from "../application/localMafiaRuntime";
+import type { PublicEvent, Role } from "../core/types";
+import type { PublicPlayerView } from "../core/playerView";
+import type { ScreenContract } from "../ux/screenContract";
 import "./mafiaClassic.css";
 
-const STORAGE_KEY = "taurin4.mafia.solo.v2";
-
-const PHASE_LABELS: Record<SoloPhase, string> = {
-  "role-card": "비밀 카드",
-  sunrise: "SUNRISE",
-  discussion: "자유 토론",
-  defense: "고발 · 변론",
-  vote: "비밀 표결",
-  verdict: "표결 결과",
-  "night-vote": "Mafia Night 제안",
-  "night-note": "Mafia Night",
-  "night-result": "밤의 결과",
-  ended: "라운드 종료",
+const ROLE_LABEL: Record<Role, string> = {
+  CITIZEN: "시민",
+  DETECTIVE: "경찰",
+  DOCTOR: "의사",
+  MAFIA: "마피아",
 };
 
-function loadSavedSession(): SoloMafiaSession | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { version?: number; session?: SoloMafiaSession };
-    if (parsed.version !== 2 || !parsed.session?.core?.players?.length) return null;
-    return parsed.session;
-  } catch {
-    return null;
+const ROLE_COPY: Record<Role, string> = {
+  CITIZEN: "밤의 능력은 없습니다. 대화와 지목, 투표만으로 마피아를 찾아내십시오.",
+  DETECTIVE: "밤마다 자신을 제외한 생존자 한 명을 조사합니다. 결과는 오직 당신만 봅니다.",
+  DOCTOR: "밤마다 생존자 한 명을 보호합니다. 같은 사람을 이틀 연속 보호할 수 없습니다.",
+  MAFIA: "동료 마피아와 함께 밤의 표적을 정하고 낮에는 정체를 감추십시오.",
+};
+
+const SCREEN_LABEL: Record<ScreenContract["id"], string> = {
+  LOBBY: "TABLE LOBBY",
+  ROLE_REVEAL: "SECRET ROLE",
+  NIGHT_CITIZEN_WAIT: "NIGHT",
+  NIGHT_DOCTOR: "NIGHT · DOCTOR",
+  NIGHT_DETECTIVE: "NIGHT · DETECTIVE",
+  NIGHT_MAFIA: "NIGHT · MAFIA",
+  DAWN: "DAWN",
+  DAY_DISCUSSION: "DAY · DISCUSSION",
+  NOMINATION: "DAY · NOMINATION",
+  DAY_VOTE: "DAY · VOTE",
+  VOTE_RESULT: "VOTE RESULT",
+  EXECUTION: "EXECUTION",
+  DEAD_PLAYER: "SPECTATOR",
+  GAME_OVER: "GAME OVER",
+  ENGINE_TRANSITION: "RESOLVING",
+};
+
+function playerName(snapshot: LocalMafiaSnapshot, id: string | null | undefined): string {
+  if (!id) return "없음";
+  return snapshot.view.players.find((player) => player.id === id)?.name ?? id;
+}
+
+function publicEventText(snapshot: LocalMafiaSnapshot, event: PublicEvent): string {
+  const name = playerName(snapshot, event.playerId);
+  switch (event.type) {
+    case "GAME_STARTED":
+      return "카드가 배분되었습니다.";
+    case "ROLE_REVEALED":
+      return event.role ? name + "의 역할이 " + ROLE_LABEL[event.role] + "(으)로 공개되었습니다." : name + "의 역할이 공개되었습니다.";
+    case "NIGHT_STARTED":
+      return "밤이 시작되었습니다.";
+    case "NO_NIGHT_DEATH":
+      return "밤이 끝났지만 사망자는 없습니다.";
+    case "PLAYER_DIED":
+      return name + "이(가) 밤에 사망했습니다.";
+    case "DAY_STARTED":
+      return "DAY " + event.day + "가 시작되었습니다.";
+    case "NOMINATIONS_CLOSED":
+      return "후보 지목이 마감되었습니다.";
+    case "VOTE_COMPLETED":
+      return "모든 생존자의 투표가 확정되었습니다.";
+    case "PLAYER_EXECUTED":
+      return name + "이(가) 투표로 처형되었습니다.";
+    case "GAME_WON":
+      return event.winner === "TOWN" ? "시민 진영이 승리했습니다." : "마피아 진영이 승리했습니다.";
   }
 }
 
-function playerName(state: SoloMafiaSession, id: string | null): string {
-  if (!id) return "";
-  return state.core.players.find((player) => player.id === id)?.name ?? "";
+function legalTargets(snapshot: LocalMafiaSnapshot): PublicPlayerView[] {
+  const { view, contract } = snapshot;
+  const alive = view.players.filter((player) => player.alive);
+
+  switch (contract.targetPolicy) {
+    case "ALIVE_PLAYER":
+      return alive;
+    case "ALIVE_NON_MAFIA": {
+      const mafiaIds = new Set(view.mafiaMembers?.map((member) => member.id) ?? []);
+      return alive.filter((player) => !mafiaIds.has(player.id));
+    }
+    case "ALIVE_EXCEPT_SELF":
+      return alive.filter((player) => player.id !== view.self.id);
+    case "DOCTOR_LEGAL_TARGET":
+      return alive.filter((player) => player.id !== view.doctorLastProtectedTargetId);
+    case "NOMINEE_OR_NO_EXECUTION":
+      return alive.filter((player) => view.nominations.includes(player.id));
+    case "NONE":
+      return [];
+  }
 }
 
-function publicPhaseCopy(state: SoloMafiaSession): string {
-  if (state.phase === "discussion") {
-    return "지금은 누구든 질문하고, 의심하고, 고발하거나 Mafia Night를 제안할 수 있습니다.";
+function ownSelection(snapshot: LocalMafiaSnapshot): string | null {
+  const { view, contract } = snapshot;
+  if (contract.primaryActions.includes("SELECT_NIGHT_TARGET")) return view.ownNightTargetId;
+  if (contract.primaryActions.includes("NOMINATE_PLAYER")) return view.ownNominationTargetId;
+  if (contract.primaryActions.includes("SELECT_VOTE")) return view.ownVoteTargetId;
+  return null;
+}
+
+function actionLabel(action: ScreenContract["primaryActions"][number], ready: boolean): string {
+  switch (action) {
+    case "SET_READY":
+      return ready ? "준비 해제" : "READY";
+    case "START_GAME":
+      return "게임 시작";
+    case "CONFIRM_ROLE":
+      return "역할 확인 완료";
+    case "CONFIRM_NIGHT_ACTION":
+      return "야간 행동 확정";
+    case "CONFIRM_RESULT":
+      return "결과 확인";
+    case "END_DISCUSSION":
+      return "토론 종료";
+    case "END_NOMINATION":
+      return "후보 지목 마감";
+    case "CONFIRM_VOTE":
+      return "투표 확정";
+    case "SELECT_NIGHT_TARGET":
+      return "대상 선택";
+    case "NOMINATE_PLAYER":
+      return "후보 지목";
+    case "SELECT_VOTE":
+      return "투표 선택";
   }
-  if (state.phase === "defense") {
-    return "고발이 성립했습니다. 피고의 변론이 끝난 뒤 피고를 제외한 생존자가 표결합니다.";
+}
+
+function roleCardClass(role: Role | null): string {
+  return role ? "m3-role-card m3-role-card--" + role.toLowerCase() : "m3-role-card";
+}
+
+function MainStage({ snapshot }: { snapshot: LocalMafiaSnapshot }) {
+  const { view, contract } = snapshot;
+  const selected = ownSelection(snapshot);
+  const selectedName = playerName(snapshot, selected);
+  const recentEvents = view.publicEvents.slice(-3);
+
+  if (contract.id === "LOBBY") {
+    return (
+      <div className="m3-stage-content m3-stage-content--lobby">
+        <span className="m3-stage-kicker">EIGHT SEATS · ONE TABLE</span>
+        <h2>모두 준비되면 카드를 섞습니다.</h2>
+        <p>8인 기본 규칙 · 마피아 2 · 경찰 1 · 의사 1 · 시민 4</p>
+        <div className="m3-ready-grid">
+          {view.players.map((player) => (
+            <div className={"m3-ready-person " + (player.ready ? "is-ready" : "")} key={player.id}>
+              <span>{player.name}</span>
+              <strong>{player.ready ? "READY" : "WAIT"}</strong>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
-  if (state.phase === "vote") {
-    return "표는 비공개입니다. 결과가 공개되기 전까지 다른 사람의 선택을 알 수 없습니다.";
+
+  if (contract.id === "ROLE_REVEAL") {
+    return (
+      <div className="m3-stage-content m3-stage-content--role">
+        <span className="m3-stage-kicker">PRIVATE · ONLY YOU</span>
+        <div className={roleCardClass(view.self.role)}>
+          <small>YOUR ROLE</small>
+          <strong>{view.self.role ? ROLE_LABEL[view.self.role] : "UNKNOWN"}</strong>
+        </div>
+        <p>{view.self.role ? ROLE_COPY[view.self.role] : ""}</p>
+        {view.self.role === "MAFIA" && view.mafiaMembers ? (
+          <div className="m3-secret-line">
+            <span>동료</span>
+            <strong>{view.mafiaMembers.map((member) => member.name).join(" · ")}</strong>
+          </div>
+        ) : null}
+      </div>
+    );
   }
-  if (state.phase === "night-vote") {
-    return "Mafia Night는 자동으로 시작되지 않습니다. 생존자 과반이 동의해야 합니다.";
+
+  if (contract.id.startsWith("NIGHT_")) {
+    return (
+      <div className="m3-stage-content m3-stage-content--night">
+        <div className="m3-moon" aria-hidden="true" />
+        <span className="m3-stage-kicker">NIGHT {view.night}</span>
+        <h2>{contract.objective}</h2>
+        {selected ? (
+          <div className="m3-selection-seal">
+            <span>현재 선택</span>
+            <strong>{selectedName}</strong>
+          </div>
+        ) : null}
+        {contract.id === "NIGHT_DETECTIVE" && view.detectiveHistory?.length ? (
+          <div className="m3-private-history">
+            <span>내 조사 기록</span>
+            {view.detectiveHistory.slice(-3).map((result) => (
+              <strong key={result.night + result.targetId}>
+                N{result.night} · {playerName(snapshot, result.targetId)} · {result.result}
+              </strong>
+            ))}
+          </div>
+        ) : null}
+        {contract.id === "NIGHT_MAFIA" && view.mafiaMembers ? (
+          <div className="m3-private-history">
+            <span>MAFIA ONLY</span>
+            <strong>{view.mafiaMembers.map((member) => member.name).join(" · ")}</strong>
+            {view.mafiaNightProgress ? (
+              <small>
+                확정 {view.mafiaNightProgress.confirmed}/{view.mafiaNightProgress.total}
+              </small>
+            ) : null}
+          </div>
+        ) : null}
+        {contract.waiting.active ? <WaitingBlock contract={contract} /> : null}
+      </div>
+    );
   }
-  if (state.phase === "night-note") {
-    return "Honest는 HONEST를, Mafia는 제거할 한 사람의 이름을 비밀리에 적습니다.";
+
+  if (contract.id === "DAWN") {
+    return (
+      <div className="m3-stage-content m3-stage-content--dawn">
+        <span className="m3-stage-kicker">DAWN · DAY {view.day}</span>
+        <h2>밤의 결과가 공개됩니다.</h2>
+        <div className="m3-event-focus">
+          {recentEvents.length ? recentEvents.map((event) => (
+            <p key={event.seq}>{publicEventText(snapshot, event)}</p>
+          )) : <p>공개할 사건이 없습니다.</p>}
+        </div>
+      </div>
+    );
   }
-  return state.notice ?? "";
+
+  if (contract.id === "DAY_DISCUSSION") {
+    return (
+      <div className="m3-stage-content m3-stage-content--day">
+        <span className="m3-stage-kicker">DAY {view.day} · OPEN TABLE</span>
+        <h2>말이 시작됩니다.</h2>
+        <p>공개된 사망과 역할, 이전 투표 결과를 바탕으로 서로의 주장을 검증하십시오.</p>
+        <div className="m3-table-mark" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+        {contract.waiting.active ? <WaitingBlock contract={contract} /> : null}
+      </div>
+    );
+  }
+
+  if (contract.id === "NOMINATION") {
+    return (
+      <div className="m3-stage-content">
+        <span className="m3-stage-kicker">NOMINATION</span>
+        <h2>누구를 처형 후보로 올릴 것인가.</h2>
+        <p>지목은 아직 투표가 아닙니다. 후보군을 만든 뒤 별도의 비밀 투표로 넘어갑니다.</p>
+        {view.ownNominationTargetId ? (
+          <div className="m3-selection-seal">
+            <span>내 지목</span>
+            <strong>{playerName(snapshot, view.ownNominationTargetId)}</strong>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (contract.id === "DAY_VOTE") {
+    const noExecutionSelected =
+      contract.primaryActions.includes("CONFIRM_VOTE") && view.ownVoteTargetId === null;
+    return (
+      <div className="m3-stage-content m3-stage-content--vote">
+        <span className="m3-stage-kicker">SECRET BALLOT</span>
+        <h2>표를 고른 뒤 확정하십시오.</h2>
+        <p>확정 전에는 선택을 바꿀 수 있습니다. 다른 사람의 개별 표는 공개되지 않습니다.</p>
+        <div className="m3-vote-progress">
+          <span>확정 진행</span>
+          <strong>
+            {view.voteProgress?.confirmed ?? 0}/{view.voteProgress?.total ?? 0}
+          </strong>
+        </div>
+        {(view.ownVoteTargetId || noExecutionSelected) ? (
+          <div className="m3-selection-seal">
+            <span>내 표</span>
+            <strong>{view.ownVoteTargetId ? playerName(snapshot, view.ownVoteTargetId) : "처형하지 않음"}</strong>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (contract.id === "VOTE_RESULT") {
+    const entries = Object.entries(view.voteResult?.tally ?? {});
+    return (
+      <div className="m3-stage-content m3-stage-content--result">
+        <span className="m3-stage-kicker">FINAL TALLY</span>
+        <h2>{view.voteResult?.executionTargetId ? playerName(snapshot, view.voteResult.executionTargetId) : "처형 없음"}</h2>
+        <div className="m3-tally">
+          {entries.map(([id, count]) => (
+            <div key={id}>
+              <span>{id === "__NO_EXECUTION__" ? "처형하지 않음" : playerName(snapshot, id)}</span>
+              <strong>{count}</strong>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (contract.id === "EXECUTION") {
+    const executed = [...view.publicEvents].reverse().find((event) => event.type === "PLAYER_EXECUTED");
+    const reveal = executed
+      ? [...view.publicEvents].reverse().find(
+          (event) => event.type === "ROLE_REVEALED" && event.playerId === executed.playerId,
+        )
+      : undefined;
+    return (
+      <div className="m3-stage-content m3-stage-content--execution">
+        <span className="m3-stage-kicker">EXECUTION</span>
+        <h2>{executed ? playerName(snapshot, executed.playerId) : "판결 집행"}</h2>
+        <div className="m3-execution-mark">×</div>
+        <p>
+          {reveal?.role
+            ? "공개된 역할 · " + ROLE_LABEL[reveal.role]
+            : "역할 공개를 확인하고 다음 단계로 진행하십시오."}
+        </p>
+      </div>
+    );
+  }
+
+  if (contract.id === "DEAD_PLAYER") {
+    return (
+      <div className="m3-stage-content m3-stage-content--dead">
+        <span className="m3-stage-kicker">SPECTATOR</span>
+        <h2>당신은 더 이상 테이블에 개입할 수 없습니다.</h2>
+        <p>{contract.waiting.reason}</p>
+        <div className="m3-dead-mark">†</div>
+      </div>
+    );
+  }
+
+  if (contract.id === "GAME_OVER") {
+    return (
+      <div className="m3-stage-content m3-stage-content--gameover">
+        <span className="m3-stage-kicker">FINAL REVEAL</span>
+        <h2>{view.winner === "TOWN" ? "시민 진영 승리" : "마피아 진영 승리"}</h2>
+        <div className="m3-final-grid">
+          {view.players.map((player) => (
+            <div key={player.id}>
+              <span>{player.name}</span>
+              <strong>{player.publicRole ? ROLE_LABEL[player.publicRole] : "?"}</strong>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="m3-stage-content">
+      <span className="m3-stage-kicker">ENGINE</span>
+      <h2>판정을 정리하고 있습니다.</h2>
+      <WaitingBlock contract={contract} />
+    </div>
+  );
+}
+
+function WaitingBlock({ contract }: { contract: ScreenContract }) {
+  if (!contract.waiting.active) return null;
+  return (
+    <div className="m3-waiting">
+      <span className="m3-waiting-dot" />
+      <p>{contract.waiting.reason}</p>
+    </div>
+  );
+}
+
+function ActionArea({
+  snapshot,
+  onAction,
+}: {
+  snapshot: LocalMafiaSnapshot;
+  onAction: (intent: HumanActionIntent) => void;
+}) {
+  const { view, contract } = snapshot;
+  const targets = useMemo(() => legalTargets(snapshot), [snapshot]);
+  const selection = ownSelection(snapshot);
+  const hasSelectNight = contract.primaryActions.includes("SELECT_NIGHT_TARGET");
+  const hasNominate = contract.primaryActions.includes("NOMINATE_PLAYER");
+  const hasVote = contract.primaryActions.includes("SELECT_VOTE");
+
+  const selectTarget = (targetId: string) => {
+    if (hasSelectNight) onAction({ type: "SELECT_NIGHT_TARGET", targetId });
+    else if (hasNominate) onAction({ type: "NOMINATE_PLAYER", targetId });
+    else if (hasVote) onAction({ type: "SELECT_VOTE", targetId });
+  };
+
+  const directActions = [
+    ...contract.primaryActions,
+    ...contract.secondaryActions,
+  ].filter(
+    (action) =>
+      action !== "SELECT_NIGHT_TARGET" &&
+      action !== "NOMINATE_PLAYER" &&
+      action !== "SELECT_VOTE",
+  );
+
+  return (
+    <section className="m3-action-area" aria-label="현재 행동">
+      <div className="m3-action-copy">
+        <span>ACTION</span>
+        <strong>{contract.objective}</strong>
+      </div>
+
+      {targets.length > 0 ? (
+        <div className="m3-target-list">
+          {targets.map((player) => (
+            <button
+              type="button"
+              className={"m3-target " + (selection === player.id ? "is-selected" : "")}
+              key={player.id}
+              onClick={() => selectTarget(player.id)}
+            >
+              <span className="m3-target-status">{player.alive ? "●" : "×"}</span>
+              <strong>{player.name}</strong>
+              <small>{player.id === view.self.id ? "YOU" : player.publicRole ? ROLE_LABEL[player.publicRole] : "UNKNOWN"}</small>
+            </button>
+          ))}
+          {hasVote ? (
+            <button
+              type="button"
+              className={
+                "m3-target m3-target--none " +
+                (view.ownVoteTargetId === null && contract.primaryActions.includes("CONFIRM_VOTE")
+                  ? "is-selected"
+                  : "")
+              }
+              onClick={() => onAction({ type: "SELECT_VOTE", targetId: null })}
+            >
+              <span className="m3-target-status">—</span>
+              <strong>처형하지 않음</strong>
+              <small>NO EXECUTION</small>
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {directActions.length > 0 ? (
+        <div className="m3-action-buttons">
+          {directActions.map((action) => (
+            <button
+              type="button"
+              className={
+                action === "CONFIRM_NIGHT_ACTION" || action === "CONFIRM_VOTE" || action === "START_GAME"
+                  ? "m3-action-button m3-action-button--strong"
+                  : action === "END_NOMINATION" || action === "END_DISCUSSION"
+                    ? "m3-action-button m3-action-button--quiet"
+                    : "m3-action-button"
+              }
+              key={action}
+              onClick={() => {
+                if (action === "SET_READY") onAction({ type: "SET_READY", ready: !view.self.ready });
+                else if (action === "START_GAME") onAction({ type: "START_GAME" });
+                else if (action === "CONFIRM_ROLE") onAction({ type: "CONFIRM_ROLE" });
+                else if (action === "CONFIRM_NIGHT_ACTION") onAction({ type: "CONFIRM_NIGHT_ACTION" });
+                else if (action === "CONFIRM_RESULT") onAction({ type: "CONFIRM_RESULT" });
+                else if (action === "END_DISCUSSION") onAction({ type: "END_DISCUSSION" });
+                else if (action === "END_NOMINATION") onAction({ type: "END_NOMINATION" });
+                else if (action === "CONFIRM_VOTE") onAction({ type: "CONFIRM_VOTE" });
+              }}
+            >
+              {actionLabel(action, view.self.ready)}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {contract.waiting.active ? <WaitingBlock contract={contract} /> : null}
+    </section>
+  );
 }
 
 export function MafiaClassicPage() {
   const [nickname, setNickname] = useState("당신");
-  const [playerCount, setPlayerCount] = useState(6);
-  const [session, setSession] = useState<SoloMafiaSession | null>(() => loadSavedSession());
-  const [roleOpen, setRoleOpen] = useState(false);
-  const [targetId, setTargetId] = useState("");
-  const [nightTargetId, setNightTargetId] = useState("");
+  const [runtime, setRuntime] = useState<LocalMafiaRuntime | null>(null);
+  const [snapshot, setSnapshot] = useState<LocalMafiaSnapshot | null>(null);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (!session) {
-      localStorage.removeItem(STORAGE_KEY);
-      return;
-    }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 2, session }));
-  }, [session]);
-
-  const living = useMemo(() => (session ? livingPlayers(session) : []), [session]);
-  const human = session?.core.players.find((player) => player.id === session.humanId) ?? null;
-  const selectedTarget =
-    session?.core.players.find((player) => player.id === targetId && player.alive) ?? null;
-
-  function startGame() {
+  const enterTable = () => {
     try {
-      const next = createSoloMafiaSession(nickname, playerCount);
-      setSession(next);
-      setRoleOpen(false);
-      setTargetId("");
-      setNightTargetId("");
+      const nextRuntime = new LocalMafiaRuntime(nickname);
+      setRuntime(nextRuntime);
+      setSnapshot(nextRuntime.snapshot());
       setError("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "게임을 시작하지 못했습니다.");
+      setError(caught instanceof Error ? caught.message : "테이블을 만들지 못했습니다.");
     }
-  }
+  };
 
-  function resetGame() {
-    localStorage.removeItem(STORAGE_KEY);
-    setSession(null);
-    setRoleOpen(false);
-    setTargetId("");
-    setNightTargetId("");
-    setError("");
-  }
+  const act = (intent: HumanActionIntent) => {
+    if (!runtime) return;
+    try {
+      const result = runtime.act(intent);
+      setSnapshot(result.snapshot);
+      setError(result.ok ? "" : (result.errorMessage ?? result.errorCode ?? "Action 실패"));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "게임 진행 중 오류가 발생했습니다.");
+    }
+  };
 
-  function update(next: SoloMafiaSession) {
-    setSession(next);
-    setError("");
-  }
-
-  function actStatement(kind: HumanStatement) {
-    if (!session || !targetId) return;
-    update(humanStatement(session, targetId, kind));
-  }
-
-  if (!session) {
+  if (!runtime || !snapshot) {
     return (
-      <main className="mafia-root mafia-setup">
-        <section className="mafia-title-block">
-          <p className="eyebrow">DIMMA DAVIDOFF · ORIGINAL RULES</p>
-          <h1>MAFIA</h1>
-          <p className="lead">
-            한 명의 사람과 다섯 명 이상의 AI가 같은 테이블에 앉습니다.
-            특수직업도, 역할 공개도, 인공 증거도 없습니다.
+      <main className="m3-entry">
+        <div className="m3-entry-grain" aria-hidden="true" />
+        <section className="m3-entry-copy">
+          <p className="m3-overline">MAFIA · M3 VISUAL SHELL</p>
+          <h1>아무도<br />믿지 마십시오.</h1>
+          <p>
+            검증된 M1 엔진과 M2 Screen Contract 위에 올라가는 첫 실제 게임 화면입니다.
+            이 테이블에서는 1명의 플레이어와 7명의 봇이 같은 Action API를 사용합니다.
           </p>
         </section>
-
-        <section className="setup-card">
-          <div className="mode-badge">
-            <span>PLAYTEST MODE</span>
-            <strong>1 HUMAN + AI TABLE</strong>
-          </div>
-
-          <label className="field-label">
-            당신의 이름
-            <input
-              value={nickname}
-              maxLength={16}
-              onChange={(event) => setNickname(event.target.value)}
-            />
+        <section className="m3-entry-panel">
+          <span className="m3-panel-label">LOCAL PLAYTEST TABLE</span>
+          <label>
+            <small>PLAYER NAME</small>
+            <input value={nickname} maxLength={14} onChange={(event) => setNickname(event.target.value)} />
           </label>
-
-          <label className="field-label">
-            총 플레이어 수
-            <select
-              value={playerCount}
-              onChange={(event) => setPlayerCount(Number(event.target.value))}
-            >
-              {[6, 7, 8, 9, 10].map((count) => (
-                <option value={count} key={count}>
-                  {count}명
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div className="rule-summary">
-            <strong>이 모드가 지키는 것</strong>
-            <p>
-              Mafia는 서로를 알고, Honest는 아무도 모릅니다. 낮에는 말과 고발,
-              밤에는 종이 한 장뿐입니다. 죽은 사람의 정체는 끝까지 공개되지 않습니다.
-            </p>
+          <div className="m3-entry-rules">
+            <span>8 PLAYERS</span>
+            <span>2 MAFIA</span>
+            <span>DETECTIVE</span>
+            <span>DOCTOR</span>
           </div>
-
-          {error ? <p className="error-copy">{error}</p> : null}
-
-          <button className="primary-action wide" onClick={startGame}>
-            카드를 섞고 테이블에 앉기
+          {error ? <p className="m3-error">{error}</p> : null}
+          <button className="m3-enter-button" onClick={enterTable}>
+            테이블 입장
           </button>
         </section>
       </main>
     );
   }
 
-  if (!human) return null;
-
-  if (session.phase === "role-card") {
-    return (
-      <main className="mafia-root private-stage">
-        <section className="private-card-shell">
-          <p className="eyebrow">PRIVATE · ONLY YOU</p>
-          {!roleOpen ? (
-            <>
-              <h1>{human.name}</h1>
-              <p className="private-help">
-                이 화면은 당신만 보세요. 역할 확인 후에는 카드가 다시 가려집니다.
-              </p>
-              <button className="primary-action" onClick={() => setRoleOpen(true)}>
-                내 카드 뒤집기
-              </button>
-            </>
-          ) : (
-            <>
-              <div
-                className={
-                  "identity-card " +
-                  (human.alignment === "mafia" ? "identity-card--black" : "identity-card--red")
-                }
-              >
-                <span>{human.alignment === "mafia" ? "BLACK CARD" : "RED CARD"}</span>
-                <strong>{human.alignment === "mafia" ? "MAFIA" : "HONEST"}</strong>
-              </div>
-              <p className="private-help">
-                {human.alignment === "mafia"
-                  ? "아직 동료의 이름은 공개되지 않습니다. Sunrise에서 서로를 확인합니다."
-                  : "당신은 자신의 결백 외에는 아무 정보도 갖고 있지 않습니다."}
-              </p>
-              <button
-                className="primary-action"
-                onClick={() => {
-                  setRoleOpen(false);
-                  update(acknowledgeRole(session));
-                }}
-              >
-                카드 덮기 · Sunrise
-              </button>
-            </>
-          )}
-        </section>
-      </main>
-    );
-  }
-
-  if (session.phase === "sunrise") {
-    const teammates = mafiaTeammatesForHuman(session);
-    return (
-      <main className="mafia-root private-stage sunrise-stage-v2">
-        <section className="private-card-shell sunrise-shell">
-          <p className="eyebrow">SUNRISE · 1—20</p>
-          <h1>모두 고개를 숙입니다.</h1>
-          <div className="sunrise-sequence">
-            <span>1 · 2 · 3 · 4 · 5</span>
-            <strong>6 — 15 · SILENT</strong>
-            <span>16 · 17 · 18 · 19 · 20</span>
-          </div>
-
-          {human.alignment === "mafia" ? (
-            <div className="secret-team">
-              <span>당신이 확인한 Mafia</span>
-              <strong>{teammates.map((player) => player.name).join(", ")}</strong>
-              <p>이 정보는 당신과 Mafia만 압니다. 공개적으로 드러내지 마세요.</p>
-            </div>
-          ) : (
-            <div className="secret-team honest-wait">
-              <span>HONEST</span>
-              <strong>눈을 감고 기다립니다.</strong>
-              <p>누가 눈을 떴는지는 알 수 없습니다.</p>
-            </div>
-          )}
-
-          <button className="primary-action" onClick={() => update(completeSunrise(session))}>
-            20 · 모두 눈을 뜬다
-          </button>
-        </section>
-      </main>
-    );
-  }
-
-  const humanAlive = humanIsAlive(session);
-  const accusedName = playerName(session, session.pendingAccusedId);
-  const accuserName = playerName(session, session.pendingAccuserId);
-  const humanIsAccused = session.pendingAccusedId === session.humanId;
-  const humanCanVote =
-    session.phase === "vote" && humanAlive && session.pendingAccusedId !== session.humanId;
-  const knownMafia = publicKnownMafiaCount(session);
+  const { view, contract } = snapshot;
+  const aliveCount = view.players.filter((player) => player.alive).length;
+  const recentEvents = [...view.publicEvents].reverse().slice(0, 6);
+  const mafiaIds = new Set(view.mafiaMembers?.map((member) => member.id) ?? []);
 
   return (
-    <main className="mafia-root table-stage">
-      <header className="table-header">
-        <div>
-          <p className="eyebrow">ORIGINAL MAFIA · SOLO TABLE V2</p>
-          <h1>DAY {session.core.day}</h1>
+    <main className={"m3-shell m3-shell--" + contract.id.toLowerCase().replaceAll("_", "-")}>
+      <div className="m3-ambient" aria-hidden="true" />
+
+      <header className="m3-header">
+        <div className="m3-brand">
+          <span className="m3-brand-mark">M</span>
+          <div>
+            <small>MAFIA</small>
+            <strong>{SCREEN_LABEL[contract.id]}</strong>
+          </div>
         </div>
-        <div className="header-state">
-          <span>{PHASE_LABELS[session.phase]}</span>
-          <strong>{living.length} ALIVE</strong>
+        <div className="m3-round">
+          <span>{view.day > 0 ? "DAY " + view.day : "NIGHT " + view.night}</span>
+          <i />
+          <strong>{aliveCount} ALIVE</strong>
+        </div>
+        <div className="m3-self">
+          <span>{view.self.alive ? "ALIVE" : "OUT"}</span>
+          <strong>{view.self.name}</strong>
+          <small>{view.self.role ? ROLE_LABEL[view.self.role] : "ROLE HIDDEN"}</small>
         </div>
       </header>
 
-      <section className="public-strip">
-        <div>
-          <span>공개 정보</span>
-          <strong>
-            {session.lastNight
-              ? "확인된 생존 Mafia " + knownMafia + "명"
-              : "초기 Black Card " + knownMafia + "장"}
-          </strong>
-        </div>
-        <div>
-          <span>내 상태</span>
-          <strong>{humanAlive ? "생존" : "제거됨 · 관전"}</strong>
-        </div>
-        <details className="my-card-peek">
-          <summary>내 카드</summary>
-          <strong className={human.alignment === "mafia" ? "role-black" : "role-red"}>
-            {human.alignment === "mafia" ? "MAFIA" : "HONEST"}
-          </strong>
-        </details>
-      </section>
-
-      <section className="seat-rail" aria-label="플레이어 상태">
-        {session.core.players.map((player, index) => (
-          <button
-            type="button"
-            key={player.id}
-            className={
-              "seat-chip " +
-              (!player.alive ? "seat-chip--dead " : "") +
-              (player.id === session.humanId ? "seat-chip--human " : "") +
-              (targetId === player.id ? "seat-chip--selected" : "")
-            }
-            disabled={!player.alive || player.id === session.humanId}
-            onClick={() => setTargetId(player.id)}
-          >
-            <span>{String(index + 1).padStart(2, "0")}</span>
-            <strong>{player.name}</strong>
-            <small>
-              {player.alive
-                ? player.id === session.humanId
-                  ? "YOU"
-                  : session.personas[player.id]?.label ?? "PLAYER"
-                : "OUT · ROLE HIDDEN"}
-            </small>
-          </button>
-        ))}
-      </section>
-
-      <section className="game-surface">
-        <div className="phase-context">
-          <span>{PHASE_LABELS[session.phase]}</span>
-          <h2>
-            {session.phase === "discussion"
-              ? "누구를 믿을 것인가."
-              : session.phase === "defense"
-                ? accusedName + "의 변론"
-                : session.phase === "vote"
-                  ? accusedName + "에 대한 표결"
-                  : session.phase === "verdict"
-                    ? "표가 공개되었습니다."
-                    : session.phase === "night-vote"
-                      ? "밤을 열 것인가."
-                      : session.phase === "night-note"
-                        ? "종이 한 장에 적으세요."
-                        : session.phase === "night-result"
-                          ? "쪽지를 펼칩니다."
-                          : "라운드가 끝났습니다."}
-          </h2>
-          <p>{session.notice ?? publicPhaseCopy(session)}</p>
-        </div>
-
-        <div className="conversation" aria-live="polite">
-          {session.talk.slice(-12).map((line) => (
-            <article className={"talk-line talk-line--" + line.tone} key={line.id}>
-              <div className="speaker-mark">
-                <span>{line.speakerId ? "P" : "•"}</span>
-              </div>
-              <div>
-                <strong>{line.speakerName}</strong>
-                <p>{line.text}</p>
-              </div>
-            </article>
-          ))}
-        </div>
-
-        {session.phase === "discussion" ? (
-          <section className="action-dock">
-            {humanAlive ? (
-              <>
-                <div className="selected-target">
-                  <span>대상</span>
-                  <strong>{selectedTarget?.name ?? "좌석을 선택하세요"}</strong>
+      <div className="m3-layout">
+        <aside className="m3-players" aria-label="플레이어">
+          <div className="m3-section-head">
+            <span>PLAYERS</span>
+            <strong>{aliveCount}/{view.players.length}</strong>
+          </div>
+          <div className="m3-seat-list">
+            {view.players.map((player, index) => {
+              const teammate = mafiaIds.has(player.id) && player.id !== view.self.id;
+              return (
+                <div
+                  className={
+                    "m3-seat " +
+                    (!player.alive ? "is-dead " : "") +
+                    (player.id === view.self.id ? "is-self " : "") +
+                    (teammate ? "is-mafia-mate" : "")
+                  }
+                  key={player.id}
+                >
+                  <span className="m3-seat-no">{String(index + 1).padStart(2, "0")}</span>
+                  <div className="m3-seat-name">
+                    <strong>{player.name}</strong>
+                    <small>
+                      {!player.alive
+                        ? player.publicRole
+                          ? ROLE_LABEL[player.publicRole]
+                          : "OUT"
+                        : teammate
+                          ? "MAFIA · ALLY"
+                          : player.id === view.self.id
+                            ? "YOU"
+                            : "UNKNOWN"}
+                    </small>
+                  </div>
+                  <span className="m3-seat-life">{player.alive ? "●" : "×"}</span>
                 </div>
-                <div className="action-row">
-                  <button
-                    className="soft-action"
-                    disabled={!selectedTarget}
-                    onClick={() => actStatement("question")}
-                  >
-                    질문한다
-                  </button>
-                  <button
-                    className="soft-action"
-                    disabled={!selectedTarget}
-                    onClick={() => actStatement("defend")}
-                  >
-                    아직 이르다
-                  </button>
-                  <button
-                    className="pressure-action"
-                    disabled={!selectedTarget}
-                    onClick={() => actStatement("suspect")}
-                  >
-                    의심한다
-                  </button>
-                  <button
-                    className="danger-action"
-                    disabled={!selectedTarget}
-                    onClick={() => selectedTarget && update(accusePlayer(session, selectedTarget.id))}
-                  >
-                    고발한다
-                  </button>
-                </div>
-              </>
-            ) : (
-              <p className="spectator-note">
-                당신은 제거되어 말하거나 표결할 수 없습니다. 남은 플레이어의 행동만 관전합니다.
-              </p>
-            )}
+              );
+            })}
+          </div>
+        </aside>
 
-            <div className="secondary-actions">
-              <button className="text-action" onClick={() => update(continueDiscussion(session))}>
-                토론을 더 듣는다
-              </button>
-              <button className="text-action" onClick={() => update(letBotAccuse(session))}>
-                다른 사람의 고발을 듣는다
-              </button>
-              <button className="night-action" onClick={() => update(proposeNight(session))}>
-                Mafia Night 제안
-              </button>
+        <section className="m3-main">
+          <div className="m3-stage">
+            <div className="m3-stage-topline">
+              <span>{SCREEN_LABEL[contract.id]}</span>
+              <strong>{contract.mode}</strong>
             </div>
-          </section>
-        ) : null}
+            <MainStage snapshot={snapshot} />
+          </div>
 
-        {session.phase === "defense" ? (
-          <section className="decision-card">
-            <p>
-              <strong>{accuserName}</strong>이(가) <strong>{accusedName}</strong>을(를) 고발했습니다.
-            </p>
-            {humanIsAccused && humanAlive ? (
-              <div className="action-row">
-                <button
-                  className="soft-action"
-                  onClick={() => update(submitHumanDefense(session, "deny"))}
-                >
-                  정면 부인
-                </button>
-                <button
-                  className="pressure-action"
-                  onClick={() => update(submitHumanDefense(session, "counter"))}
-                >
-                  고발 흐름 반박
-                </button>
-              </div>
-            ) : null}
-            <button className="primary-action" onClick={() => update(beginVerdictVote(session))}>
-              변론 종료 · 비밀 표결
-            </button>
-          </section>
-        ) : null}
-
-        {session.phase === "vote" ? (
-          <section className="decision-card vote-focus">
-            <span className="decision-kicker">PRIVATE BALLOT</span>
-            <h3>{accusedName}</h3>
-            <p>
-              제거 기준은 피고를 제외한 생존자 과반입니다.
-              다른 플레이어의 선택은 결과 공개 전까지 보이지 않습니다.
-            </p>
-            {humanCanVote ? (
-              <div className="action-row">
-                <button className="danger-action" onClick={() => update(resolveVerdictVote(session, true))}>
-                  GUILTY · 제거 찬성
-                </button>
-                <button className="soft-action" onClick={() => update(resolveVerdictVote(session, false))}>
-                  NOT GUILTY · 반대
-                </button>
-              </div>
-            ) : (
-              <button className="primary-action" onClick={() => update(resolveVerdictVote(session, null))}>
-                나는 투표권 없음 · 결과 공개
-              </button>
-            )}
-          </section>
-        ) : null}
-
-        {session.phase === "verdict" && session.lastVote ? (
-          <section className={"result-card " + (session.lastVote.executed ? "result-card--danger" : "")}>
-            <span>VERDICT</span>
-            <h3>
-              {session.lastVote.guiltyVotes}/{session.lastVote.eligibleVotes}
-            </h3>
-            <p>
-              과반 기준 {session.lastVote.threshold}표 ·{" "}
-              {session.lastVote.executed
-                ? session.lastVote.accusedName + " 제거"
-                : "과반 미달 · 고발 기각"}
-            </p>
-            <strong>정체는 공개되지 않습니다.</strong>
-            <button className="primary-action" onClick={() => update(continueAfterVerdict(session))}>
-              낮의 토론으로 돌아가기
-            </button>
-          </section>
-        ) : null}
-
-        {session.phase === "night-vote" ? (
-          <section className="decision-card night-decision">
-            <span className="decision-kicker">MAFIA NIGHT PROPOSAL</span>
-            <p>생존자 과반이 동의해야만 밤의 쪽지를 펼칠 수 있습니다.</p>
-            {humanAlive ? (
-              <div className="action-row">
-                <button className="night-action" onClick={() => update(resolveNightProposal(session, true))}>
-                  NIGHT 동의
-                </button>
-                <button className="soft-action" onClick={() => update(resolveNightProposal(session, false))}>
-                  아직 낮을 계속한다
-                </button>
-              </div>
-            ) : (
-              <button className="primary-action" onClick={() => update(resolveNightProposal(session, null))}>
-                남은 생존자의 표결 보기
-              </button>
-            )}
-          </section>
-        ) : null}
-
-        {session.phase === "night-note" ? (
-          <section className="decision-card night-note-card">
-            <span className="decision-kicker">SEALED NOTE</span>
-            {humanAlive && humanRole(session) === "mafia" ? (
-              <>
-                <h3>한 사람의 이름</h3>
-                <p>
-                  다른 Mafia도 각자 한 이름을 적습니다. 모든 Mafia가 같은 사람을 적어야 살인이 성립합니다.
-                </p>
-                <select
-                  value={nightTargetId}
-                  onChange={(event) => setNightTargetId(event.target.value)}
-                >
-                  <option value="">표적 선택</option>
-                  {legalHumanNightTargets(session).map((player) => (
-                    <option value={player.id} key={player.id}>
-                      {player.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  className="danger-action"
-                  disabled={!nightTargetId}
-                  onClick={() => update(submitNightNote(session, nightTargetId))}
-                >
-                  이름을 적고 봉인
-                </button>
-              </>
-            ) : (
-              <>
-                <div className="honest-note">HONEST</div>
-                <p>
-                  {humanAlive
-                    ? "당신에게 선택지는 없습니다. HONEST라고 적힌 쪽지를 봉인합니다."
-                    : "당신은 제거되어 쪽지를 제출하지 않습니다. 남은 생존자의 쪽지만 집계됩니다."}
-                </p>
-                <button className="primary-action" onClick={() => update(submitNightNote(session, null))}>
-                  {humanAlive ? "HONEST 쪽지 봉인" : "밤의 쪽지 집계"}
-                </button>
-              </>
-            )}
-          </section>
-        ) : null}
-
-        {session.phase === "night-result" && session.lastNight ? (
-          <section className="result-card night-result-card">
-            <span>MAFIA NIGHT</span>
-            <h3>{session.lastNight.shotCount} SHOTS</h3>
-            <p>
-              {session.lastNight.shotCount === 0
-                ? "이름이 적힌 Mafia 쪽지가 없습니다."
-                : session.lastNight.unanimous
-                  ? "모든 Mafia 쪽지가 같은 이름을 가리켰습니다."
-                  : "공개된 Mafia 쪽지: " + session.lastNight.targetNames.join(" · ")}
-            </p>
-            {session.lastNight.murderedPlayerName ? (
-              <strong>{session.lastNight.murderedPlayerName} 제거 · 정체 비공개</strong>
-            ) : (
-              <strong>이번 밤에는 아무도 제거되지 않았습니다.</strong>
-            )}
-            <button className="primary-action" onClick={() => update(continueAfterNight(session))}>
-              다음 낮
-            </button>
-          </section>
-        ) : null}
-
-        {session.phase === "ended" ? (
-          <section className="result-card final-result">
-            <span>ROUND OVER</span>
-            <h3>{session.core.winner === "honest" ? "HONEST WINS" : "MAFIA WINS"}</h3>
-            <p>
-              이제 모든 카드가 공개됩니다. 라운드 중에는 확인할 수 없었던 정체입니다.
-            </p>
-            <div className="final-reveal">
-              {session.core.players.map((player) => (
-                <div key={player.id}>
-                  <strong>{player.name}</strong>
-                  <span className={player.alignment === "mafia" ? "role-black" : "role-red"}>
-                    {player.alignment === "mafia" ? "MAFIA" : "HONEST"}
-                  </span>
-                </div>
-              ))}
+          <section className="m3-context">
+            <div className="m3-section-head">
+              <span>PUBLIC CONTEXT</span>
+              <strong>{view.publicEvents.length}</strong>
             </div>
-            <button className="primary-action" onClick={resetGame}>
-              새 라운드
-            </button>
+            {recentEvents.length ? (
+              <div className="m3-event-list">
+                {recentEvents.map((event) => (
+                  <article key={event.seq}>
+                    <span>{String(event.seq).padStart(2, "0")}</span>
+                    <p>{publicEventText(snapshot, event)}</p>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="m3-empty-context">아직 공개 사건이 없습니다.</p>
+            )}
           </section>
-        ) : null}
-      </section>
 
-      <details className="chronicle-drawer">
-        <summary>공개 기록 보기 · {session.core.log.length}건</summary>
-        <ol>
-          {[...session.core.log].reverse().map((entry) => (
-            <li key={entry.id}>
-              <span>D{entry.day}</span>
-              <p>{entry.text}</p>
-            </li>
-          ))}
-        </ol>
-      </details>
+          <ActionArea snapshot={snapshot} onAction={act} />
 
-      <footer className="table-footer">
-        <span>RULE LOCK · DAVIDOFF ORIGINAL</span>
-        <button className="text-action danger-text" onClick={resetGame}>
-          라운드 초기화
-        </button>
+          {error ? (
+            <div className="m3-error-strip" role="alert">
+              <span>ENGINE</span>
+              <p>{error}</p>
+            </div>
+          ) : null}
+        </section>
+      </div>
+
+      <footer className="m3-footer">
+        <span>M1 ENGINE · M2 CONTRACT · M3 SHELL</span>
+        <span>REV {view.revision}</span>
       </footer>
     </main>
   );
