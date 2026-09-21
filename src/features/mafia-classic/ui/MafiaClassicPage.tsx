@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   LocalMafiaRuntime,
   type HumanActionIntent,
@@ -314,15 +314,9 @@ export function MafiaClassicPage() {
   const { view, contract } = snapshot;
   const alive = view.players.filter((player) => player.alive);
   const mafiaIds = new Set(view.mafiaMembers?.map((member) => member.id) ?? []);
-  const targetCandidates = alive.filter((player) => player.id !== view.self.id);
   const canChat = view.availableActions.includes("SEND_CHAT");
   const publicMafiaCount = view.publicMafiaCount;
-  const currentAccused = view.accusation?.accusedId ?? null;
-
-  const noteTargets = useMemo(
-    () => alive,
-    [alive],
-  );
+  const noteTargets = alive;
 
   const confirmNightNote = () => {
     if (view.self.role === "HONEST") {
