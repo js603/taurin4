@@ -252,13 +252,9 @@ function endNomination(state: GameState): GameState {
   });
 
   if (nomineeIds.length === 0) {
-    next = transitionPhase(next, "VOTE_RESULT");
-    return {
-      ...next,
-      voteResult: { tally: {}, executionTargetId: null },
-      pendingExecutionId: null,
-      revision: next.revision + 1,
-    };
+    next = transitionPhase(next, "WIN_CHECK");
+    const checked = resolveWinCheck(next, "NIGHT_START");
+    return checked.phase === "NIGHT_START" ? beginNight(checked) : checked;
   }
 
   return transitionPhase(
