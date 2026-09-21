@@ -249,6 +249,22 @@ export function resolveWinCheck(
     phaseConfirmations: [],
     revision: state.revision + 1,
   };
+
+  for (const player of next.players) {
+    if (!player.role) continue;
+    const alreadyRevealed = next.publicEvents.some(
+      (event) => event.type === "ROLE_REVEALED" && event.playerId === player.id,
+    );
+    if (!alreadyRevealed) {
+      next = appendEvent(next, {
+        type: "ROLE_REVEALED",
+        day: state.day,
+        playerId: player.id,
+        role: player.role,
+      });
+    }
+  }
+
   next = appendEvent(next, {
     type: "GAME_WON",
     day: state.day,
