@@ -217,7 +217,6 @@ describe("M1 Core Engine", () => {
     state = confirmPublicResult(state, started.rng);
     state = send(state, { type: "END_DISCUSSION", playerId: state.hostId }, started.rng);
     state = send(state, { type: "END_NOMINATION", playerId: state.hostId }, started.rng);
-    state = confirmPublicResult(state, started.rng);
 
     expect(state.phase).toBe("NIGHT_ACTION");
     const currentDoctor = livingRole(state, "DOCTOR");
