@@ -32,7 +32,9 @@
     "mafia:m1:sim": "npm run core:build && node .core-dist/src/features/mafia-classic/simulation/cli.js --games 1000 --seed 20260921",
     "mafia:m1:sim:10k": "npm run core:build && node .core-dist/src/features/mafia-classic/simulation/cli.js --games 10000 --seed 20260921",
     "mafia:m2:contracts": "vitest run --config vitest.config.ts src/features/mafia-classic/ux",
-    "mafia:m3:ui": "vitest run --config vitest.config.ts src/features/mafia-classic/application/localMafiaRuntime.test.ts src/features/mafia-classic/ui/mafiaClassicArchitecture.test.ts"
+    "mafia:m3:ui": "vitest run --config vitest.config.ts src/features/mafia-classic/application/localMafiaRuntime.test.ts src/features/mafia-classic/ui/mafiaClassicArchitecture.test.ts",
+    "mafia:original:sim": "npm run core:build && node .core-dist/src/features/mafia-classic/original/cli.js",
+    "mafia:original:test": "vitest run --config vitest.config.ts src/features/mafia-classic/original"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",
