@@ -25,7 +25,9 @@ function requiresAlive(action: GameAction): boolean {
   return (
     action.type === "SELECT_NIGHT_TARGET" ||
     action.type === "CONFIRM_NIGHT_ACTION" ||
+    action.type === "END_DISCUSSION" ||
     action.type === "NOMINATE_PLAYER" ||
+    action.type === "END_NOMINATION" ||
     action.type === "SELECT_VOTE" ||
     action.type === "CONFIRM_VOTE"
   );
