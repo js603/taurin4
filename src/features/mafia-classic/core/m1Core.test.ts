@@ -81,7 +81,7 @@ function completeNightWithTargets(
 function confirmPublicResult(state: GameState, rng: Mulberry32): GameState {
   let next = state;
   const phase = next.phase;
-  for (const player of next.players) {
+  for (const player of next.players.filter((candidate) => candidate.alive)) {
     if (next.phase !== phase) break;
     next = send(next, { type: "CONFIRM_RESULT", playerId: player.id }, rng);
   }
