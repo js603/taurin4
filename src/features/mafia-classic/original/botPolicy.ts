@@ -57,9 +57,11 @@ export function originalBotGuiltyVote(
 }
 
 export function originalBotNightProposalVote(
-  _view: OriginalPlayerView,
-  _rng: RandomSource,
+  view: OriginalPlayerView,
+  rng: RandomSource,
 ): boolean {
+  void view;
+  void rng;
   return true;
 }
 
