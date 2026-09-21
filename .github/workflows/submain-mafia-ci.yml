@@ -30,6 +30,9 @@ jobs:
       - name: M2 screen contract validation
         run: npm run mafia:m2:contracts
 
+      - name: M3 visual shell boundary validation
+        run: npm run mafia:m3:ui
+
       - name: Build submain Web preview
         env:
           VITE_BASE_PATH: /taurin4/submain/
