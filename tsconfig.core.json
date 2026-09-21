@@ -17,6 +17,7 @@
   "include": [
     "src/features/medieval-trial/**/*.ts",
     "src/features/mafia-classic/core/**/*.ts",
+    "src/features/mafia-classic/original/**/*.ts",
     "src/features/mafia-classic/simulation/**/*.ts",
     "tests/**/*.ts",
     "types/**/*.d.ts"
@@ -27,6 +28,7 @@
     "src/features/medieval-trial/application/**/*.test.ts",
     "src/features/medieval-trial/ui/**/*",
     "src/features/mafia-classic/core/**/*.test.ts",
-    "src/features/mafia-classic/ui/**/*"
+    "src/features/mafia-classic/ui/**/*",
+    "src/features/mafia-classic/original/**/*.test.ts"
   ]
 }
