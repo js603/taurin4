@@ -33,18 +33,25 @@ function killPlayer(
   if (!player?.alive) throw new Error("Death resolver cannot kill a missing or dead player.");
   if (!player.role) throw new Error("Death resolver requires assigned roles.");
 
+  const players = state.players.map((candidate) =>
+    candidate.id === playerId
+      ? {
+          ...candidate,
+          alive: false,
+          deathCause: cause,
+          deathDay: state.day,
+        }
+      : candidate,
+  );
+  const nextHostId =
+    state.hostId === playerId
+      ? (players.find((candidate) => candidate.alive)?.id ?? state.hostId)
+      : state.hostId;
+
   let next: GameState = {
     ...state,
-    players: state.players.map((candidate) =>
-      candidate.id === playerId
-        ? {
-            ...candidate,
-            alive: false,
-            deathCause: cause,
-            deathDay: state.day,
-          }
-        : candidate,
-    ),
+    hostId: nextHostId,
+    players,
   };
 
   next = appendEvent(next, {
