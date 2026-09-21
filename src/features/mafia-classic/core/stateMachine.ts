@@ -23,7 +23,7 @@ export function canTransition(from: GamePhase, to: GamePhase): boolean {
 
 export function transitionPhase(state: GameState, to: GamePhase): GameState {
   if (!canTransition(state.phase, to)) {
-    throw new Error("Illegal Mafia phase transition: " + state.phase + " -> " + to);
+    throw new Error("INVALID_TRANSITION: " + state.phase + " -> " + to);
   }
   return {
     ...state,
