@@ -93,6 +93,7 @@ function availableActionTypes(state: GameState, playerId: PlayerId): GameAction[
     case "DAWN":
     case "VOTE_RESULT":
     case "EXECUTION":
+      if (!player.alive) return [];
       return state.phaseConfirmations.includes(player.id) ? [] : ["CONFIRM_RESULT"];
     case "DAY_DISCUSSION":
       return player.id === state.hostId ? ["END_DISCUSSION"] : [];
@@ -102,7 +103,8 @@ function availableActionTypes(state: GameState, playerId: PlayerId): GameAction[
       return actions;
     }
     case "DAY_VOTE":
-      return player.alive ? ["SELECT_VOTE", "CONFIRM_VOTE"] : [];
+      if (!player.alive || state.votes[player.id]?.confirmed) return [];
+      return ["SELECT_VOTE", "CONFIRM_VOTE"];
     default:
       return [];
   }
