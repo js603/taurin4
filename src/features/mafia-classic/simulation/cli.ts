@@ -27,6 +27,8 @@ process.stdout.write(
     "Illegal Actions:       " + result.illegalActions.toLocaleString("en-US"),
     "Invalid Transitions:   " + result.invalidTransitions.toLocaleString("en-US"),
     "Secret Leaks:          " + result.secretLeaks.toLocaleString("en-US"),
+    "Screen Contract Violations: " +
+      result.screenContractViolations.toLocaleString("en-US"),
     "Infinite Loops:        " + result.infiniteLoops.toLocaleString("en-US"),
     "Other Failures:        " + result.otherFailures.toLocaleString("en-US"),
     "",
