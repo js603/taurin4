@@ -1,6 +1,6 @@
 import { publicRoleOf } from "../core/resolvers.js";
 import type { GameState, PlayerId } from "../core/types.js";
-import type { PlayerView } from "../core/playerView.js";
+import { buildPlayerView, type PlayerView } from "../core/playerView.js";
 
 function leak(message: string): never {
   throw new Error("SECRET_LEAK: " + message);
@@ -84,15 +84,7 @@ export function assertPlayerViewSecrecy(
 
 export function assertAllPlayerViewsSecretSafe(state: GameState): void {
   for (const player of state.players) {
-    const { buildPlayerView } = requirePlayerView();
     const view = buildPlayerView(state, player.id);
     assertPlayerViewSecrecy(state, player.id, view);
   }
 }
-
-function requirePlayerView(): typeof import("../core/playerView.js") {
-  // Kept behind a function to avoid accidental state mutation and make the audit dependency explicit.
-  return playerViewModule;
-}
-
-import * as playerViewModule from "../core/playerView.js";
