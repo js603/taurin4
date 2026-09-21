@@ -493,6 +493,7 @@ describe("M1 Core Engine", () => {
     expect(result.illegalActions).toBe(0);
     expect(result.invalidTransitions).toBe(0);
     expect(result.secretLeaks).toBe(0);
+    expect(result.screenContractViolations).toBe(0);
     expect(result.infiniteLoops).toBe(0);
     expect(result.otherFailures).toBe(0);
     expect(result.townWins + result.mafiaWins).toBe(50);
