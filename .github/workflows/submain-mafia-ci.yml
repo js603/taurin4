@@ -27,6 +27,9 @@ jobs:
       - name: M1 headless 1,000-game simulation
         run: npm run mafia:m1:sim
 
+      - name: M2 screen contract validation
+        run: npm run mafia:m2:contracts
+
       - name: Build submain Web preview
         env:
           VITE_BASE_PATH: /taurin4/submain/
