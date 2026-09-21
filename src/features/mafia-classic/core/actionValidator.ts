@@ -179,8 +179,10 @@ export function validateAction(state: GameState, action: GameAction): Validation
 }
 
 export function allConnectedConfirmed(state: GameState): boolean {
-  const connectedIds = state.players.filter((player) => player.connected).map((player) => player.id);
-  return connectedIds.every((id) => state.phaseConfirmations.includes(id));
+  const requiredIds = state.players
+    .filter((player) => player.connected && player.alive)
+    .map((player) => player.id);
+  return requiredIds.every((id) => state.phaseConfirmations.includes(id));
 }
 
 export function allNightActionsConfirmed(state: GameState): boolean {
