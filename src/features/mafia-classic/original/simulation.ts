@@ -298,8 +298,6 @@ export function simulateOriginalGame(seed: number, maxActions = 5000): OriginalS
       case "NIGHT_RESOLVE":
         throw new Error("OFFLINE_INTERVENTION_REQUIRED: automatic resolver leaked");
 
-      case "GAME_OVER":
-        break;
     }
   }
 
