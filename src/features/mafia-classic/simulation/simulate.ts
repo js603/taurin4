@@ -9,6 +9,7 @@ import {
   chooseBotNomination,
   chooseBotVote,
 } from "./botPolicy.js";
+import { assertAllPlayerViewsSecretSafe } from "./secretLeakAudit.js";
 
 export interface SimulationResult {
   readonly seed: number;
@@ -33,7 +34,7 @@ export function simulateBotGame(seed: number, maxActions = 5000): SimulationResu
     const result = dispatchAction(state, action, engineRng);
     if (!result.ok) {
       throw new Error(
-        "Bot dispatched illegal action at " +
+        "ILLEGAL_ACTION: Bot dispatched illegal action at " +
           state.phase +
           ": " +
           JSON.stringify(action) +
@@ -47,7 +48,8 @@ export function simulateBotGame(seed: number, maxActions = 5000): SimulationResu
     actions += 1;
     phases.add(state.phase);
     assertGameStateInvariants(state);
-    if (actions > maxActions) throw new Error("simulation exceeded maxActions");
+    assertAllPlayerViewsSecretSafe(state);
+    if (actions > maxActions) throw new Error("INFINITE_LOOP: simulation exceeded maxActions");
   };
 
   while (state.phase !== "GAME_OVER") {
@@ -81,7 +83,7 @@ export function simulateBotGame(seed: number, maxActions = 5000): SimulationResu
           progressed = true;
         }
         if (!progressed && state.phase === "NIGHT_ACTION") {
-          throw new Error("NIGHT_ACTION has no legal bot actor");
+          throw new Error("STALLED: NIGHT_ACTION has no legal bot actor");
         }
         break;
       }
@@ -150,37 +152,80 @@ export function simulateBotGame(seed: number, maxActions = 5000): SimulationResu
 
 export interface SimulationBatchResult {
   readonly games: number;
+  readonly completed: number;
+  readonly stalled: number;
   readonly townWins: number;
   readonly mafiaWins: number;
+  readonly illegalActions: number;
+  readonly invalidTransitions: number;
+  readonly secretLeaks: number;
+  readonly infiniteLoops: number;
+  readonly otherFailures: number;
   readonly maxActions: number;
   readonly maxNights: number;
   readonly averageActions: number;
+  readonly passed: boolean;
 }
 
 export function simulateMany(games: number, seed: number): SimulationBatchResult {
   if (!Number.isInteger(games) || games <= 0) throw new Error("games must be a positive integer");
 
+  let completed = 0;
+  let stalled = 0;
   let townWins = 0;
   let mafiaWins = 0;
+  let illegalActions = 0;
+  let invalidTransitions = 0;
+  let secretLeaks = 0;
+  let infiniteLoops = 0;
+  let otherFailures = 0;
   let maxActions = 0;
   let maxNights = 0;
   let totalActions = 0;
 
   for (let index = 0; index < games; index += 1) {
-    const result = simulateBotGame((seed + index * 7919) >>> 0);
-    if (result.winner === "TOWN") townWins += 1;
-    else mafiaWins += 1;
-    maxActions = Math.max(maxActions, result.actions);
-    maxNights = Math.max(maxNights, result.nights);
-    totalActions += result.actions;
+    try {
+      const result = simulateBotGame((seed + index * 7919) >>> 0);
+      completed += 1;
+      if (result.winner === "TOWN") townWins += 1;
+      else mafiaWins += 1;
+      maxActions = Math.max(maxActions, result.actions);
+      maxNights = Math.max(maxNights, result.nights);
+      totalActions += result.actions;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.startsWith("STALLED:")) stalled += 1;
+      else if (message.startsWith("ILLEGAL_ACTION:")) illegalActions += 1;
+      else if (message.startsWith("INVALID_TRANSITION:")) invalidTransitions += 1;
+      else if (message.startsWith("SECRET_LEAK:")) secretLeaks += 1;
+      else if (message.startsWith("INFINITE_LOOP:")) infiniteLoops += 1;
+      else otherFailures += 1;
+    }
   }
+
+  const passed =
+    completed === games &&
+    stalled === 0 &&
+    illegalActions === 0 &&
+    invalidTransitions === 0 &&
+    secretLeaks === 0 &&
+    infiniteLoops === 0 &&
+    otherFailures === 0;
 
   return {
     games,
+    completed,
+    stalled,
     townWins,
     mafiaWins,
+    illegalActions,
+    invalidTransitions,
+    secretLeaks,
+    infiniteLoops,
+    otherFailures,
     maxActions,
     maxNights,
-    averageActions: totalActions / games,
+    averageActions: completed > 0 ? totalActions / completed : 0,
+    passed,
   };
 }
