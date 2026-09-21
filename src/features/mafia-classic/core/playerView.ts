@@ -14,6 +14,7 @@ export interface PublicPlayerView {
   readonly id: PlayerId;
   readonly name: string;
   readonly alive: boolean;
+  readonly ready: boolean;
   readonly connected: boolean;
   readonly publicRole: Role | null;
   readonly deathCause: "MAFIA" | "EXECUTION" | "FORCED" | null;
@@ -31,6 +32,7 @@ export interface PlayerView {
     readonly id: PlayerId;
     readonly name: string;
     readonly alive: boolean;
+    readonly ready: boolean;
     readonly role: Role | null;
     readonly alignment: "TOWN" | "MAFIA" | null;
     readonly roleConfirmed: boolean;
@@ -70,26 +72,37 @@ function availableActionTypes(state: GameState, playerId: PlayerId): GameAction[
   if (!player || !player.connected || state.phase === "GAME_OVER") return [];
 
   switch (state.phase) {
-    case "LOBBY":
-      return player.id === state.hostId ? ["SET_READY", "START_GAME"] : ["SET_READY"];
+    case "LOBBY": {
+      const actions: GameAction["type"][] = ["SET_READY"];
+      const canStart =
+        player.id === state.hostId &&
+        state.players.length === 8 &&
+        state.players.every((candidate) => candidate.connected && candidate.ready);
+      if (canStart) actions.push("START_GAME");
+      return actions;
+    }
     case "ROLE_REVEAL":
       return player.roleConfirmed ? [] : ["CONFIRM_ROLE"];
     case "NIGHT_ACTION":
       if (!player.alive) return [];
       if (player.role === "MAFIA") {
-        return state.nightActions.mafiaVotes[player.id]?.confirmed
-          ? []
-          : ["SELECT_NIGHT_TARGET", "CONFIRM_NIGHT_ACTION"];
+        const choice = state.nightActions.mafiaVotes[player.id];
+        if (choice?.confirmed) return [];
+        return choice?.targetId
+          ? ["SELECT_NIGHT_TARGET", "CONFIRM_NIGHT_ACTION"]
+          : ["SELECT_NIGHT_TARGET"];
       }
       if (player.role === "DOCTOR") {
-        return state.nightActions.doctor.confirmed
-          ? []
-          : ["SELECT_NIGHT_TARGET", "CONFIRM_NIGHT_ACTION"];
+        if (state.nightActions.doctor.confirmed) return [];
+        return state.nightActions.doctor.targetId
+          ? ["SELECT_NIGHT_TARGET", "CONFIRM_NIGHT_ACTION"]
+          : ["SELECT_NIGHT_TARGET"];
       }
       if (player.role === "DETECTIVE") {
-        return state.nightActions.detective.confirmed
-          ? []
-          : ["SELECT_NIGHT_TARGET", "CONFIRM_NIGHT_ACTION"];
+        if (state.nightActions.detective.confirmed) return [];
+        return state.nightActions.detective.targetId
+          ? ["SELECT_NIGHT_TARGET", "CONFIRM_NIGHT_ACTION"]
+          : ["SELECT_NIGHT_TARGET"];
       }
       return [];
     case "DAWN":
@@ -104,9 +117,11 @@ function availableActionTypes(state: GameState, playerId: PlayerId): GameAction[
       if (player.id === state.hostId) actions.push("END_NOMINATION");
       return actions;
     }
-    case "DAY_VOTE":
+    case "DAY_VOTE": {
       if (!player.alive || state.votes[player.id]?.confirmed) return [];
-      return ["SELECT_VOTE", "CONFIRM_VOTE"];
+      const hasSelection = Object.prototype.hasOwnProperty.call(state.votes, player.id);
+      return hasSelection ? ["SELECT_VOTE", "CONFIRM_VOTE"] : ["SELECT_VOTE"];
+    }
     default:
       return [];
   }
@@ -166,6 +181,7 @@ export function buildPlayerView(state: GameState, playerId: PlayerId): PlayerVie
       id: viewer.id,
       name: viewer.name,
       alive: viewer.alive,
+      ready: viewer.ready,
       role: viewer.role,
       alignment: viewer.alignment,
       roleConfirmed: viewer.roleConfirmed,
@@ -174,6 +190,7 @@ export function buildPlayerView(state: GameState, playerId: PlayerId): PlayerVie
       id: player.id,
       name: player.name,
       alive: player.alive,
+      ready: player.ready,
       connected: player.connected,
       publicRole: publicRoleOf(state, player.id),
       deathCause: player.deathCause,
