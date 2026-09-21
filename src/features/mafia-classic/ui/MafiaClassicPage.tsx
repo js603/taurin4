@@ -1,339 +1,174 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   LocalMafiaRuntime,
   type HumanActionIntent,
   type LocalMafiaSnapshot,
 } from "../application/localMafiaRuntime";
-import type { PublicEvent, Role } from "../core/types";
-import type { PublicPlayerView } from "../core/playerView";
-import type { ScreenContract } from "../ux/screenContract";
+import type {
+  ChatEntry,
+  OriginalRole,
+  SystemPayload,
+} from "../original/types";
 import "./mafiaClassic.css";
 
-const ROLE_LABEL: Record<Role, string> = {
-  CITIZEN: "시민",
-  DETECTIVE: "경찰",
-  DOCTOR: "의사",
-  MAFIA: "마피아",
+const ROLE_LABEL: Record<OriginalRole, string> = {
+  HONEST: "HONEST",
+  MAFIA: "MAFIA",
 };
 
-const ROLE_COPY: Record<Role, string> = {
-  CITIZEN: "밤의 능력은 없습니다. 대화와 지목, 투표만으로 마피아를 찾아내십시오.",
-  DETECTIVE: "밤마다 자신을 제외한 생존자 한 명을 조사합니다. 결과는 오직 당신만 봅니다.",
-  DOCTOR: "밤마다 생존자 한 명을 보호합니다. 같은 사람을 이틀 연속 보호할 수 없습니다.",
-  MAFIA: "동료 마피아와 함께 밤의 표적을 정하고 낮에는 정체를 감추십시오.",
-};
-
-const SCREEN_LABEL: Record<ScreenContract["id"], string> = {
-  LOBBY: "TABLE LOBBY",
-  ROLE_REVEAL: "SECRET ROLE",
-  NIGHT_CITIZEN_WAIT: "NIGHT",
-  NIGHT_DOCTOR: "NIGHT · DOCTOR",
-  NIGHT_DETECTIVE: "NIGHT · DETECTIVE",
-  NIGHT_MAFIA: "NIGHT · MAFIA",
-  DAWN: "DAWN",
-  DAY_DISCUSSION: "DAY · DISCUSSION",
-  NOMINATION: "DAY · NOMINATION",
-  DAY_VOTE: "DAY · VOTE",
-  VOTE_RESULT: "VOTE RESULT",
-  EXECUTION: "EXECUTION",
-  DEAD_PLAYER: "SPECTATOR",
-  GAME_OVER: "GAME OVER",
-  ENGINE_TRANSITION: "RESOLVING",
-};
-
-function playerName(snapshot: LocalMafiaSnapshot, id: string | null | undefined): string {
-  if (!id) return "없음";
+function playerName(snapshot: LocalMafiaSnapshot, id?: string | null): string {
+  if (!id) return "—";
   return snapshot.view.players.find((player) => player.id === id)?.name ?? id;
 }
 
-function publicEventText(snapshot: LocalMafiaSnapshot, event: PublicEvent): string {
-  const name = playerName(snapshot, event.playerId);
-  switch (event.type) {
+function systemTitle(system: SystemPayload): string {
+  switch (system.code) {
+    case "GAME_STARTED": return "카드가 배분되었습니다";
+    case "SUNRISE_STARTED": return "SUNRISE";
+    case "DAY_STARTED": return "DAY START";
+    case "PLAYER_ACCUSED": return "ACCUSATION";
+    case "GUILTY_VOTE_OPENED": return "GUILTY VOTE";
+    case "GUILTY_VOTE_PASSED": return "GUILTY";
+    case "GUILTY_VOTE_FAILED": return "NOT GUILTY";
+    case "PLAYER_EXECUTED": return "EXECUTION";
+    case "NIGHT_PROPOSED": return "MAFIA NIGHT PROPOSED";
+    case "NIGHT_PROPOSAL_PASSED": return "NIGHT APPROVED";
+    case "NIGHT_PROPOSAL_FAILED": return "NIGHT REJECTED";
+    case "NIGHT_STARTED": return "MAFIA NIGHT";
+    case "NIGHT_NOTES_REVEALED": return "NIGHT NOTES OPENED";
+    case "NIGHT_MURDER": return "MURDER";
+    case "NIGHT_NO_MURDER": return "NO MURDER";
+    case "GAME_WON": return "GAME OVER";
+  }
+}
+
+function systemBody(snapshot: LocalMafiaSnapshot, system: SystemPayload): string {
+  const actor = playerName(snapshot, system.actorId);
+  const target = playerName(snapshot, system.targetId);
+
+  switch (system.code) {
     case "GAME_STARTED":
-      return "카드가 배분되었습니다.";
-    case "ROLE_REVEALED":
-      return event.role ? name + "의 역할이 " + ROLE_LABEL[event.role] + "(으)로 공개되었습니다." : name + "의 역할이 공개되었습니다.";
-    case "NIGHT_STARTED":
-      return "밤이 시작되었습니다.";
-    case "NO_NIGHT_DEATH":
-      return "밤이 끝났지만 사망자는 없습니다.";
-    case "PLAYER_DIED":
-      return name + "이(가) 밤에 사망했습니다.";
+      return "모든 플레이어에게 비밀 카드가 배분되었습니다.";
+    case "SUNRISE_STARTED":
+      return "Mafia는 서로를 확인합니다. Honest는 아무 정보도 얻지 않습니다.";
     case "DAY_STARTED":
-      return "DAY " + event.day + "가 시작되었습니다.";
-    case "NOMINATIONS_CLOSED":
-      return "후보 지목이 마감되었습니다.";
-    case "VOTE_COMPLETED":
-      return "모든 생존자의 투표가 확정되었습니다.";
+      return "공개 채팅이 열렸습니다. 의심하고, 질문하고, 설득하십시오.";
+    case "PLAYER_ACCUSED":
+      return actor + " → " + target + " · Mafia 혐의로 고발했습니다.";
+    case "GUILTY_VOTE_OPENED":
+      return target + "의 유죄 표결이 시작되었습니다. 필요 과반 " + (system.required ?? 0) + "표.";
+    case "GUILTY_VOTE_PASSED":
+      return "GUILTY " + (system.guilty ?? 0) + " / NOT GUILTY " + (system.notGuilty ?? 0) + " · 필요 " + (system.required ?? 0) + "표.";
+    case "GUILTY_VOTE_FAILED":
+      return "GUILTY " + (system.guilty ?? 0) + " / NOT GUILTY " + (system.notGuilty ?? 0) + " · " + target + "은(는) 생존합니다.";
     case "PLAYER_EXECUTED":
-      return name + "이(가) 투표로 처형되었습니다.";
-    case "GAME_WON":
-      return event.winner === "TOWN" ? "시민 진영이 승리했습니다." : "마피아 진영이 승리했습니다.";
-  }
-}
-
-function legalTargets(snapshot: LocalMafiaSnapshot): PublicPlayerView[] {
-  const { view, contract } = snapshot;
-  const alive = view.players.filter((player) => player.alive);
-
-  switch (contract.targetPolicy) {
-    case "ALIVE_PLAYER":
-      return alive;
-    case "ALIVE_NON_MAFIA": {
-      const mafiaIds = new Set(view.mafiaMembers?.map((member) => member.id) ?? []);
-      return alive.filter((player) => !mafiaIds.has(player.id));
+      return target + "이(가) 게임에서 제거되었습니다. 역할은 공개되지 않습니다.";
+    case "NIGHT_PROPOSED":
+      return actor + "이(가) Mafia Night를 제안했습니다. 필요 과반 " + (system.required ?? 0) + "표.";
+    case "NIGHT_PROPOSAL_PASSED":
+      return "찬성 " + (system.agree ?? 0) + " / 반대 " + (system.disagree ?? 0) + " · Mafia Night가 열립니다.";
+    case "NIGHT_PROPOSAL_FAILED":
+      return "찬성 " + (system.agree ?? 0) + " / 반대 " + (system.disagree ?? 0) + " · Day 채팅을 계속합니다.";
+    case "NIGHT_STARTED":
+      return "PUBLIC CHAT이 잠겼습니다. 모든 생존자는 비밀 쪽지를 제출합니다.";
+    case "NIGHT_NOTES_REVEALED": {
+      const names = (system.targetIds ?? []).map((id) => playerName(snapshot, id));
+      return "이름 쪽지 " + (system.mafiaCount ?? 0) + "장" + (names.length ? " · " + names.join(" · ") : " · Mafia shot 0");
     }
-    case "ALIVE_EXCEPT_SELF":
-      return alive.filter((player) => player.id !== view.self.id);
-    case "DOCTOR_LEGAL_TARGET":
-      return alive.filter((player) => player.id !== view.doctorLastProtectedTargetId);
-    case "NOMINEE_OR_NO_EXECUTION":
-      return alive.filter((player) => view.nominations.includes(player.id));
-    case "NONE":
-      return [];
+    case "NIGHT_MURDER":
+      return target + "이(가) 밤에 제거되었습니다. 역할은 공개되지 않습니다.";
+    case "NIGHT_NO_MURDER":
+      return "Mafia 쪽지의 이름이 일치하지 않았습니다. 아무도 제거되지 않았습니다.";
+    case "GAME_WON":
+      return system.winner === "HONEST" ? "HONEST 팀 승리." : "MAFIA 팀 승리.";
   }
 }
 
-function ownSelection(snapshot: LocalMafiaSnapshot): string | null {
-  const { view, contract } = snapshot;
-  if (contract.primaryActions.includes("SELECT_NIGHT_TARGET")) return view.ownNightTargetId;
-  if (contract.primaryActions.includes("NOMINATE_PLAYER")) return view.ownNominationTargetId;
-  if (contract.primaryActions.includes("SELECT_VOTE")) return view.ownVoteTargetId;
-  return null;
-}
-
-function actionLabel(action: ScreenContract["primaryActions"][number], ready: boolean): string {
-  switch (action) {
-    case "SET_READY":
-      return ready ? "준비 해제" : "READY";
-    case "START_GAME":
-      return "게임 시작";
-    case "CONFIRM_ROLE":
-      return "역할 확인 완료";
-    case "CONFIRM_NIGHT_ACTION":
-      return "야간 행동 확정";
-    case "CONFIRM_RESULT":
-      return "결과 확인";
-    case "END_DISCUSSION":
-      return "토론 종료";
-    case "END_NOMINATION":
-      return "후보 지목 마감";
-    case "CONFIRM_VOTE":
-      return "투표 확정";
-    case "SELECT_NIGHT_TARGET":
-      return "대상 선택";
-    case "NOMINATE_PLAYER":
-      return "후보 지목";
-    case "SELECT_VOTE":
-      return "투표 선택";
-  }
-}
-
-function roleCardClass(role: Role | null): string {
-  return role ? "m3-role-card m3-role-card--" + role.toLowerCase() : "m3-role-card";
-}
-
-function MainStage({ snapshot }: { snapshot: LocalMafiaSnapshot }) {
-  const { view, contract } = snapshot;
-  const selected = ownSelection(snapshot);
-  const selectedName = playerName(snapshot, selected);
-  const recentEvents = view.publicEvents.slice(-3);
-
-  if (contract.id === "LOBBY") {
+function ChatLine({
+  snapshot,
+  entry,
+}: {
+  snapshot: LocalMafiaSnapshot;
+  entry: ChatEntry;
+}) {
+  if (entry.kind === "SYSTEM" && entry.system) {
     return (
-      <div className="m3-stage-content m3-stage-content--lobby">
-        <span className="m3-stage-kicker">EIGHT SEATS · ONE TABLE</span>
-        <h2>모두 준비되면 카드를 섞습니다.</h2>
-        <p>8인 기본 규칙 · 마피아 2 · 경찰 1 · 의사 1 · 시민 4</p>
-        <div className="m3-ready-grid">
-          {view.players.map((player) => (
-            <div className={"m3-ready-person " + (player.ready ? "is-ready" : "")} key={player.id}>
-              <span>{player.name}</span>
-              <strong>{player.ready ? "READY" : "WAIT"}</strong>
-            </div>
-          ))}
+      <article className={"oc-system oc-system--" + entry.system.code.toLowerCase()}>
+        <div className="oc-system-head">
+          <span>SYSTEM</span>
+          <strong>{systemTitle(entry.system)}</strong>
         </div>
-      </div>
+        <p>{systemBody(snapshot, entry.system)}</p>
+      </article>
     );
   }
+
+  const sender = playerName(snapshot, entry.senderId);
+  return (
+    <article className={"oc-chat-line " + (entry.channel === "DEAD" ? "is-dead" : "")}>
+      <div className="oc-chat-avatar">{sender.slice(0, 1)}</div>
+      <div>
+        <div className="oc-chat-meta">
+          <strong>{sender}</strong>
+          <span>{entry.channel === "DEAD" ? "DEAD CHAT" : "PUBLIC"}</span>
+        </div>
+        <p>{entry.text}</p>
+      </div>
+    </article>
+  );
+}
+
+function PhaseCard({ snapshot }: { snapshot: LocalMafiaSnapshot }) {
+  const { view, contract } = snapshot;
 
   if (contract.id === "ROLE_REVEAL") {
     return (
-      <div className="m3-stage-content m3-stage-content--role">
-        <span className="m3-stage-kicker">PRIVATE · ONLY YOU</span>
-        <div className={roleCardClass(view.self.role)}>
-          <small>YOUR ROLE</small>
-          <strong>{view.self.role ? ROLE_LABEL[view.self.role] : "UNKNOWN"}</strong>
-        </div>
-        <p>{view.self.role ? ROLE_COPY[view.self.role] : ""}</p>
-      </div>
+      <section className="oc-phase-card oc-role-reveal">
+        <span>PRIVATE CARD</span>
+        <h2>{view.self.role ? ROLE_LABEL[view.self.role] : "UNKNOWN"}</h2>
+        <p>
+          {view.self.role === "MAFIA"
+            ? "당신은 Mafia입니다. 아직 동료의 정체는 Sunrise까지 공개되지 않습니다."
+            : "당신은 Honest입니다. Mafia가 누구인지는 알 수 없습니다."}
+        </p>
+      </section>
     );
   }
 
-  if (contract.id.startsWith("NIGHT_")) {
+  if (contract.id === "SUNRISE") {
     return (
-      <div className="m3-stage-content m3-stage-content--night">
-        <div className="m3-moon" aria-hidden="true" />
-        <span className="m3-stage-kicker">NIGHT {view.night}</span>
-        <h2>{contract.objective}</h2>
-        {selected ? (
-          <div className="m3-selection-seal">
-            <span>현재 선택</span>
-            <strong>{selectedName}</strong>
-          </div>
-        ) : null}
-        {contract.id === "NIGHT_DETECTIVE" && view.detectiveHistory?.length ? (
-          <div className="m3-private-history">
-            <span>내 조사 기록</span>
-            {view.detectiveHistory.slice(-3).map((result) => (
-              <strong key={result.night + result.targetId}>
-                N{result.night} · {playerName(snapshot, result.targetId)} · {result.result}
-              </strong>
+      <section className="oc-phase-card oc-sunrise">
+        <span>SUNRISE</span>
+        <h2>{view.self.role === "MAFIA" ? "눈을 뜨십시오." : "아무것도 보지 못했습니다."}</h2>
+        {view.self.role === "MAFIA" && view.mafiaMembers ? (
+          <div className="oc-allies">
+            {view.mafiaMembers.map((member) => (
+              <strong key={member.id}>{member.name}</strong>
             ))}
           </div>
-        ) : null}
-        {contract.id === "NIGHT_MAFIA" && view.mafiaMembers ? (
-          <div className="m3-private-history">
-            <span>MAFIA ONLY</span>
-            <strong>{view.mafiaMembers.map((member) => member.name).join(" · ")}</strong>
-            {view.mafiaNightProgress ? (
-              <small>
-                확정 {view.mafiaNightProgress.confirmed}/{view.mafiaNightProgress.total}
-              </small>
-            ) : null}
-          </div>
-        ) : null}
-        {contract.waiting.active ? <WaitingBlock contract={contract} /> : null}
-      </div>
+        ) : (
+          <p>당신이 얻는 추가 정보는 없습니다.</p>
+        )}
+      </section>
     );
   }
 
-  if (contract.id === "DAWN") {
+  if (contract.id === "NIGHT_NOTES") {
     return (
-      <div className="m3-stage-content m3-stage-content--dawn">
-        <span className="m3-stage-kicker">DAWN · DAY {view.day}</span>
-        <h2>밤의 결과가 공개됩니다.</h2>
-        <div className="m3-event-focus">
-          {recentEvents.length ? recentEvents.map((event) => (
-            <p key={event.seq}>{publicEventText(snapshot, event)}</p>
-          )) : <p>공개할 사건이 없습니다.</p>}
-        </div>
-      </div>
-    );
-  }
-
-  if (contract.id === "DAY_DISCUSSION") {
-    return (
-      <div className="m3-stage-content m3-stage-content--day">
-        <span className="m3-stage-kicker">DAY {view.day} · OPEN TABLE</span>
-        <h2>말이 시작됩니다.</h2>
-        <p>공개된 사망과 역할, 이전 투표 결과를 바탕으로 서로의 주장을 검증하십시오.</p>
-        <div className="m3-table-mark" aria-hidden="true">
-          <span />
-          <span />
-          <span />
-        </div>
-        {contract.waiting.active ? <WaitingBlock contract={contract} /> : null}
-      </div>
-    );
-  }
-
-  if (contract.id === "NOMINATION") {
-    return (
-      <div className="m3-stage-content">
-        <span className="m3-stage-kicker">NOMINATION</span>
-        <h2>누구를 처형 후보로 올릴 것인가.</h2>
-        <p>지목은 아직 투표가 아닙니다. 후보군을 만든 뒤 별도의 비밀 투표로 넘어갑니다.</p>
-        {view.ownNominationTargetId ? (
-          <div className="m3-selection-seal">
-            <span>내 지목</span>
-            <strong>{playerName(snapshot, view.ownNominationTargetId)}</strong>
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-
-  if (contract.id === "DAY_VOTE") {
-    const noExecutionSelected =
-      contract.primaryActions.includes("CONFIRM_VOTE") && view.ownVoteTargetId === null;
-    return (
-      <div className="m3-stage-content m3-stage-content--vote">
-        <span className="m3-stage-kicker">SECRET BALLOT</span>
-        <h2>표를 고른 뒤 확정하십시오.</h2>
-        <p>확정 전에는 선택을 바꿀 수 있습니다. 다른 사람의 개별 표는 공개되지 않습니다.</p>
-        <div className="m3-vote-progress">
-          <span>확정 진행</span>
-          <strong>
-            {view.voteProgress?.confirmed ?? 0}/{view.voteProgress?.total ?? 0}
-          </strong>
-        </div>
-        {(view.ownVoteTargetId || noExecutionSelected) ? (
-          <div className="m3-selection-seal">
-            <span>내 표</span>
-            <strong>{view.ownVoteTargetId ? playerName(snapshot, view.ownVoteTargetId) : "처형하지 않음"}</strong>
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-
-  if (contract.id === "VOTE_RESULT") {
-    const entries = Object.entries(view.voteResult?.tally ?? {});
-    return (
-      <div className="m3-stage-content m3-stage-content--result">
-        <span className="m3-stage-kicker">FINAL TALLY</span>
-        <h2>{view.voteResult?.executionTargetId ? playerName(snapshot, view.voteResult.executionTargetId) : "처형 없음"}</h2>
-        <div className="m3-tally">
-          {entries.map(([id, count]) => (
-            <div key={id}>
-              <span>{id === "__NO_EXECUTION__" ? "처형하지 않음" : playerName(snapshot, id)}</span>
-              <strong>{count}</strong>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (contract.id === "EXECUTION") {
-    const executed = [...view.publicEvents].reverse().find((event) => event.type === "PLAYER_EXECUTED");
-    const reveal = executed
-      ? [...view.publicEvents].reverse().find(
-          (event) => event.type === "ROLE_REVEALED" && event.playerId === executed.playerId,
-        )
-      : undefined;
-    return (
-      <div className="m3-stage-content m3-stage-content--execution">
-        <span className="m3-stage-kicker">EXECUTION</span>
-        <h2>{executed ? playerName(snapshot, executed.playerId) : "판결 집행"}</h2>
-        <div className="m3-execution-mark">×</div>
-        <p>
-          {reveal?.role
-            ? "공개된 역할 · " + ROLE_LABEL[reveal.role]
-            : "역할 공개를 확인하고 다음 단계로 진행하십시오."}
-        </p>
-      </div>
-    );
-  }
-
-  if (contract.id === "DEAD_PLAYER") {
-    return (
-      <div className="m3-stage-content m3-stage-content--dead">
-        <span className="m3-stage-kicker">SPECTATOR</span>
-        <h2>당신은 더 이상 테이블에 개입할 수 없습니다.</h2>
-        <p>{contract.waiting.reason}</p>
-        <div className="m3-dead-mark">†</div>
-      </div>
+      <section className="oc-phase-card oc-night-card">
+        <span>SEALED NOTE</span>
+        <h2>{view.self.role === "MAFIA" ? "한 사람의 이름" : "HONEST"}</h2>
+        <p>{contract.objective}</p>
+      </section>
     );
   }
 
   if (contract.id === "GAME_OVER") {
     return (
-      <div className="m3-stage-content m3-stage-content--gameover">
-        <span className="m3-stage-kicker">FINAL REVEAL</span>
-        <h2>{view.winner === "TOWN" ? "시민 진영 승리" : "마피아 진영 승리"}</h2>
-        <div className="m3-final-grid">
+      <section className="oc-phase-card oc-game-over">
+        <span>FINAL REVEAL</span>
+        <h2>{view.winner === "HONEST" ? "HONEST WIN" : "MAFIA WIN"}</h2>
+        <div className="oc-final-roles">
           {view.players.map((player) => (
             <div key={player.id}>
               <span>{player.name}</span>
@@ -341,145 +176,82 @@ function MainStage({ snapshot }: { snapshot: LocalMafiaSnapshot }) {
             </div>
           ))}
         </div>
-      </div>
+      </section>
     );
   }
 
-  return (
-    <div className="m3-stage-content">
-      <span className="m3-stage-kicker">ENGINE</span>
-      <h2>판정을 정리하고 있습니다.</h2>
-      <WaitingBlock contract={contract} />
-    </div>
-  );
+  return null;
 }
 
-function WaitingBlock({ contract }: { contract: ScreenContract }) {
-  if (!contract.waiting.active) return null;
-  return (
-    <div className="m3-waiting">
-      <span className="m3-waiting-dot" />
-      <p>{contract.waiting.reason}</p>
-    </div>
-  );
-}
-
-function ActionArea({
+function VoteOverlay({
   snapshot,
-  onAction,
+  act,
 }: {
   snapshot: LocalMafiaSnapshot;
-  onAction: (intent: HumanActionIntent) => void;
+  act: (intent: HumanActionIntent) => void;
 }) {
   const { view, contract } = snapshot;
-  const targets = useMemo(() => legalTargets(snapshot), [snapshot]);
-  const selection = ownSelection(snapshot);
-  const hasSelectNight = contract.primaryActions.includes("SELECT_NIGHT_TARGET");
-  const hasNominate = contract.primaryActions.includes("NOMINATE_PLAYER");
-  const hasVote = contract.primaryActions.includes("SELECT_VOTE");
 
-  const selectTarget = (targetId: string) => {
-    if (hasSelectNight) onAction({ type: "SELECT_NIGHT_TARGET", targetId });
-    else if (hasNominate) onAction({ type: "NOMINATE_PLAYER", targetId });
-    else if (hasVote) onAction({ type: "SELECT_VOTE", targetId });
-  };
+  if (contract.id === "GUILTY_VOTE") {
+    const accused = playerName(snapshot, view.accusation?.accusedId);
+    return (
+      <section className="oc-decision-card">
+        <span>GUILTY VOTE</span>
+        <h3>{accused}</h3>
+        <p>
+          제출 {view.guiltyVote?.submitted ?? 0}/{view.guiltyVote?.eligible ?? 0}
+          · 필요 {view.guiltyVote?.required ?? 0}
+        </p>
+        {view.availableActions.includes("CAST_GUILTY_VOTE") ? (
+          <div className="oc-decision-buttons">
+            <button className="danger" onClick={() => act({ type: "CAST_GUILTY_VOTE", guilty: true })}>GUILTY</button>
+            <button onClick={() => act({ type: "CAST_GUILTY_VOTE", guilty: false })}>NOT GUILTY</button>
+          </div>
+        ) : (
+          <div className="oc-wait">다른 생존자의 표를 기다리고 있습니다.</div>
+        )}
+      </section>
+    );
+  }
 
-  const directActions = [
-    ...contract.primaryActions,
-    ...contract.secondaryActions,
-  ].filter(
-    (action) =>
-      action !== "SELECT_NIGHT_TARGET" &&
-      action !== "NOMINATE_PLAYER" &&
-      action !== "SELECT_VOTE",
-  );
+  if (contract.id === "NIGHT_PROPOSAL_VOTE") {
+    return (
+      <section className="oc-decision-card">
+        <span>MAFIA NIGHT?</span>
+        <h3>밤으로 넘어갈 것인가.</h3>
+        <p>
+          제출 {view.nightProposal?.submitted ?? 0}/{view.nightProposal?.eligible ?? 0}
+          · 필요 {view.nightProposal?.required ?? 0}
+        </p>
+        {view.availableActions.includes("CAST_NIGHT_PROPOSAL_VOTE") ? (
+          <div className="oc-decision-buttons">
+            <button className="danger" onClick={() => act({ type: "CAST_NIGHT_PROPOSAL_VOTE", agree: true })}>찬성</button>
+            <button onClick={() => act({ type: "CAST_NIGHT_PROPOSAL_VOTE", agree: false })}>반대</button>
+          </div>
+        ) : (
+          <div className="oc-wait">다른 생존자의 표를 기다리고 있습니다.</div>
+        )}
+      </section>
+    );
+  }
 
-  return (
-    <section className="m3-action-area" aria-label="현재 행동">
-      <div className="m3-action-copy">
-        <span>ACTION</span>
-        <strong>{contract.objective}</strong>
-      </div>
-
-      {targets.length > 0 ? (
-        <div className="m3-target-list">
-          {targets.map((player) => (
-            <button
-              type="button"
-              className={"m3-target " + (selection === player.id ? "is-selected" : "")}
-              key={player.id}
-              onClick={() => selectTarget(player.id)}
-            >
-              <span className="m3-target-status">{player.alive ? "●" : "×"}</span>
-              <strong>{player.name}</strong>
-              <small>{player.id === view.self.id ? "YOU" : player.publicRole ? ROLE_LABEL[player.publicRole] : "UNKNOWN"}</small>
-            </button>
-          ))}
-          {hasVote ? (
-            <button
-              type="button"
-              className={
-                "m3-target m3-target--none " +
-                (view.ownVoteTargetId === null && contract.primaryActions.includes("CONFIRM_VOTE")
-                  ? "is-selected"
-                  : "")
-              }
-              onClick={() => onAction({ type: "SELECT_VOTE", targetId: null })}
-            >
-              <span className="m3-target-status">—</span>
-              <strong>처형하지 않음</strong>
-              <small>NO EXECUTION</small>
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-
-      {directActions.length > 0 ? (
-        <div className="m3-action-buttons">
-          {directActions.map((action) => (
-            <button
-              type="button"
-              className={
-                action === "CONFIRM_NIGHT_ACTION" || action === "CONFIRM_VOTE" || action === "START_GAME"
-                  ? "m3-action-button m3-action-button--strong"
-                  : action === "END_NOMINATION" || action === "END_DISCUSSION"
-                    ? "m3-action-button m3-action-button--quiet"
-                    : "m3-action-button"
-              }
-              key={action}
-              onClick={() => {
-                if (action === "SET_READY") onAction({ type: "SET_READY", ready: !view.self.ready });
-                else if (action === "START_GAME") onAction({ type: "START_GAME" });
-                else if (action === "CONFIRM_ROLE") onAction({ type: "CONFIRM_ROLE" });
-                else if (action === "CONFIRM_NIGHT_ACTION") onAction({ type: "CONFIRM_NIGHT_ACTION" });
-                else if (action === "CONFIRM_RESULT") onAction({ type: "CONFIRM_RESULT" });
-                else if (action === "END_DISCUSSION") onAction({ type: "END_DISCUSSION" });
-                else if (action === "END_NOMINATION") onAction({ type: "END_NOMINATION" });
-                else if (action === "CONFIRM_VOTE") onAction({ type: "CONFIRM_VOTE" });
-              }}
-            >
-              {actionLabel(action, view.self.ready)}
-            </button>
-          ))}
-        </div>
-      ) : null}
-
-      {contract.waiting.active ? <WaitingBlock contract={contract} /> : null}
-    </section>
-  );
+  return null;
 }
 
 export function MafiaClassicPage() {
   const [nickname, setNickname] = useState("당신");
   const [runtime, setRuntime] = useState<LocalMafiaRuntime | null>(null);
   const [snapshot, setSnapshot] = useState<LocalMafiaSnapshot | null>(null);
+  const [message, setMessage] = useState("");
+  const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
-  const enterTable = () => {
+  const enter = () => {
     try {
-      const nextRuntime = new LocalMafiaRuntime(nickname);
-      setRuntime(nextRuntime);
-      setSnapshot(nextRuntime.snapshot());
+      const next = new LocalMafiaRuntime(nickname);
+      setRuntime(next);
+      setSnapshot(next.snapshot());
       setError("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "테이블을 만들지 못했습니다.");
@@ -497,161 +269,301 @@ export function MafiaClassicPage() {
     }
   };
 
+  useEffect(() => {
+    setSelectedTarget(null);
+  }, [snapshot?.view.phase, snapshot?.view.accusation?.accusedId]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [snapshot?.view.chat.length]);
+
+  const sendMessage = () => {
+    if (!snapshot) return;
+    const text = message.trim();
+    const channel = snapshot.view.writableChatChannels[0];
+    if (!text || !channel) return;
+    act({ type: "SEND_CHAT", channel, text });
+    setMessage("");
+  };
+
   if (!runtime || !snapshot) {
     return (
-      <main className="m3-entry">
-        <div className="m3-entry-grain" aria-hidden="true" />
-        <section className="m3-entry-copy">
-          <p className="m3-overline">MAFIA · M3 VISUAL SHELL</p>
-          <h1>아무도<br />믿지 마십시오.</h1>
+      <main className="oc-entry">
+        <section>
+          <p className="oc-kicker">ORIGINAL MAFIA · CHAT FIRST</p>
+          <h1>말이<br />무기가 된다.</h1>
           <p>
-            검증된 M1 엔진과 M2 Screen Contract 위에 올라가는 첫 실제 게임 화면입니다.
-            이 테이블에서는 1명의 플레이어와 7명의 봇이 같은 Action API를 사용합니다.
+            외부 대화 없이 게임 안의 채팅만으로 고발, 반론, 표결, Mafia Night까지
+            한 판 전체가 이어집니다.
           </p>
         </section>
-        <section className="m3-entry-panel">
-          <span className="m3-panel-label">LOCAL PLAYTEST TABLE</span>
+        <aside>
+          <span>LOCAL 8 PLAYER TABLE</span>
           <label>
-            <small>PLAYER NAME</small>
+            PLAYER NAME
             <input value={nickname} maxLength={14} onChange={(event) => setNickname(event.target.value)} />
           </label>
-          <div className="m3-entry-rules">
-            <span>8 PLAYERS</span>
-            <span>2 MAFIA</span>
-            <span>DETECTIVE</span>
-            <span>DOCTOR</span>
-          </div>
-          {error ? <p className="m3-error">{error}</p> : null}
-          <button className="m3-enter-button" onClick={enterTable}>
-            테이블 입장
-          </button>
-        </section>
+          <div className="oc-entry-rule">8 PLAYERS · 3 MAFIA · 5 HONEST</div>
+          {error ? <p className="oc-error">{error}</p> : null}
+          <button onClick={enter}>테이블 입장</button>
+        </aside>
       </main>
     );
   }
 
   const { view, contract } = snapshot;
-  const aliveCount = view.players.filter((player) => player.alive).length;
-  const mayShowPublicEvents = contract.visibleFields.includes("publicEvents");
-  const recentEvents = mayShowPublicEvents
-    ? [...view.publicEvents].reverse().slice(0, 6)
-    : [];
-  const mafiaIds = new Set(
-    contract.visibleFields.includes("mafiaMembers")
-      ? (view.mafiaMembers?.map((member) => member.id) ?? [])
-      : [],
+  const alive = view.players.filter((player) => player.alive);
+  const mafiaIds = new Set(view.mafiaMembers?.map((member) => member.id) ?? []);
+  const targetCandidates = alive.filter((player) => player.id !== view.self.id);
+  const canChat = view.availableActions.includes("SEND_CHAT");
+  const publicMafiaCount = view.publicMafiaCount;
+  const currentAccused = view.accusation?.accusedId ?? null;
+
+  const noteTargets = useMemo(
+    () => alive,
+    [alive],
   );
 
-  return (
-    <main className={"m3-shell m3-shell--" + contract.id.toLowerCase().replaceAll("_", "-")}>
-      <div className="m3-ambient" aria-hidden="true" />
+  const confirmNightNote = () => {
+    if (view.self.role === "HONEST") {
+      act({ type: "SUBMIT_NIGHT_NOTE", note: { kind: "HONEST" } });
+      return;
+    }
+    if (selectedTarget) {
+      act({
+        type: "SUBMIT_NIGHT_NOTE",
+        note: { kind: "TARGET", targetId: selectedTarget },
+      });
+    }
+  };
 
-      <header className="m3-header">
-        <div className="m3-brand">
-          <span className="m3-brand-mark">M</span>
-          <div>
-            <small>MAFIA</small>
-            <strong>{SCREEN_LABEL[contract.id]}</strong>
-          </div>
+  return (
+    <main className={"oc-shell oc-phase-" + contract.id.toLowerCase()}>
+      <header className="oc-header">
+        <div className="oc-brand">
+          <strong>MAFIA</strong>
+          <span>{contract.id.replaceAll("_", " ")}</span>
         </div>
-        <div className="m3-round">
-          <span>{view.day > 0 ? "DAY " + view.day : "NIGHT " + view.night}</span>
-          <i />
-          <strong>{aliveCount} ALIVE</strong>
+        <div className="oc-status">
+          <strong>{view.day > 0 ? "DAY " + view.day : "PRE-GAME"}</strong>
+          <span>{alive.length} ALIVE</span>
+          {publicMafiaCount !== null ? <span>{publicMafiaCount} MAFIA SHOTS</span> : null}
         </div>
-        <div className="m3-self">
-          <span>{view.self.alive ? "ALIVE" : "OUT"}</span>
+        <div className="oc-you">
+          <span>{view.self.alive ? "ALIVE" : "DEAD"}</span>
           <strong>{view.self.name}</strong>
-          <small>{view.self.role ? ROLE_LABEL[view.self.role] : "ROLE HIDDEN"}</small>
+          <small>{view.self.role ? ROLE_LABEL[view.self.role] : "?"}</small>
         </div>
       </header>
 
-      <div className="m3-layout">
-        <aside className="m3-players" aria-label="플레이어">
-          <div className="m3-section-head">
+      <div className="oc-body">
+        <aside className="oc-player-panel">
+          <div className="oc-panel-head">
             <span>PLAYERS</span>
-            <strong>{aliveCount}/{view.players.length}</strong>
+            <strong>{alive.length}/{view.players.length}</strong>
           </div>
-          <div className="m3-seat-list">
-            {view.players.map((player, index) => {
-              const teammate = mafiaIds.has(player.id) && player.id !== view.self.id;
-              return (
-                <div
-                  className={
-                    "m3-seat " +
-                    (!player.alive ? "is-dead " : "") +
-                    (player.id === view.self.id ? "is-self " : "") +
-                    (teammate ? "is-mafia-mate" : "")
-                  }
-                  key={player.id}
-                >
-                  <span className="m3-seat-no">{String(index + 1).padStart(2, "0")}</span>
-                  <div className="m3-seat-name">
-                    <strong>{player.name}</strong>
-                    <small>
-                      {!player.alive
-                        ? player.publicRole
-                          ? ROLE_LABEL[player.publicRole]
-                          : "OUT"
-                        : teammate
-                          ? "MAFIA · ALLY"
-                          : player.id === view.self.id
-                            ? "YOU"
-                            : "UNKNOWN"}
-                    </small>
-                  </div>
-                  <span className="m3-seat-life">{player.alive ? "●" : "×"}</span>
+          <div className="oc-player-list">
+            {view.players.map((player, index) => (
+              <button
+                type="button"
+                key={player.id}
+                disabled={!player.alive || player.id === view.self.id}
+                onClick={() => setSelectedTarget(player.id)}
+                className={
+                  "oc-player " +
+                  (!player.alive ? "is-dead " : "") +
+                  (player.id === view.self.id ? "is-self " : "") +
+                  (mafiaIds.has(player.id) && player.id !== view.self.id ? "is-mafia " : "") +
+                  (selectedTarget === player.id ? "is-selected" : "")
+                }
+              >
+                <span>{String(index + 1).padStart(2, "0")}</span>
+                <div>
+                  <strong>{player.name}</strong>
+                  <small>
+                    {!player.alive
+                      ? "OUT"
+                      : mafiaIds.has(player.id) && player.id !== view.self.id
+                        ? "MAFIA ALLY"
+                        : player.id === view.self.id
+                          ? "YOU"
+                          : "UNKNOWN"}
+                  </small>
                 </div>
-              );
-            })}
+                <i>{player.alive ? "●" : "×"}</i>
+              </button>
+            ))}
           </div>
         </aside>
 
-        <section className="m3-main">
-          <div className="m3-stage">
-            <div className="m3-stage-topline">
-              <span>{SCREEN_LABEL[contract.id]}</span>
-              <strong>{contract.mode}</strong>
+        <section className="oc-chat-stage">
+          <div className="oc-chat-head">
+            <div>
+              <span>{view.self.alive ? "PUBLIC TABLE" : "SPECTATOR"}</span>
+              <strong>{contract.objective}</strong>
             </div>
-            <MainStage snapshot={snapshot} />
+            <small>{canChat ? "CHAT OPEN" : "READ ONLY"}</small>
           </div>
 
-          {mayShowPublicEvents ? (
-            <section className="m3-context">
-              <div className="m3-section-head">
-                <span>PUBLIC CONTEXT</span>
-                <strong>{view.publicEvents.length}</strong>
-              </div>
-              {recentEvents.length ? (
-                <div className="m3-event-list">
-                  {recentEvents.map((event) => (
-                    <article key={event.seq}>
-                      <span>{String(event.seq).padStart(2, "0")}</span>
-                      <p>{publicEventText(snapshot, event)}</p>
-                    </article>
-                  ))}
-                </div>
+          <div className="oc-chat-scroll">
+            <PhaseCard snapshot={snapshot} />
+            {view.chat.map((entry) => (
+              <ChatLine snapshot={snapshot} entry={entry} key={entry.seq} />
+            ))}
+            <VoteOverlay snapshot={snapshot} act={act} />
+            <div ref={chatEndRef} />
+          </div>
+
+          {contract.chatVisible ? (
+            <div className={"oc-composer " + (!canChat ? "is-locked" : "")}>
+              <span>{view.writableChatChannels[0] === "DEAD" ? "DEAD" : "CHAT"}</span>
+              <input
+                value={message}
+                disabled={!canChat}
+                maxLength={500}
+                placeholder={
+                  canChat
+                    ? view.writableChatChannels[0] === "DEAD"
+                      ? "사망자에게만 보이는 메시지…"
+                      : "의심, 질문, 반론을 입력하세요…"
+                    : "현재 단계에서는 채팅이 잠겨 있습니다."
+                }
+                onChange={(event) => setMessage(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) sendMessage();
+                }}
+              />
+              <button disabled={!canChat || !message.trim()} onClick={sendMessage}>SEND</button>
+            </div>
+          ) : null}
+        </section>
+
+        <aside className="oc-context-panel">
+          <div className="oc-panel-head">
+            <span>CONTEXT</span>
+            <strong>REV {view.revision}</strong>
+          </div>
+
+          <section className="oc-context-block">
+            <span>MY CARD</span>
+            <strong className={view.self.role === "MAFIA" ? "is-red" : ""}>
+              {view.self.role ? ROLE_LABEL[view.self.role] : "SEALED"}
+            </strong>
+            {view.self.role === "MAFIA" && view.mafiaMembers ? (
+              <p>{view.mafiaMembers.map((member) => member.name).join(" · ")}</p>
+            ) : null}
+          </section>
+
+          {view.accusation ? (
+            <section className="oc-context-block is-alert">
+              <span>ACTIVE ACCUSATION</span>
+              <strong>
+                {playerName(snapshot, view.accusation.accuserId)}
+                {" → "}
+                {playerName(snapshot, view.accusation.accusedId)}
+              </strong>
+              {view.guiltyVote ? (
+                <p>표결 {view.guiltyVote.submitted}/{view.guiltyVote.eligible} · 필요 {view.guiltyVote.required}</p>
               ) : (
-                <p className="m3-empty-context">아직 공개 사건이 없습니다.</p>
+                <p>채팅으로 근거와 반론을 이어가십시오.</p>
               )}
             </section>
           ) : null}
 
-          <ActionArea snapshot={snapshot} onAction={act} />
-
-          {error ? (
-            <div className="m3-error-strip" role="alert">
-              <span>ENGINE</span>
-              <p>{error}</p>
-            </div>
+          {view.nightProposal ? (
+            <section className="oc-context-block is-alert">
+              <span>NIGHT PROPOSAL</span>
+              <strong>{playerName(snapshot, view.nightProposal.proposerId)}</strong>
+              <p>표결 {view.nightProposal.submitted}/{view.nightProposal.eligible} · 필요 {view.nightProposal.required}</p>
+            </section>
           ) : null}
-        </section>
+
+          <section className="oc-context-block">
+            <span>SELECTED PLAYER</span>
+            <strong>{playerName(snapshot, selectedTarget)}</strong>
+            <p>플레이어 목록에서 대상을 선택합니다.</p>
+          </section>
+        </aside>
       </div>
 
-      <footer className="m3-footer">
-        <span>M1 ENGINE · M2 CONTRACT · M3 SHELL</span>
-        <span>REV {view.revision}</span>
-      </footer>
+      <section className="oc-action-bar">
+        <div>
+          <span>ACTION</span>
+          <strong>{contract.objective}</strong>
+        </div>
+
+        <div className="oc-actions">
+          {view.availableActions.includes("SET_READY") ? (
+            <button onClick={() => act({ type: "SET_READY", ready: !view.self.ready })}>
+              {view.self.ready ? "READY 해제" : "READY"}
+            </button>
+          ) : null}
+
+          {view.availableActions.includes("START_GAME") ? (
+            <button className="danger" onClick={() => act({ type: "START_GAME" })}>게임 시작</button>
+          ) : null}
+
+          {view.availableActions.includes("CONFIRM_ROLE") ? (
+            <button className="danger" onClick={() => act({ type: "CONFIRM_ROLE" })}>카드 확인 완료</button>
+          ) : null}
+
+          {view.availableActions.includes("CONFIRM_SUNRISE") ? (
+            <button className="danger" onClick={() => act({ type: "CONFIRM_SUNRISE" })}>SUNRISE 확인 완료</button>
+          ) : null}
+
+          {view.availableActions.includes("ACCUSE_PLAYER") ? (
+            <button
+              className="danger"
+              disabled={!selectedTarget}
+              onClick={() => selectedTarget && act({ type: "ACCUSE_PLAYER", targetId: selectedTarget })}
+            >
+              {selectedTarget ? playerName(snapshot, selectedTarget) + " 고발" : "고발 대상 선택"}
+            </button>
+          ) : null}
+
+          {view.availableActions.includes("CALL_GUILTY_VOTE") ? (
+            <button className="danger" onClick={() => act({ type: "CALL_GUILTY_VOTE" })}>
+              유죄 표결 요청
+            </button>
+          ) : null}
+
+          {view.availableActions.includes("PROPOSE_MAFIA_NIGHT") ? (
+            <button onClick={() => act({ type: "PROPOSE_MAFIA_NIGHT" })}>Mafia Night 제안</button>
+          ) : null}
+
+          {view.availableActions.includes("SUBMIT_NIGHT_NOTE") ? (
+            <>
+              {view.self.role === "MAFIA" ? (
+                <div className="oc-night-targets">
+                  {noteTargets.map((player) => (
+                    <button
+                      type="button"
+                      className={selectedTarget === player.id ? "is-selected" : ""}
+                      key={player.id}
+                      onClick={() => setSelectedTarget(player.id)}
+                    >
+                      {player.name}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <button
+                className="danger"
+                disabled={view.self.role === "MAFIA" && !selectedTarget}
+                onClick={confirmNightNote}
+              >
+                {view.self.role === "MAFIA"
+                  ? selectedTarget
+                    ? playerName(snapshot, selectedTarget) + " 쪽지 봉인"
+                    : "표적 선택"
+                  : "HONEST 쪽지 봉인"}
+              </button>
+            </>
+          ) : null}
+        </div>
+      </section>
+
+      {error ? <div className="oc-error-strip">{error}</div> : null}
     </main>
   );
 }
