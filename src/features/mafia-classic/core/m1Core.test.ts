@@ -3,7 +3,7 @@ import { dispatchAction } from "./engine";
 import { createLobbyGame } from "./gameState";
 import { buildPlayerView } from "./playerView";
 import { Mulberry32 } from "./random";
-import { calculateWinner, resolveVote, resolveWinCheck } from "./resolvers";
+import { calculateWinner, resolveExecution, resolveVote, resolveWinCheck } from "./resolvers";
 import type { GameAction, GameState, PlayerState } from "./types";
 import { simulateMany } from "../simulation/simulate";
 
@@ -307,6 +307,46 @@ describe("M1 Core Engine", () => {
     );
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("ILLEGAL_ACTION_DEAD_PLAYER");
+  });
+
+  it("rejects a dead player's public-result confirmation", () => {
+    const started = startEight(67);
+    const dead = started.state.players[1]!;
+    const state: GameState = {
+      ...started.state,
+      phase: "DAWN",
+      players: started.state.players.map((player) =>
+        player.id === dead.id
+          ? { ...player, alive: false, deathCause: "FORCED" as const, deathDay: 1 }
+          : player,
+      ),
+    };
+
+    const result = dispatchAction(
+      state,
+      { type: "CONFIRM_RESULT", playerId: dead.id },
+      started.rng,
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("ILLEGAL_ACTION_DEAD_PLAYER");
+  });
+
+  it("transfers phase-control host when the current host dies", () => {
+    const started = startEight(69);
+    const originalHost = started.state.hostId;
+    const expectedSuccessor = started.state.players.find(
+      (player) => player.id !== originalHost,
+    )!.id;
+
+    const executed = resolveExecution({
+      ...started.state,
+      phase: "EXECUTION",
+      pendingExecutionId: originalHost,
+      day: 1,
+    });
+
+    expect(executed.players.find((player) => player.id === originalHost)?.alive).toBe(false);
+    expect(executed.hostId).toBe(expectedSuccessor);
   });
 
   it("blocks every Action after GAME_OVER", () => {
