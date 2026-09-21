@@ -29,78 +29,94 @@ CI contract:
 
 Workflow 수정 시 `GITHUB_SETUP.md`도 갱신한다.
 
-## Mafia M1 Core Contract
+## Original Mafia Authoritative Contract
 
-`src/features/mafia-classic`의 규칙 구현은 사용자가 제공한 **Mafia Game Specification v1**을 Single Source of Truth로 취급한다.
+`src/features/mafia-classic/original/` is the Single Source of Truth for the active Mafia game.
 
-구조:
+Architecture:
 
 ```text
-Player Input
-→ Action
-→ Action Validator
-→ Game Engine
-→ GameState
-→ PlayerView Builder
-→ UI
+Human / Bot
+→ OriginalAction
+→ Original Action Validator
+→ Original Game Engine
+→ OriginalGameState
+→ OriginalPlayerView
+→ OriginalScreenContract
+→ Chat-first UI
 ```
 
-절대 규칙:
+Rules:
 
-1. UI, React state, modal, animation handler가 GameState를 직접 변경하지 않는다.
-2. 클라이언트와 봇은 `GameAction`만 보낸다. `SET_PHASE`, `KILL_PLAYER`, `SET_WINNER` 같은 권한은 없다.
-3. 모든 Action은 phase, alive/dead, role, permission, completion state를 Validator에서 검증한다.
-4. GameState는 서버/호스트의 authoritative state다.
-5. 클라이언트에는 GameState를 직접 보내지 않는다. 반드시 `buildPlayerView(playerId)` 결과만 전달한다.
-6. CSS 숨김으로 비밀정보를 보호하지 않는다. 허가되지 않은 데이터 자체를 PlayerView에 넣지 않는다.
-7. 봇은 인간과 같은 Action API를 사용하며, 의사결정은 자기 PlayerView만 사용한다.
-8. 사망자는 생존자에게 영향을 주는 Action을 실행할 수 없다.
-9. v1 기본 게임은 8인: Mafia 2, Detective 1, Doctor 1, Citizen 4다.
-10. v1은 ROLE_REVEAL 이후 NIGHT 1부터 시작한다.
-11. Mafia 공격은 생존 비-Mafia만 가능하다. 1차 동률은 재선택, 2차 동률은 공격 실패다.
-12. Doctor는 자신 포함 생존자를 보호할 수 있지만 같은 플레이어를 2일 연속 보호할 수 없다.
-13. Detective는 자신 외 생존자를 조사하며 결과는 MAFIA / NOT_MAFIA만 본인에게 공개한다.
-14. 밤 행동 결과는 NIGHT_RESOLVE에서 동시에 처리한다.
-15. 사망 시 역할은 공개한다.
-16. Day Vote는 생존자만 가능하며 자기 자신에게 투표할 수 있다.
-17. 지목된 후보 + 처형하지 않음만 투표할 수 있다.
-18. 최다 득표 단독 1명만 처형한다. 최다 득표 동률은 처형 없음이다.
-19. Town 승리: 생존 Mafia 0.
-20. Mafia 승리: 생존 Mafia 수 >= 생존 Town 수.
-21. winner가 정해진 뒤에는 GAME_OVER 외 상태로 이동하지 않는다.
-22. 모든 성공 Action은 replay에 기록한다.
-23. Core 변경 후 `npm run mafia:m1:sim` 1,000판을 통과해야 한다.
-24. M1 Core가 승인되기 전에는 Mafia UI를 고도화하지 않는다.
-25. 소스 문서에 정의되지 않은 규칙은 임의로 발명하지 않는다. 특히 5~7명/9~10명의 역할 배분은 별도 확정 전까지 구현하지 않는다.
+1. Active roles are only `HONEST` and `MAFIA`.
+2. Mafia count: 6–7 players = 2, 8–10 = 3, 11–13 = 4, 14–16 = 5.
+3. ROLE_REVEAL shows only the player's own role.
+4. SUNRISE reveals Mafia teammates to Mafia only.
+5. Dead roles remain hidden during the active game.
+6. Day gameplay is chat-first. PUBLIC chat is an authoritative gameplay surface, not decorative UI.
+7. During DAY_DISCUSSION any living player may `ACCUSE_PLAYER` or `PROPOSE_MAFIA_NIGHT`.
+8. ACCUSATION keeps PUBLIC chat open for accusation evidence and defense.
+9. Only the accuser may `CALL_GUILTY_VOTE`.
+10. The accused does not vote in their own guilty vote.
+11. Guilty execution requires a strict majority of eligible voters.
+12. A guilty vote, whether passed or failed, returns to DAY_DISCUSSION unless Mafia has already eliminated all Honest players.
+13. Execution does not automatically begin Mafia Night.
+14. Mafia Night begins only after a living player proposes it and a strict majority of living players agree.
+15. During Mafia Night PUBLIC chat is closed.
+16. Every living Honest player submits exactly `HONEST`.
+17. Every living Mafia player submits exactly one living player name.
+18. There is no Mafia private night chat in Original mode.
+19. The number of name-bearing notes is publicly revealed and therefore reveals the number of surviving Mafia.
+20. A murder occurs only when every surviving Mafia submits the same target name.
+21. Split Mafia names produce no murder.
+22. Zero Mafia name notes produce an HONEST victory.
+23. Eliminating the last Mafia during Day does not immediately reveal an Honest win; the zero-shot Mafia Night resolves it.
+24. Mafia wins when no Honest players remain.
+25. GAME_OVER reveals all roles and makes the full chat history readable.
 
-M1 core:
-- `src/features/mafia-classic/core/`
-- `src/features/mafia-classic/simulation/`
+Chat policy:
 
-현재 UI/application의 이전 V2 구현은 legacy adapter 대상이며 M1 Core의 규칙 기준이 아니다.
+1. Living players may write PUBLIC only during DAY_DISCUSSION and ACCUSATION.
+2. Dead players cannot write PUBLIC.
+3. Dead players may write and read DEAD chat before GAME_OVER.
+4. Living players must never receive DEAD chat data before GAME_OVER.
+5. SYSTEM messages are authoritative transition history.
+6. Major transitions must create SYSTEM records so the full game can be understood from the timeline.
+7. External voice/chat/offline conversation must never be required for the game to progress.
+8. Bots use the same OriginalAction API as humans and receive only OriginalPlayerView.
 
+UI contract:
 
-## Mafia M2 Screen Contract
+1. React never imports OriginalGameState or Original engine functions.
+2. React receives LocalMafiaSnapshot containing OriginalPlayerView + OriginalScreenContract.
+3. CHAT is the primary gameplay surface for DAY_DISCUSSION and ACCUSATION.
+4. Accusation, guilty vote, Night proposal, Night result and Game Over must remain connected through the same timeline.
+5. Buttons are rendered only from `view.availableActions`.
+6. Hidden information is omitted from PlayerView, never hidden with CSS.
+7. Mobile default view prioritizes chat, composer and current action; player/context panels may compress around them.
 
-M2는 `PlayerView -> ScreenContract -> UI` 경계를 고정한다.
+Required gates:
 
-절대 규칙:
+```text
+npm run check
+npm run mafia:original:test
+npm run mafia:original:sim
+npm run mafia:m3:ui
+npm run build
+```
 
-1. `src/features/mafia-classic/ux/screenContract.ts`는 `GameState`, `gameState.ts`, `engine.ts`, React를 import하지 않는다.
-2. Screen Contract는 오직 `PlayerView`만 입력으로 받는다.
-3. M3 React UI는 임의로 `phase + role` 조합을 다시 해석하지 않는다.
-4. M3 UI는 `buildScreenContract(view)`의 `id`, `mode`, `primaryActions`, `secondaryActions`, `waiting`, `targetPolicy`를 렌더링한다.
-5. `PlayerView.availableActions`와 Screen Contract의 허용 Action 집합이 다르면 구현 오류다.
-6. Screen Contract에서 허용된 Action과 금지 Action은 겹치면 안 된다.
-7. 사망자는 GAME_OVER 전까지 `DEAD_PLAYER` 계약을 사용하고 authoritative GameAction을 갖지 않는다.
-8. 야간 행동을 확정한 플레이어와 낮 투표를 확정한 플레이어는 ACTION이 아니라 WAITING 계약으로 전환한다.
-9. 자동 Phase(`ROLE_ASSIGNMENT`, `NIGHT_START`, `NIGHT_RESOLVE`, `WIN_CHECK`)는 `ENGINE_TRANSITION`이며 사용자 Action을 허용하지 않는다.
-10. `GAME_OVER`는 TERMINAL 계약이며 모든 GameAction을 금지한다.
-11. M2 변경 후 `npm run mafia:m2:contracts`를 통과해야 한다.
-12. 1,000판 시뮬레이션의 `Screen Contract Violations`가 0이어야 한다.
-13. M2 승인 전에는 Mafia Visual UI를 새로 만들지 않는다.
-14. M3에서 Screen Contract에 없는 버튼/행동/대기 상태를 임의로 추가하지 않는다.
+`mafia:original:sim` must report all of these as zero:
 
-M2 source:
-- `src/features/mafia-classic/ux/screenContract.ts`
-- `docs/mafia/M2_SCREEN_CONTRACTS.md`
+- Stalled
+- Illegal Actions
+- Invalid Transitions
+- Secret Leaks
+- Chat Policy Violations
+- Dead -> Living Leaks
+- Missing System Transitions
+- Offline Intervention Required
+- Infinite Loops
+- Other Failures
+
+Legacy directories `core/`, `simulation/`, `ux/` and legacy Mafia application code may remain temporarily for migration/regression history, but they are not the active rule authority and must not be used by the active UI.
+
