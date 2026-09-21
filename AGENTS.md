@@ -78,3 +78,29 @@ M1 core:
 - `src/features/mafia-classic/simulation/`
 
 현재 UI/application의 이전 V2 구현은 legacy adapter 대상이며 M1 Core의 규칙 기준이 아니다.
+
+
+## Mafia M2 Screen Contract
+
+M2는 `PlayerView -> ScreenContract -> UI` 경계를 고정한다.
+
+절대 규칙:
+
+1. `src/features/mafia-classic/ux/screenContract.ts`는 `GameState`, `gameState.ts`, `engine.ts`, React를 import하지 않는다.
+2. Screen Contract는 오직 `PlayerView`만 입력으로 받는다.
+3. M3 React UI는 임의로 `phase + role` 조합을 다시 해석하지 않는다.
+4. M3 UI는 `buildScreenContract(view)`의 `id`, `mode`, `primaryActions`, `secondaryActions`, `waiting`, `targetPolicy`를 렌더링한다.
+5. `PlayerView.availableActions`와 Screen Contract의 허용 Action 집합이 다르면 구현 오류다.
+6. Screen Contract에서 허용된 Action과 금지 Action은 겹치면 안 된다.
+7. 사망자는 GAME_OVER 전까지 `DEAD_PLAYER` 계약을 사용하고 authoritative GameAction을 갖지 않는다.
+8. 야간 행동을 확정한 플레이어와 낮 투표를 확정한 플레이어는 ACTION이 아니라 WAITING 계약으로 전환한다.
+9. 자동 Phase(`ROLE_ASSIGNMENT`, `NIGHT_START`, `NIGHT_RESOLVE`, `WIN_CHECK`)는 `ENGINE_TRANSITION`이며 사용자 Action을 허용하지 않는다.
+10. `GAME_OVER`는 TERMINAL 계약이며 모든 GameAction을 금지한다.
+11. M2 변경 후 `npm run mafia:m2:contracts`를 통과해야 한다.
+12. 1,000판 시뮬레이션의 `Screen Contract Violations`가 0이어야 한다.
+13. M2 승인 전에는 Mafia Visual UI를 새로 만들지 않는다.
+14. M3에서 Screen Contract에 없는 버튼/행동/대기 상태를 임의로 추가하지 않는다.
+
+M2 source:
+- `src/features/mafia-classic/ux/screenContract.ts`
+- `docs/mafia/M2_SCREEN_CONTRACTS.md`
