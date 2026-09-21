@@ -167,6 +167,7 @@ export interface SimulationBatchResult {
   readonly illegalActions: number;
   readonly invalidTransitions: number;
   readonly secretLeaks: number;
+  readonly screenContractViolations: number;
   readonly infiniteLoops: number;
   readonly otherFailures: number;
   readonly maxActions: number;
@@ -185,6 +186,7 @@ export function simulateMany(games: number, seed: number): SimulationBatchResult
   let illegalActions = 0;
   let invalidTransitions = 0;
   let secretLeaks = 0;
+  let screenContractViolations = 0;
   let infiniteLoops = 0;
   let otherFailures = 0;
   let maxActions = 0;
@@ -206,6 +208,7 @@ export function simulateMany(games: number, seed: number): SimulationBatchResult
       else if (message.startsWith("ILLEGAL_ACTION:")) illegalActions += 1;
       else if (message.startsWith("INVALID_TRANSITION:")) invalidTransitions += 1;
       else if (message.startsWith("SECRET_LEAK:")) secretLeaks += 1;
+      else if (message.startsWith("SCREEN_CONTRACT_")) screenContractViolations += 1;
       else if (message.startsWith("INFINITE_LOOP:")) infiniteLoops += 1;
       else otherFailures += 1;
     }
@@ -217,6 +220,7 @@ export function simulateMany(games: number, seed: number): SimulationBatchResult
     illegalActions === 0 &&
     invalidTransitions === 0 &&
     secretLeaks === 0 &&
+    screenContractViolations === 0 &&
     infiniteLoops === 0 &&
     otherFailures === 0;
 
@@ -229,6 +233,7 @@ export function simulateMany(games: number, seed: number): SimulationBatchResult
     illegalActions,
     invalidTransitions,
     secretLeaks,
+    screenContractViolations,
     infiniteLoops,
     otherFailures,
     maxActions,
