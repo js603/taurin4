@@ -10,7 +10,7 @@ describe("M3 UI architecture", () => {
     expect(source).not.toContain("../core/engine");
     expect(source).not.toMatch(/\bGameState\b/);
     expect(source).not.toContain("dispatchAction(");
-    expect(source).toContain("snapshot.contract");
+    expect(source).toContain("const { view, contract } = snapshot");
     expect(source).toContain("contract.visibleFields.includes");
   });
 });
