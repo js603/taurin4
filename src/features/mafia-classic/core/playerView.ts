@@ -47,6 +47,8 @@ export interface PlayerView {
       }
     | null;
   readonly nominations: readonly PlayerId[];
+  readonly ownNominationTargetId: PlayerId | null;
+  readonly ownVoteTargetId: PlayerId | null;
   readonly voteProgress:
     | {
         readonly confirmed: number;
@@ -184,6 +186,8 @@ export function buildPlayerView(state: GameState, playerId: PlayerId): PlayerVie
     ownNightTargetId: ownNightTarget(state, viewer.id),
     mafiaNightProgress,
     nominations: [...new Set(Object.values(state.nominations))],
+    ownNominationTargetId: state.nominations[viewer.id] ?? null,
+    ownVoteTargetId: state.votes[viewer.id]?.targetId ?? null,
     voteProgress:
       state.phase === "DAY_VOTE"
         ? {
