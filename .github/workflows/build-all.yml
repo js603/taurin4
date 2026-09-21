@@ -76,6 +76,31 @@ jobs:
         run: npm run tauri -- build -vv --bundles nsis
       - name: Build MSI
         run: npm run tauri -- build -vv --bundles msi
+      - name: Stage Windows portable package
+        shell: pwsh
+        run: |
+          $portableExe = "src-tauri/target/release/taurin4.exe"
+          $portableDir = "artifacts/windows-portable"
+          if (-not (Test-Path -Path $portableExe -PathType Leaf)) {
+            throw "Portable executable was not produced: $portableExe"
+          }
+
+          New-Item -ItemType Directory -Force -Path $portableDir | Out-Null
+          Copy-Item -Path $portableExe -Destination "$portableDir/taurin4.exe"
+
+          @(
+            "taurin4 Portable (Windows x64)"
+            ""
+            "Run taurin4.exe directly. Installation is not required."
+            "The app stores its data in the current Windows user's app-data directory."
+            "Moving this folder to another PC does not move the saved app data."
+            "Microsoft Edge WebView2 Runtime is required. It is normally included with Windows 10/11."
+            "This build is unsigned, so Windows SmartScreen may show a warning on first launch."
+          ) | Set-Content -Path "$portableDir/README_PORTABLE.txt" -Encoding utf8
+
+          $hash = Get-FileHash -Path "$portableDir/taurin4.exe" -Algorithm SHA256
+          "$($hash.Hash.ToLowerInvariant())  taurin4.exe" |
+            Set-Content -Path "$portableDir/SHA256SUMS.txt" -Encoding ascii
       - name: Stage Windows installers
         shell: pwsh
         run: |
@@ -91,6 +116,13 @@ jobs:
         with:
           name: windows-x64-installers
           path: artifacts/windows/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Windows portable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64-portable
+          path: artifacts/windows-portable/
           if-no-files-found: error
           retention-days: 14
 

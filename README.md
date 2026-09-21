@@ -118,6 +118,7 @@ AI에게 작업시키기 전에:
 기본:
 - web-pwa
 - windows-x64-installers
+- windows-x64-portable
 - android-debug-apk
 - ios-unsigned
 
