@@ -700,3 +700,83 @@ Implement actual persistence:
 ---
 
 ## 14. Definition of "done"
+
+A milestone is not complete merely because code exists.
+
+Required evidence as applicable:
+
+- automated test
+- build success
+- runtime behavior
+- real two-device test when that milestone explicitly requires it
+- CI result
+- updated MASTER RECORD
+
+Unverified behavior must be marked explicitly as unverified.
+
+---
+
+## 15. Documentation continuity rule
+
+This file is the canonical continuity record.
+
+Initial canonical-document commits:
+
+- `c81377735e0334ddaca21edf803e880a9c75fa42` — add canonical project master record
+- `842a73af2d74eeb38fb451afef84732f699bdd07` — limit LAN runtime Gate to Windows PC↔PC
+- `360bd9bc3b39f4154106ef95ac66bedaebd148b8` — align architecture with M1.5 OpenMMO audit roadmap
+- `f1c0d8add643d3b5e1ec8811e93735e636c826eb` — finalize continuity/resume protocol
+
+CI efficiency commits:
+
+- `08305b4042d1591bafa7b988136a81c92a13c405` — skip normal quality CI for docs-only pushes
+- `b4068934955c02b635c5fb79d5463f6707f33893` — skip Windows/Android platform builds for docs-only pushes
+- `be8be819f831cea8b53505a824b786e13a8bbca2` — skip Pages deployment for docs-only pushes
+
+This keeps the living documentation cheap to maintain: documentation-only updates do not
+rebuild Windows, Android, or Pages unnecessarily.
+
+Do not rely on documentation commit SHAs as the latest branch HEAD; query GitHub at the
+start of each session.
+
+For every major milestone, architectural change, test-policy change, or verified build:
+
+1. update `Last verified`
+2. verify and record the actual branch HEAD separately from the last implementation baseline
+3. update milestone status
+4. record test/CI result
+5. record material decisions
+6. update "Next exact action"
+7. commit documentation together with or immediately after implementation
+
+If another document conflicts with this file, fix that document or explicitly update
+this file.
+
+---
+
+## 16. Next exact action
+
+**M1 — Windows PC ↔ Windows PC LAN Client implementation**
+
+Order:
+
+1. keep Android build gate intact
+2. implement Windows/client WebSocket connection to the existing Host Core
+3. manual Host address first
+4. verify HostHello / Hello / ClientAccepted
+5. verify Ping/Pong
+6. expose connected-client state
+7. verify disconnect and reconnect
+8. build Windows test artifacts
+9. perform actual PC↔PC LAN runtime test
+10. only then implement LAN automatic discovery
+11. after M1 completes, begin M1.5 original OpenMMO runtime + full user-flow audit
+
+---
+
+## 17. New-chat bootstrap
+
+When starting a new ChatGPT conversation, use this instruction:
+
+> Continue the `js603/taurin4` `idea2` project. Treat `docs/IDEA2_MASTER_RECORD.md` on the `idea2` branch as the canonical project state. Read it first, then verify the actual current `idea2` branch HEAD and relevant CI state before making changes. Do not infer progress from old chat memory when repository state disagrees. Continue from "Next exact action". Keep Windows PC↔PC as the only current LAN runtime validation Gate. Android remains a build/play platform, but Android LAN runtime testing is currently excluded. Update the MASTER RECORD after every material milestone or policy change.
+
