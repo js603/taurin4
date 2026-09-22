@@ -1,68 +1,123 @@
 # idea2 platform policy
 
-## First-class platforms
+> Canonical status: see `docs/IDEA2_MASTER_RECORD.md`.
 
-From this milestone onward, Windows and Android are developed in parallel.
+## First-class build/play platforms
 
-A feature that changes hosting, persistence, networking, or gameplay runtime is not
-considered platform-complete until it at least compiles for both platforms and its
-shared core has automated tests.
+Windows and Android are developed in parallel as build/play targets.
 
-### Windows
+A feature that changes shared hosting, persistence, networking, or gameplay runtime
+must keep the common Rust core portable and must not break either platform's build.
 
-- React client
-- Tauri shell
-- Rust game host
-- LAN client
-- LAN host
+## Windows
 
-### Android
+Windows is currently the primary runtime validation platform.
 
 - React client
 - Tauri shell
-- Rust game host embedded in the app
+- embedded Rust game host
 - LAN client
 - LAN host
+- **actual LAN runtime Gate: Windows PC ↔ Windows PC**
 
-The Android host is not a desktop sidecar executable. The host core runs inside the
-Android application process on a dedicated Rust thread with its own Tokio runtime.
+Current M1 multiplayer verification is limited to two Windows PCs.
 
-The first Android-host target is **foreground hosting**. Background survival, screen-off
-hosting, foreground services, wake locks, and aggressive vendor battery policies are a
-separate milestone and must not be assumed until tested on real devices.
+Required M1 runtime proof:
+
+1. PC A starts LAN Host.
+2. PC B connects.
+3. HostHello / Hello / ClientAccepted complete.
+4. Ping/Pong works.
+5. Host reports one connected client.
+6. PC B disconnects and Host returns to zero clients.
+7. PC B reconnects successfully.
+
+Manual host address is acceptable for the first proof.
+Automatic LAN discovery is added only after basic connection is proven.
+
+## Android
+
+Android remains a first-class build/play target.
+
+- React client
+- Tauri APK
+- shared Rust host core embedded in the application
+- Android project initialization in CI
+- Android Rust/NDK compile/link
+- Debug APK artifact generation
+
+The Android host is not a desktop sidecar executable. The shared host core is linked
+inside the Android application.
+
+### Current Android LAN testing policy
+
+The architecture keeps Android Host/Client capability, but **Android LAN runtime tests
+are not part of the current validation Gate**.
+
+Currently excluded from required runtime testing:
+
+- Android ↔ Windows LAN
+- Android ↔ Android LAN
+
+This exclusion is a test-scope decision, not removal of Android networking capability.
+
+Background survival, screen-off hosting, foreground services, wake locks, and vendor
+battery-management behavior are also outside the current Gate.
 
 ## Shared Rust boundary
 
-The migration begins with three platform-independent crates:
+The platform-independent crates are:
 
 - `taurin4-game-network`: bootstrap LAN control protocol
-- `taurin4-game-server-core`: host lifecycle and WebSocket listener
-- `taurin4-game-persistence`: separate Character Passport and Host World schemas
+- `taurin4-game-server-core`: Host lifecycle and WebSocket listener
+- `taurin4-game-persistence`: Character Passport and Host World contracts
 
 Neither the server core nor the protocol crate depends on Tauri.
 
-Tauri exposes only host lifecycle commands at this stage:
+Tauri exposes Host lifecycle commands:
 
 - `host_status`
 - `host_start`
 - `host_stop`
 
-The React gameplay UI remains behind `GameSession`, so browser play and future
-OpenMMO protocol integration do not become Tauri-IPC gameplay implementations.
+React gameplay remains behind `GameSession`. Game logic must not become a collection
+of Tauri IPC calls.
 
 ## Character ownership
 
-A player's durable character is a portable Character Passport owned by the player
-device. A hosted world's durable state is a World Save owned by the host.
+A player's durable character target model is a portable Character Passport owned by the
+player device. A hosted world's durable state is owned by the Host as a World Save.
 
-During multiplayer, the host remains authoritative. Imported character data is never
-blindly trusted; validation and later server-side rule checks happen before admission.
+During multiplayer, Host/server state remains authoritative. Imported character data
+must be validated rather than blindly trusted.
+
+The current implementation provides schema/validation foundations only. Durable file
+persistence and multiplayer reconciliation are later milestones.
 
 ## OpenMMO migration rule
 
-OpenMMO remains pinned reference material. We do not copy its desktop server `main.rs`
-into Android. Systems are extracted conceptually behind platform-neutral crates.
+OpenMMO remains pinned external reference material during the early migration.
 
-The future OpenMMO live adapter will preserve its shared Rust/WASM protocol boundary,
-but desktop-only concerns such as CLI parsing, process signals, and server application
-lifecycle remain outside the common core.
+Do not copy the original desktop server `main.rs` wholesale into platform runtimes.
+Separate game/server concepts from CLI, OS signal handling, process lifecycle, and other
+desktop/server-only concerns.
+
+Before replacing OpenMMO behavior, execute the formal M1.5 Original Runtime & Flow Audit
+defined in `docs/IDEA2_MASTER_RECORD.md`.
+
+## Completion policy
+
+"Works on PC" does not mean Android may stop building.
+
+"Android APK builds" does not mean Android LAN runtime is currently verified.
+
+The current policy is therefore:
+
+```text
+Windows:
+  build + play + PC↔PC LAN runtime verification
+
+Android:
+  build + play foundation + shared Host Core compile/link
+  LAN runtime verification deferred
+```
