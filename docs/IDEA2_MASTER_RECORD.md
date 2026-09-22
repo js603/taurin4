@@ -10,7 +10,8 @@
 - Repository: `js603/taurin4`
 - Branch: `idea2`
 - Base checkpoint: `370688fc7d712e823206510d9b972af0fab30e88`
-- Current verified HEAD: `ef47f8cc5390a42a23854aeca463eed55fb581e5`
+- Last verified implementation HEAD: `ef47f8cc5390a42a23854aeca463eed55fb581e5`
+- Note: documentation-only commits may advance the branch HEAD. Every new session must query the actual `idea2` HEAD before work.
 - GitHub Pages preview: `https://js603.github.io/taurin4/idea2/`
 - OpenMMO reference repository: `Julian-adv/OpenMMO`
 - OpenMMO migration reference pin: `950e081c178d920c10c51f2d31f60c1b3383c925`
@@ -306,7 +307,8 @@ Android LAN Host/Client 기능을 제거하는 것이 아니다.
 
 ## 8. Verified CI / build results
 
-Verified against HEAD `ef47f8cc5390a42a23854aeca463eed55fb581e5`.
+Runtime/build results below were verified against implementation HEAD `ef47f8cc5390a42a23854aeca463eed55fb581e5`.
+Subsequent documentation-only commits do not represent additional runtime implementation.
 
 ### idea2 validation
 
@@ -698,63 +700,3 @@ Implement actual persistence:
 ---
 
 ## 14. Definition of "done"
-
-A milestone is not complete merely because code exists.
-
-Required evidence as applicable:
-
-- automated test
-- build success
-- runtime behavior
-- real two-device test where the milestone requires it
-- CI result
-- updated MASTER RECORD
-
-Unverified behavior must be marked explicitly as unverified.
-
----
-
-## 15. Documentation continuity rule
-
-This file is the canonical continuity record.
-
-For every major milestone, architectural change, test-policy change, or verified build:
-
-1. update `Last verified`
-2. update current HEAD
-3. update milestone status
-4. record test/CI result
-5. record material decision in this document
-6. update "Next exact action"
-7. commit documentation together with or immediately after implementation
-
-If another document conflicts with this file, fix the other document or explicitly update this file.
-
----
-
-## 16. Next exact action
-
-**M1 — Windows PC ↔ Windows PC LAN Client implementation**
-
-Order:
-
-1. keep Android build gate intact
-2. implement Windows/client WebSocket connection to the existing Host Core
-3. manual host address first
-4. verify HostHello / Hello / ClientAccepted
-5. verify Ping/Pong
-6. expose connected client state
-7. verify disconnect and reconnect
-8. build Windows test artifacts
-9. perform actual PC↔PC LAN runtime test
-10. only then implement LAN automatic discovery
-11. after M1 completes, begin M1.5 original OpenMMO runtime + full user-flow audit
-
----
-
-## 17. New-chat bootstrap
-
-When starting a new ChatGPT conversation, use this instruction:
-
-> Continue the `js603/taurin4` `idea2` project. Treat `docs/IDEA2_MASTER_RECORD.md` on the `idea2` branch as the canonical project state. Read it first, then verify the current branch HEAD and CI state before making changes. Do not infer progress from old chat memory when repository state disagrees. Continue from "Next exact action". Keep Windows PC↔PC as the only current LAN runtime validation Gate. Android remains a build/play platform but Android LAN runtime testing is currently excluded. Update the MASTER RECORD after every material milestone or policy change.
-
