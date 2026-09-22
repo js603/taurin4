@@ -1,0 +1,113 @@
+name: Deploy idea2 Pages Preview
+
+on:
+  push:
+    branches: ["idea2"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages-multibranch
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          path: source-main
+
+      - name: Checkout submain
+        uses: actions/checkout@v5
+        with:
+          ref: submain
+          path: source-submain
+
+      - name: Checkout idea2
+        uses: actions/checkout@v5
+        with:
+          ref: idea2
+          path: source-idea2
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Build main
+        working-directory: source-main
+        env:
+          VITE_BASE_PATH: /taurin4/
+          VITE_DISABLE_PWA: "true"
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+
+      - name: Build submain
+        working-directory: source-submain
+        env:
+          VITE_BASE_PATH: /taurin4/submain/
+          VITE_DISABLE_PWA: "true"
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+
+      - name: Build idea2
+        working-directory: source-idea2
+        env:
+          VITE_BASE_PATH: /taurin4/idea2/
+          VITE_DISABLE_PWA: "true"
+        run: |
+          npm install --no-audit --no-fund
+          npm run check
+          npm run build
+
+      - name: Assemble Pages tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p pages/submain pages/idea2
+          cp -R source-main/dist/. pages/
+          cp -R source-submain/dist/. pages/submain/
+          cp -R source-idea2/dist/. pages/idea2/
+          printf '%s\n' \
+            '/* GitHub Pages cleanup worker: removes the old root-scope PWA registration. */' \
+            'self.addEventListener("install", () => self.skipWaiting());' \
+            'self.addEventListener("activate", (event) => {' \
+            '  event.waitUntil((async () => {' \
+            '    await self.registration.unregister();' \
+            '    const clients = await self.clients.matchAll({ type: "window" });' \
+            '    for (const client of clients) {' \
+            '      if ("navigate" in client) client.navigate(client.url);' \
+            '    }' \
+            '  })());' \
+            '});' > pages/sw.js
+          touch pages/.nojekyll
+          printf 'main\n' > pages/BRANCH.txt
+          printf 'submain\n' > pages/submain/BRANCH.txt
+          printf 'idea2\n' > pages/idea2/BRANCH.txt
+          test -f pages/index.html
+          test -f pages/submain/index.html
+          test -f pages/idea2/index.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: pages/
+
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
