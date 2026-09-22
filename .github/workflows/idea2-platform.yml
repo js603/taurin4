@@ -3,6 +3,8 @@ name: idea2 Windows + Android
 on:
   push:
     branches: ["idea2"]
+    paths-ignore:
+      - "docs/**"
   workflow_dispatch:
 
 permissions:
