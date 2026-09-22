@@ -15,6 +15,7 @@ import {
   createLocalGameSession,
   type GameSession,
 } from "../../../game/session";
+import { HostControl } from "./HostControl";
 
 function formatTime(worldMinutes: number) {
   const hour = Math.floor(worldMinutes / 60) % 24;
@@ -257,6 +258,8 @@ export function GameScreen() {
           ))}
         </div>
       </section>
+
+      <HostControl />
     </main>
   );
 }
