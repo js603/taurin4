@@ -3,6 +3,8 @@ name: Deploy idea2 Pages Preview
 on:
   push:
     branches: ["idea2"]
+    paths-ignore:
+      - "docs/**"
   workflow_dispatch:
 
 permissions:
