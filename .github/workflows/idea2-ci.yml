@@ -3,6 +3,8 @@ name: idea2 validation
 on:
   push:
     branches: ["idea2"]
+    paths-ignore:
+      - "docs/**"
   workflow_dispatch:
 
 permissions:
