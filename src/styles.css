@@ -1,11 +1,20 @@
 :root {
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
-  color: #e5e7eb;
-  background: #111827;
+    "Cascadia Code", "JetBrains Mono", "SFMono-Regular", Consolas,
+    "Liberation Mono", monospace;
+  color: #e7e4dc;
+  background: #090b0d;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  --bg: #090b0d;
+  --panel: rgba(16, 19, 21, 0.92);
+  --panel-raised: rgba(24, 27, 29, 0.96);
+  --line: #343a3d;
+  --muted: #8e9696;
+  --text: #e7e4dc;
+  --accent: #c8b27b;
+  --accent-soft: rgba(200, 178, 123, 0.14);
+  --danger: #c77b74;
 }
 
 * {
@@ -17,46 +26,68 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background:
-    radial-gradient(circle at top, rgba(59, 130, 246, 0.15), transparent 35%),
-    #111827;
-}
-
-button,
-input,
-textarea {
-  font: inherit;
+    radial-gradient(circle at 50% -20%, rgba(200, 178, 123, 0.08), transparent 36%),
+    linear-gradient(180deg, #0d1012, var(--bg));
 }
 
 button {
+  font: inherit;
+}
+
+button:not(:disabled) {
   cursor: pointer;
 }
 
-.app-shell {
-  width: min(920px, 100%);
+button:focus-visible,
+.game-shell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.game-shell {
+  width: min(1040px, 100%);
   margin: 0 auto;
-  padding: 28px 18px 60px;
+  padding: 24px 16px 56px;
+  outline: none;
 }
 
-.app-header,
-.notes-toolbar,
-.note-card__top {
+.world-stage {
+  position: relative;
+  min-height: 610px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 42%),
+    var(--panel);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
+  transition:
+    filter 160ms ease,
+    transform 160ms ease;
+}
+
+.world-stage--defocused > :not(.attention-layer) {
+  filter: blur(2px);
+  opacity: 0.46;
+}
+
+.world-header {
   display: flex;
-  gap: 12px;
-  align-items: center;
   justify-content: space-between;
+  gap: 20px;
+  padding: 24px 26px 18px;
+  border-bottom: 1px solid var(--line);
 }
 
-.app-header {
-  margin-bottom: 24px;
-}
-
-.eyebrow {
-  margin: 0 0 4px;
-  color: #93c5fd;
-  font-size: 12px;
+.eyebrow,
+.world-kicker,
+.attention-card__eyebrow,
+.event-log__heading {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.14em;
 }
 
 h1,
@@ -65,100 +96,427 @@ p {
   margin-top: 0;
 }
 
-.runtime-badge {
-  border: 1px solid #374151;
-  border-radius: 999px;
-  padding: 6px 10px;
-  background: #1f2937;
-  color: #bfdbfe;
+h1 {
+  margin-bottom: 0;
+  font-size: clamp(21px, 4vw, 30px);
+}
+
+.world-clock {
+  color: var(--muted);
   font-size: 12px;
 }
 
-.panel {
-  border: 1px solid #374151;
-  border-radius: 18px;
-  background: rgba(17, 24, 39, 0.86);
-  padding: 18px;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.16);
+.world-copy {
+  width: min(650px, 100%);
+  margin: 0 auto;
+  padding: 74px 28px 180px;
+  text-align: center;
 }
 
-.notes-toolbar {
-  align-items: flex-end;
+.world-kicker {
   margin-bottom: 16px;
 }
 
-.notes-toolbar p {
+.world-description {
   margin-bottom: 0;
-  color: #9ca3af;
+  color: #c9cecb;
+  line-height: 1.9;
 }
 
-.note-form {
+.travel-progress {
+  width: min(430px, 100%);
+  margin: 34px auto 0;
+}
+
+.travel-progress__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 9px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.travel-progress__track {
+  height: 3px;
+  overflow: hidden;
+  background: #2a2f31;
+}
+
+.travel-progress__bar {
+  height: 100%;
+  background: var(--accent);
+  transition: width 100ms linear;
+}
+
+.destination-stack {
+  position: absolute;
+  right: 24px;
+  bottom: 76px;
+  left: 24px;
+  z-index: 3;
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
-  margin-bottom: 18px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  perspective: 900px;
 }
 
-.input,
-.textarea {
-  width: 100%;
-  border: 1px solid #4b5563;
-  border-radius: 12px;
-  background: #0f172a;
-  color: #f9fafb;
-  padding: 12px;
+.destination-card {
+  display: flex;
+  min-width: 0;
+  min-height: 172px;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px;
+  background: rgba(22, 25, 27, 0.94);
+  color: var(--text);
+  text-align: left;
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(12px);
+  animation: float-in 180ms ease both;
 }
 
-.button {
-  border: 0;
-  border-radius: 12px;
-  padding: 12px 16px;
-  background: #2563eb;
-  color: white;
+.destination-card:nth-child(2) {
+  animation-delay: 45ms;
+}
+
+.destination-card:nth-child(3) {
+  animation-delay: 90ms;
+}
+
+.destination-card:hover {
+  border-color: #626861;
+  transform: translateY(-3px);
+}
+
+.destination-card__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.danger {
+  color: var(--accent);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.destination-card__description {
+  margin-top: 12px;
+  color: #b7bdba;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.destination-card__tags {
+  margin-top: auto;
+  padding-top: 12px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.destination-card__action {
+  margin-top: 10px;
+  color: var(--accent);
+  font-size: 11px;
   font-weight: 700;
 }
 
-.button--ghost {
-  background: #1f2937;
-  color: #d1d5db;
+.status-bar {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding: 10px 24px;
+  background: rgba(9, 11, 13, 0.78);
+  color: var(--muted);
+  font-size: 11px;
+  backdrop-filter: blur(10px);
 }
 
-.note-list {
-  display: grid;
-  gap: 10px;
+.status-bar__actions {
+  display: flex;
+  gap: 8px;
 }
 
-.note-card {
-  border: 1px solid #374151;
-  border-radius: 14px;
-  padding: 14px;
-  background: #111827;
+.text-button,
+.game-button {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #171a1c;
+  color: var(--text);
 }
 
-.note-card p {
-  color: #d1d5db;
-  white-space: pre-wrap;
+.text-button {
+  padding: 9px 12px;
+}
+
+.text-button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.attention-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  pointer-events: none;
+}
+
+.attention-layer--floating {
+  align-items: flex-end;
+  padding-bottom: 86px;
+}
+
+.attention-card {
+  width: min(410px, 100%);
+  border: 1px solid #4a4f4d;
+  border-radius: 18px;
+  padding: 22px;
+  background: rgba(22, 25, 27, 0.96);
+  box-shadow: 0 24px 68px rgba(0, 0, 0, 0.46);
+  backdrop-filter: blur(16px);
+  pointer-events: auto;
+  animation: focus-in 150ms ease both;
+}
+
+.attention-card--floating {
+  transform: translateY(0);
+}
+
+.attention-card--focus {
+  border-color: #626861;
+}
+
+.attention-card--critical {
+  border-color: var(--danger);
+  box-shadow:
+    0 28px 80px rgba(0, 0, 0, 0.58),
+    0 0 0 1px rgba(199, 123, 116, 0.14);
+  animation:
+    critical-in 130ms ease both,
+    critical-pulse 800ms ease-in-out infinite alternate;
+}
+
+.attention-card h2 {
+  margin: 8px 0 12px;
+  font-size: clamp(20px, 5vw, 28px);
+}
+
+.attention-card__body {
   margin-bottom: 0;
+  color: #bdc3c0;
+  line-height: 1.7;
+  white-space: pre-line;
 }
 
-.note-card time,
-.empty {
-  color: #6b7280;
-  font-size: 12px;
+.countdown {
+  margin: 18px 0;
+  color: #f0d4cf;
+  font-size: clamp(36px, 8vw, 58px);
+  font-weight: 800;
+  letter-spacing: -0.05em;
 }
 
-@media (max-width: 640px) {
-  .app-header,
-  .notes-toolbar {
-    align-items: flex-start;
-    flex-direction: column;
+.countdown small {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+}
+
+.attention-card__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 22px;
+}
+
+.attention-card__actions > :only-child {
+  grid-column: 1 / -1;
+}
+
+.game-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 10px 12px;
+}
+
+.game-button--primary {
+  border-color: #71684f;
+  background: var(--accent-soft);
+  color: #f1e7ce;
+}
+
+.game-button--danger {
+  border-color: var(--danger);
+}
+
+.keycap {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.event-log {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: rgba(13, 16, 18, 0.72);
+}
+
+.event-log__heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.event-log__entries {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.event-log__entry {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 10px;
+  color: #aab1ae;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.event-log__entry time {
+  color: #666e6c;
+}
+
+.event-log__entry--critical {
+  color: #dfaaa4;
+}
+
+.event-log__entry--focus {
+  color: #d8ccb0;
+}
+
+@keyframes float-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97) rotateX(3deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotateX(0);
+  }
+}
+
+@keyframes focus-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.965);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes critical-in {
+  from {
+    opacity: 0;
+    transform: scale(0.91);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes critical-pulse {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.012);
+  }
+}
+
+@media (max-width: 700px) {
+  .game-shell {
+    padding: 10px 10px 36px;
   }
 
-  .note-form {
+  .world-stage {
+    min-height: 680px;
+    border-radius: 16px;
+  }
+
+  .world-header {
+    padding: 18px;
+  }
+
+  .world-copy {
+    padding: 56px 20px 330px;
+  }
+
+  .destination-stack {
+    right: 12px;
+    bottom: 70px;
+    left: 12px;
     grid-template-columns: 1fr;
+    gap: 8px;
   }
 
-  .button {
-    min-height: 44px;
+  .destination-card {
+    min-height: 0;
+    padding: 13px;
+  }
+
+  .destination-card__description {
+    display: none;
+  }
+
+  .destination-card__tags {
+    margin-top: 8px;
+    padding-top: 0;
+  }
+
+  .status-bar {
+    padding: 8px 12px;
+  }
+
+  .attention-layer {
+    padding: 14px;
+  }
+
+  .attention-layer--floating {
+    padding-bottom: 76px;
+  }
+
+  .attention-card {
+    padding: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation: none !important;
+    transition: none !important;
   }
 }
