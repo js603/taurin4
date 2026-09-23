@@ -6,7 +6,7 @@
 > 새 채팅, 새 작업 세션, 다른 실행 환경에서 프로젝트를 이어갈 때 가장 먼저 이 문서를 확인한다.
 > 기존 대화 기억보다 **현재 저장소 + 이 문서 + CI 결과**를 우선한다.
 
-- Last verified: **2026-09-23 (Asia/Seoul)**
+- Last verified: **2026-09-24 (Asia/Seoul)**
 - Repository: `js603/taurin4`
 - Branch: `idea2`
 - Base checkpoint: `370688fc7d712e823206510d9b972af0fab30e88`
@@ -572,9 +572,32 @@ Initial connection may use manual host address.
 M1 completion is based only on Windows PC↔PC runtime testing.
 Android LAN runtime is excluded from the current Gate.
 
-### M1.5 — OpenMMO Original Runtime & Flow Audit
+### M1.5 — OpenMMO Original Runtime & Flow Audit — IN PROGRESS
 
 This is a formal verification milestone.
+
+Verified so far:
+
+- pinned original server build: PASS
+- original server real process startup: PASS
+- no-Google server startup: PASS
+- no-full-terrain server startup: PASS
+- SQLite state creation: PASS
+- NPC token generation: PASS
+- original protocol ClientInfo/auth: PASS
+- stat roll + character creation: PASS
+- character persistence + reconnect: PASS
+- EnterGame / in-game entry path: PASS
+- original browser shared WASM build: PASS
+- original Svelte/TypeScript/lint validation: PASS
+- original browser Vite bundle + HTTP preview: PASS
+
+Important LLM boundary discovered:
+
+- OpenMMO world simulation, monster AI, combat authority, item/drop/dungeon rules do not require an LLM.
+- Agent Client low-level execution (protocol/state/pathfinding/reflex handling) is separate from optional LLM high-level reasoning.
+- The pinned revision contains a coupling bug/inconsistency: generic `llm="none"` agent sessions do not take the normal EnterGame branch even though config comments imply deterministic schedule/monster-AI operation can continue without an LLM.
+- idea2 must **not** copy that coupling. Deterministic NPC/agent execution and optional LLM reasoning remain separate modules.
 
 #### M1.5-A Original Runtime
 
@@ -812,9 +835,10 @@ Current order:
 5. execute original protocol login → character list → roll/create/select → EnterGame where possible
 6. identify the minimum terrain/assets needed beyond server/character lifecycle
 7. verify original browser client build/start prerequisites
-8. document character lifecycle and core-play source/runtime findings
-9. produce KEEP / ADAPT / REPLACE / DROP migration matrix
-10. only after the audit is sufficiently evidenced, begin M2 taurin4 ↔ real OpenMMO adapter
+8. execute pinned original gameplay-system runtime tests for movement/combat/loot/inventory/chat/death/respawn/persistence
+9. finalize KEEP / ADAPT / REPLACE / DROP migration matrix
+10. close M1.5 when the gameplay runtime Gate passes; full 73 GB terrain and complete visual asset download are not required
+11. then begin M2 taurin4 ↔ real OpenMMO adapter
 
 Current runtime-audit workflow:
 `.github/workflows/idea2-openmmo-audit.yml`
