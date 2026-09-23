@@ -313,19 +313,62 @@ function cellCenter(
   };
 }
 
-function doorWorldPosition(
+function doorApproachSides(
   constants: DungeonConstants,
   door: DungeonDoor,
 ) {
   const origin = dungeonOrigin(constants);
+  const lat = door.lat0 + door.len / 2;
+  const line = door.wallLine;
   const spansX = door.wall === 0 || door.wall === 2;
-  const localX = spansX ? door.lat0 + door.len / 2 : door.wallLine;
-  const localZ = spansX ? door.wallLine : door.lat0 + door.len / 2;
-  return { x: origin.x + localX, z: origin.z + localZ };
+  return spansX
+    ? [
+        { x: origin.x + lat, z: origin.z + line - 0.5 },
+        { x: origin.x + lat, z: origin.z + line + 0.5 },
+      ]
+    : [
+        { x: origin.x + line - 0.5, z: origin.z + lat },
+        { x: origin.x + line + 0.5, z: origin.z + lat },
+      ];
 }
 
 function pathResult(value: unknown): PathResult {
   return value as PathResult;
+}
+
+function pathToReachableDoorSide(
+  wasm: DungeonTestWasmExports,
+  constants: DungeonConstants,
+  position: { x: number; z: number },
+  door: DungeonDoor,
+) {
+  const candidates = doorApproachSides(constants, door)
+    .map((side) => ({
+      side,
+      path: pathResult(
+        wasm.passability_find_path_budget(
+          position.x,
+          position.z,
+          constants.floorIndexBase,
+          side.x,
+          side.z,
+          constants.floorIndexBase,
+          constants.pathMaxNodes,
+        ),
+      ),
+    }))
+    .filter((candidate) => candidate.path.found)
+    .sort((a, b) => {
+      const waypointDiff =
+        a.path.waypoints.length - b.path.waypoints.length;
+      if (waypointDiff !== 0) return waypointDiff;
+      return (
+        Math.hypot(a.side.x - position.x, a.side.z - position.z) -
+        Math.hypot(b.side.x - position.x, b.side.z - position.z)
+      );
+    });
+
+  return candidates[0]?.path ?? null;
 }
 
 async function queueDungeonPath(
@@ -739,26 +782,17 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
 
         expect(session.getSnapshot().player.floorLevel).toBe(-1);
 
+        // This workflow boots an isolated fresh server, so no dungeon door
+        // can already be open. The pinned server's RequestDungeonDoors path
+        // resets the world view and emits individual DungeonDoorState subjects
+        // (despite the shared protocol also defining DungeonDoorsState).
+        // Track only doors this test actually opens via DungeonDoorToggled.
         const openDoorIds = new Set<number>();
-        const stateStart = observed.length;
-        expect(adapter.requestDungeonDoors(OLD_CRYPT.id)).toBe(true);
-        const doorState = await waitForObserved<{
-          entrance_id: string;
-          doors: Array<[number, number]>;
-        }>(
-          observed,
-          "DungeonDoorsState",
-          (payload) => payload.entrance_id === OLD_CRYPT.id,
-          { startIndex: stateStart, timeoutMs: 5_000 },
-        );
-        for (const [depth, doorId] of doorState.doors) {
-          if (depth === 1) openDoorIds.add(doorId);
-        }
         wasm.dungeon_rebuild_floor(
           OLD_CRYPT.id,
           1,
           new Uint32Array(),
-          new Uint32Array([...openDoorIds]),
+          new Uint32Array(),
         );
 
         const doors = wasm.dungeon_interior_doors(
@@ -806,27 +840,13 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
           let opened = false;
           for (const door of doors) {
             if (door.locked || openDoorIds.has(door.doorId)) continue;
-            const point = doorWorldPosition(constants, door);
-            const toDoor = pathResult(
-              wasm.passability_find_path_budget(
-                position.x,
-                position.z,
-                constants.floorIndexBase,
-                point.x,
-                point.z,
-                constants.floorIndexBase,
-                constants.pathMaxNodes,
-              ),
+            const toDoor = pathToReachableDoorSide(
+              wasm,
+              constants,
+              position,
+              door,
             );
-            const last = toDoor.waypoints.at(-1);
-            const endpoint = last ?? position;
-            const reach = 2.5 + door.len / 2;
-            if (
-              Math.hypot(endpoint.x - point.x, endpoint.z - point.z) >
-              reach + 0.5
-            ) {
-              continue;
-            }
+            if (!toDoor) continue;
 
             if (toDoor.waypoints.length > 0) {
               await queueDungeonPath(adapter, session, wasm, toDoor, 20_000);
@@ -922,27 +942,13 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
           let opened = false;
           for (const door of doors) {
             if (door.locked || openDoorIds.has(door.doorId)) continue;
-            const point = doorWorldPosition(constants, door);
-            const toDoor = pathResult(
-              wasm.passability_find_path_budget(
-                position.x,
-                position.z,
-                constants.floorIndexBase,
-                point.x,
-                point.z,
-                constants.floorIndexBase,
-                constants.pathMaxNodes,
-              ),
+            const toDoor = pathToReachableDoorSide(
+              wasm,
+              constants,
+              position,
+              door,
             );
-            const last = toDoor.waypoints.at(-1);
-            const endpoint = last ?? position;
-            const reach = 2.5 + door.len / 2;
-            if (
-              Math.hypot(endpoint.x - point.x, endpoint.z - point.z) >
-              reach + 0.5
-            ) {
-              continue;
-            }
+            if (!toDoor) continue;
 
             if (toDoor.waypoints.length > 0) {
               await queueDungeonPath(adapter, session, wasm, toDoor, 20_000);
