@@ -9,5 +9,5 @@ futures-util = { version = "0.3", features = ["sink"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "net", "rt", "sync", "time"] }
-tokio-tungstenite = { version = "0.28", default-features = false, features = ["handshake"] }
+tokio-tungstenite = { version = "0.28", default-features = false, features = ["connect", "handshake"] }
 taurin4-game-network = { path = "../game-network" }
