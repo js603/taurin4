@@ -874,7 +874,7 @@ now been extended into a real pinned-server end-to-end regression candidate.
 
 Latest implementation candidate:
 
-`b57d96a37d62bd74cb0421132db08c8251cc7047`
+`39863b66973598dc93f8e1ca00f00a80ba1aa8fd`
 
 ### Previous Gate result clarified
 
@@ -980,3 +980,39 @@ Next order after the current Gate:
 When starting a new ChatGPT conversation, use this instruction:
 
 > Continue the `js603/taurin4` `idea2` project. Treat `docs/IDEA2_MASTER_RECORD.md` on the `idea2` branch as the canonical project state. Read it first, then verify the actual current `idea2` branch HEAD and relevant CI state before making changes. Do not infer progress from old chat memory when repository state disagrees. Continue from "Next exact action". Keep Windows PC↔PC as the only current LAN runtime validation Gate. Android remains a build/play platform, but Android LAN runtime testing is currently excluded. Update the MASTER RECORD after every material milestone or policy change.
+
+### M2 Gate clarification — real gameplay passed, packaging failed
+
+Run `35901639325` is recorded as overall **FAILURE**, but the failure occurred after the
+real pinned-server gameplay regression had already passed.
+
+Confirmed inside that run:
+
+- real pinned OpenMMO server boot: PASS
+- real shared WASM codec: PASS
+- character lifecycle / EnterGame: PASS
+- authoritative movement: PASS
+- Radiance / AbilityCooldowns: PASS
+- unequip: PASS
+- DropItem / GroundItem: PASS
+- PickupItem / InventoryUpdated: PASS
+- EquipItem: PASS
+- disconnect / reconnect: PASS
+- same character / equipment / position persistence: PASS
+- Vitest full-cycle test: **1 passed / 1 passed**, 546 ms
+
+The workflow then failed in the browser/PWA packaging step because
+`openmmo-wasm/onlinerpg_shared_bg.wasm` was 3.84 MB while Workbox's default precache
+limit was 2 MiB.
+
+That packaging defect is now fixed by setting
+`maximumFileSizeToCacheInBytes: 5 * 1024 * 1024`.
+
+Latest candidate also maps and tests original `PlayerAttackRejected` and extends the real
+integration Gate with an actual `PlayerAttack` request against a missing target so the
+server rejection path is proven end-to-end.
+
+Natural ambient monster spawn / kill is not claimed yet. NPC-token sessions are marked
+`is_official_npc=true` by the original server, and ambient spawning deliberately refuses
+to spawn monsters for an unwatched official NPC. A normal human-auth integration identity
+is therefore required before that slice can be automated without modifying original rules.
