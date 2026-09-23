@@ -16,7 +16,7 @@ export interface OpenMmoAdapterOptions {
   requestTimeoutMs?: number;
 }
 
-type Result<T extends object = Record<string, never>> =
+type Result<T extends object = object> =
   | ({ ok: true } & T)
   | { ok: false; message: string };
 
@@ -353,6 +353,23 @@ export class OpenMmoAdapter {
 
   sendAttack(monsterId: string) {
     return this.send({ PlayerAttack: { monster_id: monsterId } });
+  }
+
+  sendMove(
+    position: { x: number; y: number; z: number },
+    rotation: number,
+    floorLevel: number,
+    options: { append?: boolean; sprinting?: boolean } = {},
+  ) {
+    return this.send({
+      PlayerMove: {
+        position,
+        rotation,
+        floor_level: floorLevel,
+        append: options.append ?? false,
+        sprinting: options.sprinting ?? false,
+      },
+    });
   }
 
   requestRespawn() {
