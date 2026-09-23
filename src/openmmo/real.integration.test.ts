@@ -721,6 +721,49 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
       const unsubscribeProbe = adapter.subscribeMessages((message) => {
         observed.push(...flattenWireMessage(message));
       });
+      const encounterWitness: {
+        value: {
+          targetId: string;
+          targetSemanticId: string;
+          title: string;
+        } | null;
+      } = { value: null };
+      const unsubscribeEncounterWitness = session.subscribe(() => {
+        if (encounterWitness.value) return;
+
+        const snapshot = session.getSnapshot();
+        if (snapshot.phase !== "encounter" || !snapshot.encounter?.entityId) {
+          return;
+        }
+
+        const targetId = snapshot.encounter.entityId;
+        const targetSemanticId = "monster:" + targetId;
+        const semanticMonster = snapshot.semanticDestinations?.find(
+          (destination) =>
+            destination.id === targetSemanticId &&
+            destination.kind === "monster" &&
+            destination.floorLevel === -1,
+        );
+        if (!semanticMonster) return;
+
+        const card = getAttentionCard(snapshot);
+        if (
+          card?.level !== "focus" ||
+          card.eyebrow !== "WORLD ENCOUNTER" ||
+          card.title !== snapshot.encounter.name ||
+          !card.choices.some(
+            (choice) => choice.command.type === "INVESTIGATE_ENCOUNTER",
+          )
+        ) {
+          return;
+        }
+
+        encounterWitness.value = {
+          targetId,
+          targetSemanticId,
+          title: card.title,
+        };
+      });
 
       wasm.dungeon_add_passability(
         OLD_CRYPT.id,
@@ -921,33 +964,35 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
           10_000,
         );
 
-        const encounterSnapshot = session.getSnapshot();
-        expect(encounterSnapshot.phase).toBe("encounter");
-        const targetId = encounterSnapshot.encounter?.entityId;
-        expect(targetId).toBeTruthy();
-        if (!targetId) throw new Error("Real monster did not create an encounter");
+        const witnessedEncounter = encounterWitness.value;
+        expect(witnessedEncounter).not.toBeNull();
+        if (!witnessedEncounter) {
+          throw new Error(
+            "Real MonsterSpawned never produced the Text/Card WORLD ENCOUNTER witness",
+          );
+        }
 
-        const targetSemanticId = "monster:" + targetId;
+        const { targetId, targetSemanticId } = witnessedEncounter;
         const initialTarget = currentDungeonMonster(
           session,
           targetSemanticId,
         );
         expect(initialTarget).toBeDefined();
         if (!initialTarget) {
-          throw new Error("Encounter monster was not projected as a semantic MONSTER card");
+          throw new Error(
+            "Witnessed encounter monster left semantic MONSTER state before approach",
+          );
         }
+        expect(witnessedEncounter.title).toBe(initialTarget.label);
 
-        const encounterCard = getAttentionCard(encounterSnapshot);
-        expect(encounterCard).toMatchObject({
-          level: "focus",
-          eyebrow: "WORLD ENCOUNTER",
-          title: encounterSnapshot.encounter?.name,
-        });
-        expect(
-          encounterCard?.choices.some(
-            (choice) => choice.command.type === "INVESTIGATE_ENCOUNTER",
-          ),
-        ).toBe(true);
+        // An aggressive kobold may attack while the test is opening dungeon
+        // doors. That legitimately advances encounter -> combat. The witness
+        // above proves the Text/Card encounter happened before that transition.
+        const currentPhase = session.getSnapshot().phase;
+        expect(["encounter", "combat"]).toContain(currentPhase);
+        if (currentPhase === "combat") {
+          expect(session.getSnapshot().combat?.enemy.id).toBe(targetId);
+        }
 
         const findMonsterPath = () => {
           const position = session.getSnapshot().player.position;
@@ -1222,6 +1267,7 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
         }
       } finally {
         wasm.dungeon_remove_passability(OLD_CRYPT.id);
+        unsubscribeEncounterWitness();
         unsubscribeProbe();
         session.stop();
         adapter.disconnect();
