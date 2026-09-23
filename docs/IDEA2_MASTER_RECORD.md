@@ -11,7 +11,7 @@
 - Branch: `idea2`
 - Base checkpoint: `370688fc7d712e823206510d9b972af0fab30e88`
 - Last verified implementation HEAD: `a2ce2dc3556412e588a35f6534bb3258b8fb399f`
-- Latest M2 implementation candidate HEAD: `253fc4b57cb3d75412b80d4dcd2dd1b06cafe1e7`
+- Latest M2 implementation candidate HEAD: `b57d96a37d62bd74cb0421132db08c8251cc7047`
 - Candidate validation: run `35898869607` — **SUCCESS**
 - Candidate Pages: run `35898869614` — **SUCCESS**
 - Candidate Windows/Android: run `35898869592` — **IN PROGRESS** at last check
@@ -867,121 +867,104 @@ this file.
 
 ## 16. Next exact action
 
-**M2 — Semantic World + Combat/Loot/Inventory integration candidate**
+**M2 — Real OpenMMO full-cycle regression Gate**
 
-M1.5 is complete and the original real lifecycle adapter Gate remains verified by
-run `35888983232`.
-
-The newest M2 candidate now goes beyond lifecycle/bootstrap:
-
-### WorldUpdate / authoritative movement
-
-A previous real movement test timed out even though `PlayerMove` reached the server.
-Pinned-source inspection showed why:
-
-```text
-PlayerMove
-  ↓
-server movement queue/tick
-  ↓
-Interest / WorldUpdate envelope
-  ↓
-WorldUpdate.events[].messages[]
-  └─ PlayerMoved / nearby state
-```
-
-The original client recursively unwraps `WorldUpdate`; idea2 now does the same.
-
-Current candidate behavior:
-
-- `WorldUpdate.position / floor_level` updates the authoritative local-player pose.
-- nested `WorldUpdate.events[].messages[]` are fed back through the semantic mapper.
-- epoch/generation/sequence are tracked so stale updates are ignored.
-- reset updates clear the current semantic AOI list.
-- raw `MOVE_TO` never changes visible player position optimistically.
-- semantic arrival is determined only from server-authoritative position updates.
-
-### Semantic destination layer
-
-The UI no longer requires raw coordinates.
-
-Current target types:
-
-- MONSTER
-- PLAYER
-- NPC / Agent
-- LOOT
-
-Targets originate only from authoritative OpenMMO AOI messages.
-
-`TRAVEL_TO_DESTINATION`:
-
-1. resolves the selected semantic target
-2. computes an approach point and facing
-3. sends original `PlayerMove`
-4. keeps the client pose unchanged
-5. completes only when authoritative server position reaches the target radius
-
-Official OpenMMO agents are identified from `Player.is_official_npc` and presented as
-NPC rather than normal players.
-
-### Ability / loot / inventory
-
-Implemented protocol/UI candidate:
-
-- all five audited abilities:
-  - `guardian_ward`
-  - `radiance`
-  - `bow_mark`
-  - `dagger_double_slash`
-  - `auscultation`
-- `UseAbility`
-- `AbilityCooldowns`
-- `AbilityRejected`
-- `PickupItem`
-- `GroundItemSpawned / Appeared / Removed / QuantityChanged`
-- `InventoryState / InventoryUpdated`
-- `EquipItem / UnequipItem`
-
-The Text/Card UI now contains:
-
-- semantic nearby-target cards
-- near-loot "pickup" action
-- server-cooldown ability buttons
-- bag list
-- equipped list
-- equip / unequip actions
-
-All mutations remain server-authoritative.
-
-### Current verification status
+The semantic WorldUpdate / destination / ability / loot / inventory implementation has
+now been extended into a real pinned-server end-to-end regression candidate.
 
 Latest implementation candidate:
 
-`253fc4b57cb3d75412b80d4dcd2dd1b06cafe1e7`
+`b57d96a37d62bd74cb0421132db08c8251cc7047`
 
-Current evidence:
+### Previous Gate result clarified
 
-- quality validation: run `35898869607` — **SUCCESS**
-- Pages build/deploy: run `35898869614` — **SUCCESS**
-- Windows/Android platform build: run `35898869592` — still running at the last check
-- real OpenMMO regression: run `35898863607` — still running at the last check
+Candidate `253fc4b57cb3d75412b80d4dcd2dd1b06cafe1e7` already passed:
 
-Do not promote this candidate to the final verified implementation baseline until the
-remaining applicable Gates are confirmed.
+- idea2 validation — run `35898869607` — **SUCCESS**
+- Pages — run `35898869614` — **SUCCESS**
+- Windows + Android — run `35898869592` — **SUCCESS**
 
-Next implementation order:
+The previous real OpenMMO run `35898863607` was not a gameplay-server failure:
 
-1. confirm the current candidate workflows once
-2. if successful, promote the verified implementation HEAD and record exact run IDs
-3. exercise semantic movement through the real pinned-server Gate
-4. extend real runtime proof from lifecycle/movement into one safe ability server response
-5. create an end-to-end loot → pickup → `InventoryUpdated` proof
-6. verify equip/unequip mutation against the real server
-7. then close the remaining M2 full-cycle gaps: logout/reconnect/same-character state
-8. only after the full real cycle works, proceed to M3 controlled native migration
+- the real pinned OpenMMO integration test itself passed
+- the workflow failed later during the taurin4 production build because the
+  newly added `npc` semantic kind had not yet been included in one UI helper type
+- the OpenMMO workflow path filter also failed to retrigger for ordinary
+  `GameScreen` / `src/game/**` changes
 
-Do not claim full M2 completion from unit/mock coverage alone.
+Both issues are now corrected.
+
+### Real full-cycle proof candidate
+
+The current real pinned-server test now performs:
+
+```text
+ClientInfo
+→ NPC audit authentication
+→ character create/select
+→ EnterGame / WorldReady
+→ starter InventoryState
+→ authoritative movement
+→ Radiance
+→ server AbilityCooldowns
+→ Unequip worn_iron_sword
+→ InventoryUpdated
+→ DropItem
+→ GroundItem semantic LOOT
+→ PickupItem
+→ InventoryUpdated
+→ EquipItem
+→ InventoryUpdated
+→ disconnect
+→ reconnect same account
+→ same character returned
+→ EnterGame
+→ equipped sword persisted
+→ position persisted
+```
+
+The test deliberately uses only original server rules and starter equipment.
+No test-only DB mutation or invented loot is required.
+
+Pinned-source basis:
+
+- ordinary new characters start with:
+  - `worn_iron_sword` equipped in `main_hand`
+  - `worn_torch` in the bag
+- Radiance is usable without a target or special equipment
+- disconnect/session replacement calls
+  `persist_and_detach_player` under the server persistence/session locks before the
+  replacement login reads character data
+
+Therefore reconnect itself is the persistence synchronization barrier; the test does not
+depend on an arbitrary sleep.
+
+### CI Gate coverage fix
+
+`.github/workflows/idea2-openmmo-adapter.yml` now also reacts to:
+
+- `src/game/**`
+- `src/features/game/ui/GameScreen.tsx`
+- `src/styles.css`
+
+This prevents semantic gameplay/UI changes from bypassing the real OpenMMO regression Gate.
+
+### Current Gate state
+
+The latest validation / platform / Pages / real OpenMMO workflows for
+`b57d96a37d62bd74cb0421132db08c8251cc7047` were running at the last deliberate check.
+
+Do not mark M2 complete until those results are confirmed.
+
+Next order after the current Gate:
+
+1. confirm the current four workflow results once
+2. fix any failing Gate immediately
+3. if all applicable Gates pass, promote the candidate to the verified implementation HEAD
+4. record exact run IDs
+5. then verify the same full cycle through the explicit Text/Card app bootstrap surface
+6. close any remaining monster encounter/basic-attack runtime gap
+7. only then decide whether M2 meets its complete-cycle definition or requires one final runtime slice
 
 ---
 
