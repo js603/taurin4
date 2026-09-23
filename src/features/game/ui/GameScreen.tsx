@@ -126,6 +126,7 @@ export function GameScreen({
   );
   const card = getAttentionCard(state);
   const currentLocation = LOCATIONS[state.currentLocationId];
+  const openMmo = state.source === "openmmo";
 
   useEffect(() => {
     session.start();
@@ -165,10 +166,9 @@ export function GameScreen({
         <header className="world-header">
           <div>
             <p className="eyebrow">
-              {state.source === "openmmo" ? "OPENMMO · " : ""}
-              {currentLocation.subtitle}
+              {openMmo ? "OPENMMO · AUTHORITATIVE WORLD" : currentLocation.subtitle}
             </p>
-            <h1>{currentLocation.name}</h1>
+            <h1>{openMmo ? "OpenMMO World" : currentLocation.name}</h1>
           </div>
           <div className="world-clock">{formatTime(state.worldMinutes)}</div>
         </header>
@@ -190,7 +190,9 @@ export function GameScreen({
                   "이(가) " +
                   state.combat.enemy.distanceMeters +
                   "m 앞에서 공격 기회를 노리고 있다."
-                : currentLocation.description}
+                : openMmo
+                  ? "원본 OpenMMO 서버의 권위 상태를 Text/Card 이벤트로 표현하고 있다."
+                  : currentLocation.description}
           </p>
 
           {state.travel ? (
@@ -209,7 +211,7 @@ export function GameScreen({
           ) : null}
         </div>
 
-        {state.nearbyOpen ? (
+        {!openMmo && state.nearbyOpen ? (
           <div className="destination-stack" aria-label="이동 가능한 장소">
             {DESTINATION_IDS.map((id) => (
               <DestinationCard
@@ -232,18 +234,22 @@ export function GameScreen({
             {state.player.maxMp}
           </span>
           <div className="status-bar__actions">
-            <button
-              className="text-button"
-              type="button"
-              disabled={state.phase !== "exploration"}
-              onClick={() =>
-                send({
-                  type: state.nearbyOpen ? "CLOSE_NEARBY" : "OPEN_NEARBY",
-                })
-              }
-            >
-              {state.nearbyOpen ? "카드 닫기" : "주변 보기"}
-            </button>
+            {openMmo ? (
+              <span>SERVER AUTHORITATIVE</span>
+            ) : (
+              <button
+                className="text-button"
+                type="button"
+                disabled={state.phase !== "exploration"}
+                onClick={() =>
+                  send({
+                    type: state.nearbyOpen ? "CLOSE_NEARBY" : "OPEN_NEARBY",
+                  })
+                }
+              >
+                {state.nearbyOpen ? "카드 닫기" : "주변 보기"}
+              </button>
+            )}
           </div>
         </footer>
 
@@ -268,10 +274,12 @@ export function GameScreen({
         </div>
       </section>
 
-      <section className="network-controls" aria-label="LAN network controls">
-        <HostControl />
-        <LanClientControl />
-      </section>
+      {!openMmo ? (
+        <section className="network-controls" aria-label="LAN network controls">
+          <HostControl />
+          <LanClientControl />
+        </section>
+      ) : null}
     </main>
   );
 }
