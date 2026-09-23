@@ -182,6 +182,7 @@ export type GameCommand =
       targetPlayerId?: number;
     }
   | { type: "PICKUP_ITEM"; instanceId: number }
+  | { type: "DROP_ITEM"; instanceId: number }
   | { type: "EQUIP_ITEM"; instanceId: number }
   | { type: "UNEQUIP_ITEM"; slot: string }
   | { type: "COLLECT_REWARD" };
