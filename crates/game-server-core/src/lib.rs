@@ -402,6 +402,11 @@ impl Drop for ClientCountGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::thread;
+    use taurin4_game_network::{
+        decode_server_message, encode_client_message, ClientPlatform, ServerControlMessage,
+    };
+    use tokio_tungstenite::connect_async;
 
     #[test]
     fn host_can_start_on_an_ephemeral_loopback_port_and_stop() {
@@ -422,5 +427,124 @@ mod tests {
         let stopped = controller.stop().expect("stop host");
         assert!(!stopped.running);
         assert_eq!(stopped.connected_clients, 0);
+    }
+
+    #[test]
+    fn websocket_client_completes_handshake_ping_disconnect_and_reconnect() {
+        let controller = HostController::new();
+        let started = controller
+            .start(HostConfig {
+                host_name: "pc-a".into(),
+                port: 0,
+                lan_visible: false,
+            })
+            .expect("start host");
+        let port = started.port.expect("host port");
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .enable_time()
+            .build()
+            .expect("client runtime");
+
+        runtime.block_on(async {
+            async fn verify_session(
+                port: u16,
+                client_id: &str,
+            ) -> tokio_tungstenite::WebSocketStream<
+                tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+            > {
+                let (mut socket, _) = connect_async(format!("ws://127.0.0.1:{port}"))
+                    .await
+                    .expect("connect client");
+
+                let host_hello = socket
+                    .next()
+                    .await
+                    .expect("host hello frame")
+                    .expect("host hello websocket frame")
+                    .into_text()
+                    .expect("host hello text");
+                assert_eq!(
+                    decode_server_message(host_hello.as_ref()).expect("decode host hello"),
+                    ServerControlMessage::HostHello {
+                        protocol_version: LAN_PROTOCOL_VERSION,
+                        host_name: "pc-a".into(),
+                    }
+                );
+
+                let hello = encode_client_message(&ClientControlMessage::Hello {
+                    client_id: client_id.into(),
+                    platform: ClientPlatform::Windows,
+                })
+                .expect("encode client hello");
+                socket
+                    .send(Message::Text(hello.into()))
+                    .await
+                    .expect("send client hello");
+
+                let accepted = socket
+                    .next()
+                    .await
+                    .expect("accepted frame")
+                    .expect("accepted websocket frame")
+                    .into_text()
+                    .expect("accepted text");
+                assert_eq!(
+                    decode_server_message(accepted.as_ref()).expect("decode accepted"),
+                    ServerControlMessage::ClientAccepted {
+                        client_id: client_id.into(),
+                    }
+                );
+
+                let ping = encode_client_message(&ClientControlMessage::Ping { nonce: 42 })
+                    .expect("encode ping");
+                socket
+                    .send(Message::Text(ping.into()))
+                    .await
+                    .expect("send ping");
+
+                let pong = socket
+                    .next()
+                    .await
+                    .expect("pong frame")
+                    .expect("pong websocket frame")
+                    .into_text()
+                    .expect("pong text");
+                assert_eq!(
+                    decode_server_message(pong.as_ref()).expect("decode pong"),
+                    ServerControlMessage::Pong { nonce: 42 }
+                );
+
+                socket
+            }
+
+            let mut first = verify_session(port, "pc-b").await;
+            assert_eq!(controller.snapshot().connected_clients, 1);
+            first.close(None).await.expect("close first client");
+
+            for _ in 0..20 {
+                if controller.snapshot().connected_clients == 0 {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(10));
+            }
+            assert_eq!(controller.snapshot().connected_clients, 0);
+
+            let mut second = verify_session(port, "pc-b").await;
+            assert_eq!(controller.snapshot().connected_clients, 1);
+            second.close(None).await.expect("close reconnected client");
+        });
+
+        for _ in 0..20 {
+            if controller.snapshot().connected_clients == 0 {
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(controller.snapshot().connected_clients, 0);
+
+        let stopped = controller.stop().expect("stop host");
+        assert!(!stopped.running);
     }
 }
