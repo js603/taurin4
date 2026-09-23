@@ -282,6 +282,27 @@ async function waitForObserved<T>(
   );
 }
 
+async function observeOptional<T>(
+  observed: readonly unknown[],
+  variant: string,
+  predicate: (payload: T) => boolean,
+  options: { startIndex?: number; windowMs?: number } = {},
+): Promise<T | null> {
+  const startIndex = options.startIndex ?? 0;
+  const windowMs = options.windowMs ?? 1_500;
+  const deadline = Date.now() + windowMs;
+
+  while (Date.now() < deadline) {
+    for (let index = startIndex; index < observed.length; index += 1) {
+      const payload = wirePayload<T>(observed[index], variant);
+      if (payload && predicate(payload)) return payload;
+    }
+    await delay(20);
+  }
+
+  return null;
+}
+
 function dungeonOrigin(constants: DungeonConstants) {
   return {
     x: Math.floor(OLD_CRYPT.x) - constants.grid / 2,
@@ -1090,17 +1111,95 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
         expect(xp.xp_amount).toBeGreaterThan(0);
 
         // Kobold item drops are probabilistic (weapon 10%, apple 1% plus
-        // world-drop rolls). Their presence is observed but never required,
-        // keeping this authoritative kill Gate deterministic.
-        await delay(700);
-        const optionalLoot = session
-          .getSnapshot()
-          .semanticDestinations?.filter(
-            (destination) =>
-              destination.kind === "loot" &&
-              destination.floorLevel === -1,
+        // world-drop rolls). A drop is never required, but when the original
+        // RNG does create one this Gate must prove the real GroundItem path all
+        // the way through semantic observation and authoritative pickup.
+        const optionalGroundItem = await observeOptional<{
+          item: {
+            instance_id: number;
+            item_def_id: string;
+            position: { x: number; y: number; z: number };
+            floor_level: number;
+          };
+        }>(
+          observed,
+          "GroundItemSpawned",
+          (payload) => payload.item.floor_level === -1,
+          { startIndex: combatStart, windowMs: 1_500 },
+        );
+
+        if (optionalGroundItem) {
+          const item = optionalGroundItem.item;
+          const semanticLootId = "loot:" + item.instance_id;
+
+          await waitForSession(
+            session,
+            () =>
+              session
+                .getSnapshot()
+                .semanticDestinations?.some(
+                  (destination) => destination.id === semanticLootId,
+                ) ?? false,
+            2_000,
           );
-        expect(optionalLoot).toBeDefined();
+
+          const lootDestination = session
+            .getSnapshot()
+            .semanticDestinations?.find(
+              (destination) => destination.id === semanticLootId,
+            );
+          const playerPosition = session.getSnapshot().player.position;
+          if (!lootDestination || !playerPosition) {
+            throw new Error("Real kobold drop was not projected into Text/Card loot state");
+          }
+
+          if (lootDestination.distanceMeters > 0.7) {
+            const lootPath = pathResult(
+              wasm.passability_find_path_budget(
+                playerPosition.x,
+                playerPosition.z,
+                constants.floorIndexBase,
+                item.position.x,
+                item.position.z,
+                constants.floorIndexBase,
+                constants.pathMaxNodes,
+              ),
+            );
+            if (!lootPath.found || lootPath.waypoints.length === 0) {
+              throw new Error("Real kobold drop spawned but no authentic pickup path exists");
+            }
+            await queueDungeonPath(adapter, session, wasm, lootPath, 15_000);
+          }
+
+          const pickupStart = observed.length;
+          session.command({
+            type: "PICKUP_ITEM",
+            instanceId: item.instance_id,
+          });
+
+          await waitForObserved<{ instance_id: number }>(
+            observed,
+            "GroundItemRemoved",
+            (payload) => payload.instance_id === item.instance_id,
+            { startIndex: pickupStart, timeoutMs: 5_000 },
+          );
+          await waitForObserved<Record<string, unknown>>(
+            observed,
+            "InventoryUpdated",
+            () => true,
+            { startIndex: pickupStart, timeoutMs: 5_000 },
+          );
+          await waitForSession(
+            session,
+            () =>
+              !session
+                .getSnapshot()
+                .semanticDestinations?.some(
+                  (destination) => destination.id === semanticLootId,
+                ),
+            2_000,
+          );
+        }
       } finally {
         wasm.dungeon_remove_passability(OLD_CRYPT.id);
         unsubscribeProbe();
