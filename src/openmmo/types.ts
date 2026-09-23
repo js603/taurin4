@@ -81,6 +81,13 @@ export type OpenMmoClientMessage =
       };
     };
 
+export interface OpenMmoWorldEvent {
+  subject: string;
+  revision: number;
+  change: "Enter" | "Update" | "Leave" | "Delete";
+  messages: unknown[];
+}
+
 export type OpenMmoServerMessage =
   | {
       AuthSuccess: {
@@ -101,6 +108,18 @@ export type OpenMmoServerMessage =
   | { CharacterRenameRequired: { character_id: number } }
   | { CharacterError: { message: string } }
   | { JoinSuccess: Record<string, unknown> }
+  | {
+      WorldUpdate: {
+        world_epoch: string;
+        generation: number;
+        sequence: number;
+        position: OpenMmoPosition;
+        floor_level: number;
+        reset: boolean;
+        ready: boolean;
+        events: OpenMmoWorldEvent[];
+      };
+    }
   | { GameTimeSync: Record<string, unknown> }
   | {
       PlayerMoved: {
