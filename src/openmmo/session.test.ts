@@ -5,6 +5,7 @@ import type { OpenMmoServerMessage } from "./types";
 class FakeAdapter {
   private listener: ((message: OpenMmoServerMessage) => void) | null = null;
   sendAttack = vi.fn(() => true);
+  sendMove = vi.fn(() => true);
   requestRespawn = vi.fn(() => true);
 
   subscribeMessages(listener: (message: OpenMmoServerMessage) => void) {
@@ -90,6 +91,59 @@ describe("OpenMmoGameSession", () => {
 
     session.command({ type: "ATTACK" });
     expect(adapter.sendAttack).toHaveBeenCalledWith("wolf-7");
+  });
+
+  it("sends movement requests but updates position only from server authority", () => {
+    const adapter = new FakeAdapter();
+    const session = new OpenMmoGameSession(adapter);
+    session.start();
+
+    adapter.emit({
+      JoinSuccess: {
+        player: {
+          id: 11,
+          name: "ScoutMira",
+          health: 30,
+          max_health: 30,
+          position: { x: 1, y: 0, z: 2 },
+          rotation: 0,
+          floor_level: 0,
+        },
+      },
+    });
+
+    session.command({
+      type: "MOVE_TO",
+      position: { x: 5, y: 0, z: 7 },
+      rotation: 1.5,
+      floorLevel: 0,
+      sprinting: true,
+    });
+
+    expect(adapter.sendMove).toHaveBeenCalledWith(
+      { x: 5, y: 0, z: 7 },
+      1.5,
+      0,
+      { append: undefined, sprinting: true },
+    );
+    expect(session.getSnapshot().player.position).toEqual({ x: 1, y: 0, z: 2 });
+
+    adapter.emit({
+      PlayerMoved: {
+        player_id: 11,
+        position: { x: 5, y: 0, z: 7 },
+        rotation: 1.5,
+        floor_level: 0,
+        sprinting: true,
+      },
+    });
+
+    expect(session.getSnapshot().player).toMatchObject({
+      position: { x: 5, y: 0, z: 7 },
+      rotation: 1.5,
+      floorLevel: 0,
+      sprinting: true,
+    });
   });
 
   it("maps authoritative combat, loot, death and respawn events", () => {
