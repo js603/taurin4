@@ -63,9 +63,10 @@ function abilityLabel(id: string) {
     .join(" ");
 }
 
-function semanticKindLabel(kind: "monster" | "player" | "loot") {
+function semanticKindLabel(kind: "monster" | "player" | "npc" | "loot") {
   if (kind === "monster") return "MONSTER";
   if (kind === "player") return "PLAYER";
+  if (kind === "npc") return "NPC";
   return "LOOT";
 }
 
