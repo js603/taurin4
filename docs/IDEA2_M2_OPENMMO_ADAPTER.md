@@ -36,6 +36,8 @@ Files:
 - `src/openmmo/transport.ts`
 - `src/openmmo/adapter.ts`
 - `src/openmmo/adapter.test.ts`
+- `src/openmmo/real.integration.test.ts`
+- `.github/workflows/idea2-openmmo-adapter.yml`
 
 Implemented lifecycle:
 
@@ -100,10 +102,15 @@ The adapter unit test verifies:
 These tests use a fake codec/transport. They prove orchestration, not the real
 MessagePack/WASM/server path.
 
-## M2 next Gate
+## M2 real-codec Gate — IMPLEMENTED / RUNNING
 
-The next Gate must use the **real pinned OpenMMO shared WASM codec** and the **real
-pinned OpenMMO server**.
+The real integration Gate is now implemented. It builds the exact pinned OpenMMO
+shared crate as Node-target WASM, boots the exact pinned OpenMMO server with an empty
+terrain directory, and runs taurin4's adapter against it through a real binary WebSocket.
+
+Workflow: `.github/workflows/idea2-openmmo-adapter.yml`
+
+The Gate must prove:
 
 Required proof:
 
@@ -137,8 +144,8 @@ After the real adapter path is proven:
 
 ## Not yet complete
 
-- real pinned WASM codec is not yet bundled/injected into taurin4 runtime
-- adapter has not yet connected from taurin4 to the real OpenMMO server
+- real pinned WASM codec/server integration workflow is implemented but its current run has not yet been declared successful
+- production runtime packaging of the pinned codec is not yet wired into the normal taurin4 app
 - `OpenMmoGameSession` semantic state mapper is not yet implemented
 - character UI is not yet wired to the adapter
 - movement/combat/loot/inventory event translation is not yet implemented
