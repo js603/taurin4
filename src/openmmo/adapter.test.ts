@@ -223,6 +223,20 @@ describe("OpenMmoAdapter", () => {
     expect(transport.sent.at(-1)).toEqual({
       UnequipItem: { slot: "main_hand" },
     });
+
+    expect(adapter.toggleDungeonDoor("old_crypt", 1, 42)).toBe(true);
+    expect(transport.sent.at(-1)).toEqual({
+      ToggleDungeonDoor: {
+        entrance_id: "old_crypt",
+        depth: 1,
+        door_id: 42,
+      },
+    });
+
+    expect(adapter.requestDungeonDoors("old_crypt")).toBe(true);
+    expect(transport.sent.at(-1)).toEqual({
+      RequestDungeonDoors: { entrance_id: "old_crypt" },
+    });
   });
 
   it("answers GameTimeSync with Heartbeat", () => {
