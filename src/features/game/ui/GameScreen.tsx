@@ -112,8 +112,13 @@ function FloatingAttention({
   );
 }
 
-export function GameScreen() {
-  const [session] = useState<GameSession>(() => createLocalGameSession());
+export function GameScreen({
+  session: providedSession,
+}: {
+  session?: GameSession;
+} = {}) {
+  const [localSession] = useState<GameSession>(() => createLocalGameSession());
+  const session = providedSession ?? localSession;
   const state = useSyncExternalStore(
     session.subscribe,
     session.getSnapshot,
@@ -159,7 +164,10 @@ export function GameScreen() {
       >
         <header className="world-header">
           <div>
-            <p className="eyebrow">{currentLocation.subtitle}</p>
+            <p className="eyebrow">
+              {state.source === "openmmo" ? "OPENMMO · " : ""}
+              {currentLocation.subtitle}
+            </p>
             <h1>{currentLocation.name}</h1>
           </div>
           <div className="world-clock">{formatTime(state.worldMinutes)}</div>
