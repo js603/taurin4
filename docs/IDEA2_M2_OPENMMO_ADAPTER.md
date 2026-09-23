@@ -145,11 +145,13 @@ After the real adapter path is proven:
 ## Not yet complete
 
 - real pinned WASM codec/server integration workflow: **PASS**
-- production runtime packaging of the pinned codec is not yet wired into the normal taurin4 app
-- `OpenMmoGameSession` semantic state mapper is not yet implemented
-- character UI is not yet wired to the adapter
-- movement/combat/loot/inventory event translation is not yet implemented
-- final local/LAN player identity replacement is not yet implemented
+- `OpenMmoGameSession` semantic mapper: implemented
+- Text/Card character lifecycle UI: implemented
+- explicit app bootstrap: implemented, current validation pending
+- movement mapping: not yet implemented
+- combat translation: initial attack/damage/death mapping implemented, deeper ability/reaction mapping pending
+- loot translation: initial GroundItem semantic event implemented, inventory UI/update mapping pending
+- final local/LAN player identity replacement: not yet implemented
 
 Do not call M2 complete until the taurin4 UI completes the full real OpenMMO gameplay
 cycle defined in the MASTER RECORD.
@@ -204,8 +206,67 @@ Implemented:
   - rename
   - 3-slot limit matching the audited original UI
 
-Current limitation:
+The normal app intentionally still defaults to LocalGameSession.
 
-The normal app bootstrap still defaults to LocalGameSession. The next step is an explicit
-OpenMMO bootstrap path that loads/provides the verified pinned codec and transitions from
-the character lobby into the same GameScreen.
+## Phase 4 — explicit real app bootstrap
+
+Implemented candidate:
+
+```text
+taurin4 launch
+  ├─ default → LocalGameSession
+  └─ ?runtime=openmmo
+       ↓
+     OpenMmoBootstrap
+       ↓
+     browser WASM codec load
+       ↓
+     real OpenMMO WebSocket
+       ↓
+     temporary NPC-token M2 authentication
+       ↓
+     Text/Card Character Lobby
+       ↓
+     EnterGame
+       ↓
+     OpenMmoGameSession
+       ↓
+     same GameScreen
+```
+
+Files:
+
+- `src/features/game/ui/OpenMmoBootstrap.tsx`
+- `src/openmmo/browserCodec.ts`
+- `src/app/runtimeMode.ts`
+- `scripts/prepare-openmmo-codec.mjs`
+
+Local codec preparation deliberately uses a separate OpenMMO checkout:
+
+```powershell
+$env:OPENMMO_SOURCE_DIR = "G:\path\to\OpenMMO"
+npm run openmmo:codec
+```
+
+The script refuses any OpenMMO checkout whose HEAD is not exactly:
+
+```text
+950e081c178d920c10c51f2d31f60c1b3383c925
+```
+
+Generated files go to `public/openmmo-wasm/` and are gitignored.
+
+Development bootstrap URL:
+
+```text
+?runtime=openmmo
+```
+
+Default fields:
+
+- server: `ws://127.0.0.1:10006`
+- codec: `<BASE_URL>/openmmo-wasm/onlinerpg_shared.js`
+- account: `npc_idea2_player`
+- NPC token: entered manually and never persisted
+
+NPC-token authentication is still an M2 engineering path, not the final player identity policy.
