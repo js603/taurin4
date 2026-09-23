@@ -10,7 +10,8 @@
 - Repository: `js603/taurin4`
 - Branch: `idea2`
 - Base checkpoint: `370688fc7d712e823206510d9b972af0fab30e88`
-- Last verified implementation HEAD: `1b6f94f14fc6d6cc8df9bc063f2c779739db474a`
+- Last verified implementation HEAD: `a2ce2dc3556412e588a35f6534bb3258b8fb399f`
+- Latest M2 implementation candidate HEAD: `fc5b97cc325e7e2cbf50512d2b64def261e99932` (validation pending at last check)
 - Note: documentation-only commits may advance the branch HEAD. Every new session must query the actual `idea2` HEAD before work.
 - GitHub Pages preview: `https://js603.github.io/taurin4/idea2/`
 - OpenMMO reference repository: `Julian-adv/OpenMMO`
@@ -691,6 +692,10 @@ Phase 1 and early Phase 2 implementation are now present:
 - `src/openmmo/session.test.ts`
 - `src/openmmo/runtime.ts`
 - `src/features/game/ui/OpenMmoCharacterLobby.tsx`
+- `src/features/game/ui/OpenMmoBootstrap.tsx`
+- `src/openmmo/browserCodec.ts`
+- `src/app/runtimeMode.ts`
+- `scripts/prepare-openmmo-codec.mjs`
 - `docs/IDEA2_M2_OPENMMO_ADAPTER.md`
 
 Implemented adapter flow:
@@ -862,15 +867,28 @@ this file.
 
 M1.5 is complete and the real M2 codec/server Gate has passed.
 
+Implemented in the current candidate:
+
+- LocalGameSession remains the default app runtime.
+- `?runtime=openmmo` opens the explicit M2 OpenMMO bootstrap.
+- bootstrap loads a generated browser WASM codec, connects to the real OpenMMO WebSocket,
+  authenticates with the temporary NPC-token M2 path, opens the Text/Card character lobby,
+  then transitions into the same `GameScreen` backed by `OpenMmoGameSession`.
+- NPC token is kept only in React memory and is not persisted.
+- `npm run openmmo:codec` builds the exact audited OpenMMO shared crate from a separate
+  pinned checkout supplied through `OPENMMO_SOURCE_DIR`.
+- generated browser codec files live under `public/openmmo-wasm/` and are gitignored.
+- the OpenMMO CI Gate now also builds the browser-target codec and verifies it is included
+  in the taurin4 production bundle.
+
 Next implementation order:
 
-1. confirm latest validation for semantic session/runtime/lobby once
-2. wire an explicit OpenMMO runtime bootstrap path while preserving LocalGameSession as default
-3. connect Text/Card character lobby to that runtime bootstrap
-4. expose real OpenMMO GameScreen after character entry
-5. add authoritative movement mapping
-6. continue combat/loot/inventory translation incrementally
-7. keep the pinned real-server integration workflow as a regression Gate
+1. confirm validation of the current bootstrap candidate once
+2. if successful, record the new verified implementation HEAD
+3. add authoritative movement mapping
+4. continue combat/loot/inventory translation incrementally
+5. replace NPC-token player bootstrap with the final LAN/local identity design later
+6. keep the pinned real-server integration workflow as a regression Gate
 
 Do not claim M2 runtime integration success while the adapter is still using only mock codec/transport tests.
 
