@@ -184,3 +184,28 @@ simulation or semantic OpenMMO state.
 
 Phase 2 is not yet wired as the default app runtime. The next step is character/lifecycle
 UI and runtime bootstrap selection.
+
+
+## Phase 3 — runtime/lobby bridge
+
+Implemented:
+
+- `src/openmmo/runtime.ts`
+  - creates a production `OpenMmoAdapter + OpenMmoGameSession` pair from injected pinned WASM exports
+- `GameScreen` now accepts an optional `GameSession`
+  - LocalGameSession remains the default
+  - OpenMmoGameSession can render through the same UI
+- `OpenMmoCharacterLobby`
+  - character list
+  - stat roll
+  - create
+  - select / EnterGame
+  - delete
+  - rename
+  - 3-slot limit matching the audited original UI
+
+Current limitation:
+
+The normal app bootstrap still defaults to LocalGameSession. The next step is an explicit
+OpenMMO bootstrap path that loads/provides the verified pinned codec and transitions from
+the character lobby into the same GameScreen.
