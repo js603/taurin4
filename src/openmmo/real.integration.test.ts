@@ -13,10 +13,6 @@ const serverUrl = process.env.OPENMMO_SERVER_URL;
 const npcToken = process.env.OPENMMO_NPC_TOKEN;
 const enabled = Boolean(wasmModulePath && serverUrl && npcToken);
 
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function waitForConnected(adapter: OpenMmoAdapter, timeoutMs = 5_000) {
   if (adapter.getSnapshot().phase === "connected") {
     return Promise.resolve();
@@ -213,7 +209,11 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
         () => {
           const current = session.getSnapshot().player.position;
           return Boolean(
-            current && Math.abs(current.x - initialPosition.x) > 0.01,
+            current &&
+              Math.hypot(
+                current.x - target.x,
+                current.z - target.z,
+              ) < 0.08,
           );
         },
         8_000,
@@ -306,8 +306,10 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
 
       session.stop();
       adapter.disconnect();
-      await delay(350);
 
+      // The pinned server serializes account-session replacement with
+      // persist_and_detach_player. A reconnect therefore becomes the
+      // deterministic persistence barrier; no arbitrary sleep is required.
       const second = await connectAndAuthenticate(codec, accountName);
       const persistedCharacter = second.auth.characters.find(
         (item) => item.id === character.id && item.name === character.name,
