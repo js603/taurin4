@@ -696,6 +696,7 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
     45_000,
   );
 
+  // PR validation probe: executes the same authoritative old_crypt Gate.
   it(
     "enters old_crypt and kills a real server-spawned kobold",
     async () => {
