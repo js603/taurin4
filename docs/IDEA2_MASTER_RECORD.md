@@ -572,11 +572,13 @@ Initial connection may use manual host address.
 M1 completion is based only on Windows PC↔PC runtime testing.
 Android LAN runtime is excluded from the current Gate.
 
-### M1.5 — OpenMMO Original Runtime & Flow Audit — IN PROGRESS
+### M1.5 — OpenMMO Original Runtime & Flow Audit — COMPLETE
 
 This is a formal verification milestone.
 
-Verified so far:
+Completion evidence: run `35887895372` — **SUCCESS**.
+
+Verified:
 
 - pinned original server build: PASS
 - original server real process startup: PASS
@@ -704,8 +706,7 @@ connect
 
 The mock orchestration tests are implemented, and a second Gate now builds the real pinned
 OpenMMO shared WASM codec and boots the real pinned OpenMMO server before running taurin4's
-adapter against them. That real integration workflow is currently running; do not mark it PASS
-until its workflow result is confirmed.
+adapter against them. The taurin4 adapter has now completed ClientInfo → NPC audit auth → character lifecycle → EnterGame → WorldReady against the real pinned OpenMMO server and real shared WASM codec.
 
 First success definition:
 
@@ -853,22 +854,20 @@ this file.
 
 ## 16. Next exact action
 
-**M1.5 final Gate + M2 real-codec integration**
+**M2 — character/lifecycle UI + runtime bootstrap**
 
-M1.5 gameplay-system workflow has been launched and must be checked once on the next
-verification pass. Do not poll it repeatedly.
-
-In parallel, M2 Phase 1 is implemented.
+M1.5 is complete and the real M2 codec/server Gate has passed.
 
 Next implementation order:
 
-1. confirm the M1.5 original gameplay-system Gate result once
-2. if successful, mark M1.5 COMPLETE
-3. confirm the real M2 adapter integration workflow once
-4. if successful, record real pinned codec/server proof
-5. then implement `OpenMmoGameSession` semantic world mapping
-9. then wire Text/Card character select/create UI
-10. continue with movement/combat/loot/inventory translation
+1. finish validation of the new `OpenMmoGameSession` semantic mapper
+2. add runtime bootstrap selection without removing `LocalGameSession`
+3. implement Text/Card character list / create / select flow
+4. wire the OpenMMO lifecycle adapter into that UI
+5. expose real world/player/monster semantic state in the main GameScreen
+6. add movement mapping
+7. add combat/loot/inventory translation incrementally
+8. keep the pinned real-server integration workflow as a regression Gate
 
 Do not claim M2 runtime integration success while the adapter is still using only mock codec/transport tests.
 
