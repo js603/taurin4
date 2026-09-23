@@ -5,6 +5,10 @@ import type { OpenMmoServerMessage } from "./types";
 class FakeAdapter {
   private listener: ((message: OpenMmoServerMessage) => void) | null = null;
   sendAttack = vi.fn(() => true);
+  useAbility = vi.fn(() => true);
+  pickupItem = vi.fn(() => true);
+  equipItem = vi.fn(() => true);
+  unequipItem = vi.fn(() => true);
   sendMove = vi.fn(() => true);
   requestRespawn = vi.fn(() => true);
 
@@ -254,6 +258,62 @@ describe("OpenMmoGameSession", () => {
       floorLevel: 0,
       sprinting: true,
     });
+  });
+
+  it("maps inventory and ability cooldowns and sends gameplay commands", () => {
+    const adapter = new FakeAdapter();
+    const session = new OpenMmoGameSession(adapter);
+    session.start();
+
+    adapter.emit({
+      InventoryState: {
+        inventory: {
+          bag: [
+            {
+              instance_id: 41,
+              item_def_id: "iron_sword",
+              quantity: 1,
+              enchant: 2,
+              locked: false,
+            },
+          ],
+          equipped: {},
+          active_ammo: null,
+        },
+      },
+    });
+    adapter.emit({
+      AbilityCooldowns: {
+        cooldowns: [
+          { ability: "bow_mark", remaining_ms: 4200 },
+        ],
+      },
+    });
+
+    expect(session.getSnapshot().inventory?.bag[0]).toMatchObject({
+      instanceId: 41,
+      itemDefId: "iron_sword",
+      enchant: 2,
+    });
+    expect(
+      session.getSnapshot().abilities?.find((ability) => ability.id === "bow_mark"),
+    ).toEqual({ id: "bow_mark", remainingMs: 4200 });
+
+    session.command({ type: "EQUIP_ITEM", instanceId: 41 });
+    expect(adapter.equipItem).toHaveBeenCalledWith(41);
+
+    session.command({
+      type: "USE_ABILITY",
+      ability: "bow_mark",
+      monsterId: "wolf-7",
+    });
+    expect(adapter.useAbility).toHaveBeenCalledWith("bow_mark", {
+      monsterId: "wolf-7",
+      targetPlayerId: undefined,
+    });
+
+    session.command({ type: "PICKUP_ITEM", instanceId: 77 });
+    expect(adapter.pickupItem).toHaveBeenCalledWith(77);
   });
 
   it("maps authoritative combat, loot, death and respawn events", () => {
