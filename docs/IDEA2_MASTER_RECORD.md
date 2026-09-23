@@ -1017,6 +1017,59 @@ the explicit Text/Card app-surface proof before M3.
 
 ---
 
+
+### Current old_crypt Gate candidate — 2026-09-24
+
+Implementation candidate:
+
+`b80d165213bdf82f9e9502f53bb3e85082123288`
+
+Status: **IMPLEMENTED-NOT-VERIFIED**
+
+The existing candidate integration slice now contains an executable real-server proof for:
+
+```text
+old_crypt real entry
+→ authoritative floor -1
+→ real MonsterSpawned
+→ semantic MONSTER destination
+→ GameScreen Text/Card MONSTER projection
+→ authentic dungeon door/path approach
+→ real PlayerAttack
+→ authoritative PlayerAttacked
+→ MonsterDead
+→ XpGained tied to the killed monster
+→ if original RNG creates GroundItem:
+     semantic LOOT observation
+     → authentic approach when required
+     → PickupItem
+     → GroundItemRemoved
+     → InventoryUpdated
+```
+
+Important verification details confirmed against the exact pinned OpenMMO revision:
+
+- `XpGained` includes `monster_id: Option<String>`; tying XP to the killed kobold is authentic.
+- normal engineering `npc_` accounts still receive the standard starter `worn_iron_sword`; only registered world NPC names skip starter gear.
+- `GameScreen` renders `semanticDestinations` as Text/Card buttons and labels monster destinations as `MONSTER`.
+- probabilistic dungeon loot remains observational only and is never required for PASS.
+- commit `b80d1652...` strengthened the optional-drop branch so a real drop, when produced, must be picked up and acknowledged by both `GroundItemRemoved` and `InventoryUpdated`.
+
+Validation state at this checkpoint:
+
+- branch HEAD immediately after the implementation commit matched `b80d165213bdf82f9e9502f53bb3e85082123288`
+- the connected GitHub status surface exposed no push-triggered Actions run/status yet
+- no repeated CI polling was performed
+- therefore the dungeon Gate is **not** marked PASS yet
+
+Exact next verification action:
+
+1. inspect the next meaningful Actions checkpoint for implementation `b80d1652...`
+2. if the real pinned OpenMMO job fails, inspect only the failing job/step log first
+3. fix the shortest authentic failure path without dropping any Gate requirement
+4. if the real Gate passes, promote the verified implementation baseline and then perform the explicit Text/Card app-surface proof before M3
+
+
 ## 17. New-chat bootstrap
 
 When starting a new ChatGPT conversation, use this instruction:
