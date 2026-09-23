@@ -116,6 +116,7 @@ export type OpenMmoClientMessage =
       };
     }
   | { PickupItem: { instance_id: number } }
+  | { DropItem: { instance_id: number } }
   | { EquipItem: { instance_id: number } }
   | { UnequipItem: { slot: OpenMmoEquipSlot } }
   | {
