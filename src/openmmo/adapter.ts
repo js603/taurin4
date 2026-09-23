@@ -48,6 +48,9 @@ function payloadOf<T>(message: OpenMmoServerMessage, variant: string): T {
 export class OpenMmoAdapter {
   private snapshot: OpenMmoAdapterSnapshot = INITIAL_SNAPSHOT;
   private readonly listeners = new Set<() => void>();
+  private readonly messageListeners = new Set<
+    (message: OpenMmoServerMessage) => void
+  >();
   private readonly pending = new Set<PendingRequest>();
   private readonly codec: OpenMmoCodec;
   private readonly transport: OpenMmoTransport;
@@ -67,6 +70,13 @@ export class OpenMmoAdapter {
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  };
+
+  subscribeMessages = (
+    listener: (message: OpenMmoServerMessage) => void,
+  ) => {
+    this.messageListeners.add(listener);
+    return () => this.messageListeners.delete(listener);
   };
 
   connect(endpoint: string) {
@@ -486,6 +496,8 @@ export class OpenMmoAdapter {
       pending.resolve(message);
       break;
     }
+
+    this.messageListeners.forEach((listener) => listener(message));
   }
 
   private messageFromError(
