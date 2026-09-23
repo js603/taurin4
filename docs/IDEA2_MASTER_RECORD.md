@@ -10,7 +10,7 @@
 - Repository: `js603/taurin4`
 - Branch: `idea2`
 - Base checkpoint: `370688fc7d712e823206510d9b972af0fab30e88`
-- Last verified implementation HEAD: `dcdd42b927cc4b0c4a80284cdc25347575c383c0`
+- Last verified implementation HEAD: `a2ce2dc3556412e588a35f6534bb3258b8fb399f`
 - Note: documentation-only commits may advance the branch HEAD. Every new session must query the actual `idea2` HEAD before work.
 - GitHub Pages preview: `https://js603.github.io/taurin4/idea2/`
 - OpenMMO reference repository: `Julian-adv/OpenMMO`
@@ -683,6 +683,8 @@ Phase 1 implementation is now present:
 - `src/openmmo/transport.ts`
 - `src/openmmo/adapter.ts`
 - `src/openmmo/adapter.test.ts`
+- `src/openmmo/real.integration.test.ts`
+- `.github/workflows/idea2-openmmo-adapter.yml`
 - `docs/IDEA2_M2_OPENMMO_ADAPTER.md`
 
 Implemented adapter flow:
@@ -700,9 +702,10 @@ connect
 → GameTimeSync → Heartbeat
 ```
 
-This is currently a tested orchestration layer using an injected codec/transport.
-It is **not yet proof of taurin4 talking to the real OpenMMO server**. The next M2 Gate
-must inject the real pinned shared WASM codec and connect to the real pinned server.
+The mock orchestration tests are implemented, and a second Gate now builds the real pinned
+OpenMMO shared WASM codec and boots the real pinned OpenMMO server before running taurin4's
+adapter against them. That real integration workflow is currently running; do not mark it PASS
+until its workflow result is confirmed.
 
 First success definition:
 
@@ -861,12 +864,9 @@ Next implementation order:
 
 1. confirm the M1.5 original gameplay-system Gate result once
 2. if successful, mark M1.5 COMPLETE
-3. build/package the pinned OpenMMO shared WASM codec as an integration dependency
-4. inject that real codec into `OpenMmoAdapter`
-5. start the real pinned OpenMMO server in an isolated integration environment
-6. connect taurin4 adapter through binary WebSocket
-7. prove ClientInfo → NPC audit auth → character list → EnterGame → WorldReady → Heartbeat
-8. only after that real path passes, implement `OpenMmoGameSession` semantic world mapping
+3. confirm the real M2 adapter integration workflow once
+4. if successful, record real pinned codec/server proof
+5. then implement `OpenMmoGameSession` semantic world mapping
 9. then wire Text/Card character select/create UI
 10. continue with movement/combat/loot/inventory translation
 
