@@ -802,6 +802,44 @@ export class OpenMmoGameSession implements GameSession {
         return;
       }
 
+      case "PlayerAttackRejected": {
+        const payload = payloadOf<{
+          monster_id: string;
+          reason: string;
+        }>(message, variant);
+
+        const reasonText: Record<string, string> = {
+          invalid_target: "대상이 사라졌다.",
+          out_of_range: "공격 거리를 벗어났다.",
+          attacker_dead: "쓰러진 상태에서는 공격할 수 없다.",
+          out_of_ammo: "사용 가능한 탄약이 없다.",
+        };
+
+        if (
+          payload.reason === "invalid_target" &&
+          this.state.combat?.enemy.id === payload.monster_id
+        ) {
+          this.removeDestination("monster:" + payload.monster_id);
+          this.setState({
+            ...this.state,
+            phase: "exploration",
+            encounter: null,
+            combat: null,
+          });
+        }
+
+        this.setState(
+          addLog(
+            this.state,
+            "공격 거부: " +
+              (reasonText[payload.reason] ??
+                payload.reason.replaceAll("_", " ")),
+            "floating",
+          ),
+        );
+        return;
+      }
+
       case "MonsterDead": {
         const payload = payloadOf<{ monster_id: string }>(message, variant);
         this.removeDestination("monster:" + payload.monster_id);
