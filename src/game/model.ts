@@ -97,6 +97,33 @@ export interface RewardState {
   items: readonly string[];
 }
 
+export type AbilityId =
+  | "guardian_ward"
+  | "radiance"
+  | "bow_mark"
+  | "dagger_double_slash"
+  | "auscultation";
+
+export interface AbilityState {
+  id: AbilityId;
+  remainingMs: number;
+}
+
+export interface InventoryItemState {
+  instanceId: number;
+  itemDefId: string;
+  quantity: number;
+  enchant: number;
+  locked: boolean;
+  equippedSlot?: string;
+}
+
+export interface InventoryState {
+  bag: readonly InventoryItemState[];
+  equipped: readonly InventoryItemState[];
+  activeAmmo?: string | null;
+}
+
 export interface GameLogEntry {
   id: number;
   worldMinutes: number;
@@ -117,6 +144,8 @@ export interface GameState {
   reward: RewardState | null;
   semanticDestinations?: readonly SemanticDestination[];
   semanticTravel?: SemanticTravelState | null;
+  abilities?: readonly AbilityState[];
+  inventory?: InventoryState;
   logs: readonly GameLogEntry[];
   nextLogId: number;
 }
@@ -146,6 +175,15 @@ export type GameCommand =
       destinationId: string;
       sprinting?: boolean;
     }
+  | {
+      type: "USE_ABILITY";
+      ability: AbilityId;
+      monsterId?: string;
+      targetPlayerId?: number;
+    }
+  | { type: "PICKUP_ITEM"; instanceId: number }
+  | { type: "EQUIP_ITEM"; instanceId: number }
+  | { type: "UNEQUIP_ITEM"; slot: string }
   | { type: "COLLECT_REWARD" };
 
 export const LOCATIONS: Record<LocationId, Location> = {
