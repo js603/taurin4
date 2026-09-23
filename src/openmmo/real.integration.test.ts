@@ -739,22 +739,7 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
 
         expect(session.getSnapshot().player.floorLevel).toBe(-1);
 
-        await waitForSession(
-          session,
-          () => Boolean(currentDungeonMonster(session)),
-          10_000,
-        );
-
-        const initialTarget = currentDungeonMonster(session);
-        expect(initialTarget).toBeDefined();
-        if (!initialTarget) throw new Error("No real dungeon monster entered AOI");
-
-        const targetSemanticId = initialTarget.id;
-        const targetId = targetSemanticId.startsWith("monster:")
-          ? targetSemanticId.slice("monster:".length)
-          : targetSemanticId;
         const openDoorIds = new Set<number>();
-
         const stateStart = observed.length;
         expect(adapter.requestDungeonDoors(OLD_CRYPT.id)).toBe(true);
         const doorState = await waitForObserved<{
@@ -780,6 +765,128 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
           OLD_CRYPT.id,
           1,
         ) as DungeonDoor[];
+
+        // EVENT_DELIVERY_RADIUS is 32m while a dungeon floor is 80m wide.
+        // Walk toward the deterministic nearest spawn before requiring an AOI
+        // monster, otherwise a valid layout can have every fresh spawn outside
+        // the initial view.
+        const nearestSpawn = firstFloor.spawns
+          .map((spawn) => ({
+            spawn,
+            point: cellCenter(constants, { x: spawn.x, z: spawn.z }),
+          }))
+          .sort(
+            (a, b) =>
+              Math.hypot(a.point.x - exit.x, a.point.z - exit.z) -
+              Math.hypot(b.point.x - exit.x, b.point.z - exit.z),
+          )[0];
+        expect(nearestSpawn).toBeDefined();
+        if (!nearestSpawn) throw new Error("old_crypt floor 1 has no spawn");
+
+        for (let scoutPass = 0; scoutPass <= doors.length; scoutPass += 1) {
+          const position = session.getSnapshot().player.position;
+          if (!position) throw new Error("Lost player position while scouting");
+
+          const scoutPath = pathResult(
+            wasm.passability_find_path_budget(
+              position.x,
+              position.z,
+              constants.floorIndexBase,
+              nearestSpawn.point.x,
+              nearestSpawn.point.z,
+              constants.floorIndexBase,
+              constants.pathMaxNodes,
+            ),
+          );
+          if (scoutPath.found && scoutPath.waypoints.length > 0) {
+            await queueDungeonPath(adapter, session, wasm, scoutPath, 25_000);
+            break;
+          }
+
+          let opened = false;
+          for (const door of doors) {
+            if (door.locked || openDoorIds.has(door.doorId)) continue;
+            const point = doorWorldPosition(constants, door);
+            const toDoor = pathResult(
+              wasm.passability_find_path_budget(
+                position.x,
+                position.z,
+                constants.floorIndexBase,
+                point.x,
+                point.z,
+                constants.floorIndexBase,
+                constants.pathMaxNodes,
+              ),
+            );
+            const last = toDoor.waypoints.at(-1);
+            const endpoint = last ?? position;
+            const reach = 2.5 + door.len / 2;
+            if (
+              Math.hypot(endpoint.x - point.x, endpoint.z - point.z) >
+              reach + 0.5
+            ) {
+              continue;
+            }
+
+            if (toDoor.waypoints.length > 0) {
+              await queueDungeonPath(adapter, session, wasm, toDoor, 20_000);
+            }
+
+            const toggledFrom = observed.length;
+            expect(
+              adapter.toggleDungeonDoor(
+                OLD_CRYPT.id,
+                1,
+                door.doorId,
+              ),
+            ).toBe(true);
+            await waitForObserved<{
+              entrance_id: string;
+              depth: number;
+              door_id: number;
+              is_open: boolean;
+            }>(
+              observed,
+              "DungeonDoorToggled",
+              (payload) =>
+                payload.entrance_id === OLD_CRYPT.id &&
+                payload.depth === 1 &&
+                payload.door_id === door.doorId &&
+                payload.is_open,
+              { startIndex: toggledFrom, timeoutMs: 5_000 },
+            );
+            openDoorIds.add(door.doorId);
+            wasm.dungeon_rebuild_floor(
+              OLD_CRYPT.id,
+              1,
+              new Uint32Array(),
+              new Uint32Array([...openDoorIds]),
+            );
+            opened = true;
+            break;
+          }
+
+          if (!opened) {
+            throw new Error(
+              "No reachable interior door could open the nearest spawn route",
+            );
+          }
+        }
+
+        await waitForSession(
+          session,
+          () => Boolean(currentDungeonMonster(session)),
+          10_000,
+        );
+
+        const initialTarget = currentDungeonMonster(session);
+        expect(initialTarget).toBeDefined();
+        if (!initialTarget) throw new Error("No real dungeon monster entered AOI");
+
+        const targetSemanticId = initialTarget.id;
+        const targetId = targetSemanticId.startsWith("monster:")
+          ? targetSemanticId.slice("monster:".length)
+          : targetSemanticId;
 
         const findMonsterPath = () => {
           const position = session.getSnapshot().player.position;
