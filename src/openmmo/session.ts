@@ -2,13 +2,25 @@ import type { GameCommand, GameState } from "../game/model";
 import { createInitialGameState } from "../game/simulation";
 import type { GameSession } from "../game/session";
 import type { OpenMmoAdapter } from "./adapter";
-import type { OpenMmoServerMessage } from "./types";
+import type {
+  OpenMmoAbilityId,
+  OpenMmoEquipSlot,
+  OpenMmoInventory,
+  OpenMmoServerMessage,
+} from "./types";
 
 export interface OpenMmoSessionAdapter {
   subscribeMessages(
     listener: (message: OpenMmoServerMessage) => void,
   ): () => void;
   sendAttack(monsterId: string): boolean;
+  useAbility(
+    ability: OpenMmoAbilityId,
+    options?: { monsterId?: string; targetPlayerId?: number },
+  ): boolean;
+  pickupItem(instanceId: number): boolean;
+  equipItem(instanceId: number): boolean;
+  unequipItem(slot: OpenMmoEquipSlot): boolean;
   sendMove(
     position: { x: number; y: number; z: number },
     rotation: number,
@@ -64,6 +76,43 @@ function payloadOf<T>(message: OpenMmoServerMessage, variant: string): T {
   return (message as Record<string, unknown>)[variant] as T;
 }
 
+const OPENMMO_ABILITIES: readonly OpenMmoAbilityId[] = [
+  "guardian_ward",
+  "radiance",
+  "bow_mark",
+  "dagger_double_slash",
+  "auscultation",
+];
+
+function normalizeInventory(inventory: OpenMmoInventory) {
+  const equipped = Object.entries(inventory.equipped ?? {}).flatMap(
+    ([slot, item]) =>
+      item
+        ? [
+            {
+              instanceId: item.instance_id,
+              itemDefId: item.item_def_id,
+              quantity: item.quantity,
+              enchant: item.enchant ?? 0,
+              locked: item.locked ?? false,
+              equippedSlot: slot,
+            },
+          ]
+        : [],
+  );
+  return {
+    bag: inventory.bag.map((item) => ({
+      instanceId: item.instance_id,
+      itemDefId: item.item_def_id,
+      quantity: item.quantity,
+      enchant: item.enchant ?? 0,
+      locked: item.locked ?? false,
+    })),
+    equipped,
+    activeAmmo: inventory.active_ammo ?? null,
+  };
+}
+
 function monsterName(monsterType: string) {
   return monsterType
     .split("_")
@@ -105,6 +154,8 @@ function createOpenMmoInitialState(): GameState {
     reward: null,
     semanticDestinations: [],
     semanticTravel: null,
+    abilities: OPENMMO_ABILITIES.map((id) => ({ id, remainingMs: 0 })),
+    inventory: { bag: [], equipped: [], activeAmmo: null },
     logs: [
       {
         id: 1,
@@ -302,6 +353,43 @@ export class OpenMmoGameSession implements GameSession {
         return;
       }
 
+      case "USE_ABILITY": {
+        const monsterId = command.monsterId ?? this.state.combat?.enemy.id;
+        if (
+          this.adapter.useAbility(command.ability, {
+            monsterId,
+            targetPlayerId: command.targetPlayerId,
+          })
+        ) {
+          this.setState(
+            addLog(
+              this.state,
+              "능력 사용 요청: " + command.ability.replaceAll("_", " "),
+              "floating",
+            ),
+          );
+        }
+        return;
+      }
+
+      case "PICKUP_ITEM":
+        if (this.adapter.pickupItem(command.instanceId)) {
+          this.setState(addLog(this.state, "전리품 획득을 서버에 요청했다.", "floating"));
+        }
+        return;
+
+      case "EQUIP_ITEM":
+        if (this.adapter.equipItem(command.instanceId)) {
+          this.setState(addLog(this.state, "장착 요청을 서버에 보냈다."));
+        }
+        return;
+
+      case "UNEQUIP_ITEM":
+        if (this.adapter.unequipItem(command.slot as OpenMmoEquipSlot)) {
+          this.setState(addLog(this.state, "장착 해제 요청을 서버에 보냈다."));
+        }
+        return;
+
       case "DODGE":
       case "GUARD":
         this.setState(
@@ -418,6 +506,54 @@ export class OpenMmoGameSession implements GameSession {
           }),
         );
         this.checkSemanticArrival();
+        return;
+      }
+
+      case "InventoryState":
+      case "InventoryUpdated": {
+        const payload = payloadOf<{ inventory: OpenMmoInventory }>(message, variant);
+        const inventory = normalizeInventory(payload.inventory);
+        this.setState({
+          ...this.state,
+          inventory,
+        });
+        return;
+      }
+
+      case "AbilityCooldowns": {
+        const payload = payloadOf<{
+          cooldowns: Array<{
+            ability: OpenMmoAbilityId;
+            remaining_ms: number;
+          }>;
+        }>(message, variant);
+        const remaining = new Map(
+          payload.cooldowns.map((timer) => [timer.ability, timer.remaining_ms]),
+        );
+        this.setState({
+          ...this.state,
+          abilities: OPENMMO_ABILITIES.map((id) => ({
+            id,
+            remainingMs: remaining.get(id) ?? 0,
+          })),
+        });
+        return;
+      }
+
+      case "AbilityRejected": {
+        const payload = payloadOf<{
+          ability: OpenMmoAbilityId;
+          reason: string;
+        }>(message, variant);
+        this.setState(
+          addLog(
+            this.state,
+            payload.ability.replaceAll("_", " ") +
+              " 사용 거부: " +
+              payload.reason.replaceAll("_", " "),
+            "floating",
+          ),
+        );
         return;
       }
 
@@ -714,6 +850,24 @@ export class OpenMmoGameSession implements GameSession {
               "floating",
             ),
           );
+        }
+        return;
+      }
+
+      case "GroundItemQuantityChanged": {
+        const payload = payloadOf<{
+          instance_id: number;
+          quantity: number;
+        }>(message, variant);
+        const id = "loot:" + payload.instance_id;
+        const destination = this.state.semanticDestinations?.find(
+          (item) => item.id === id,
+        );
+        if (destination) {
+          this.upsertDestination({
+            ...destination,
+            detail: "전리품 × " + payload.quantity,
+          });
         }
         return;
       }
