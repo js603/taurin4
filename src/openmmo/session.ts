@@ -33,7 +33,25 @@ type MonsterWire = {
   monster_type: string;
   health: number;
   max_health: number;
+  position?: { x: number; y: number; z: number };
+  floor_level?: number;
   aggressive?: boolean;
+};
+
+type WorldUpdateWire = {
+  world_epoch: string;
+  generation: number;
+  sequence: number;
+  position: { x: number; y: number; z: number };
+  floor_level: number;
+  reset: boolean;
+  ready: boolean;
+  events: Array<{
+    subject: string;
+    revision: number;
+    change: "Enter" | "Update" | "Leave" | "Delete";
+    messages: unknown[];
+  }>;
 };
 
 function variantOf(message: OpenMmoServerMessage): string {
@@ -85,6 +103,8 @@ function createOpenMmoInitialState(): GameState {
     travel: null,
     combat: null,
     reward: null,
+    semanticDestinations: [],
+    semanticTravel: null,
     logs: [
       {
         id: 1,
@@ -109,6 +129,9 @@ export class OpenMmoGameSession implements GameSession {
   private readonly listeners = new Set<() => void>();
   private unsubscribeMessages: (() => void) | null = null;
   private currentPlayerId: number | null = null;
+  private worldEpoch = "";
+  private worldGeneration = 0;
+  private worldSequence = 0;
 
   constructor(private readonly adapter: OpenMmoSessionAdapter) {}
 
@@ -220,6 +243,65 @@ export class OpenMmoGameSession implements GameSession {
         }
         return;
 
+      case "TRAVEL_TO_DESTINATION": {
+        const destination = this.state.semanticDestinations?.find(
+          (item) => item.id === command.destinationId,
+        );
+        const current = this.state.player.position;
+        if (!destination || !current) return;
+
+        const dx = destination.position.x - current.x;
+        const dz = destination.position.z - current.z;
+        const distance = Math.hypot(dx, dz);
+        const stopDistance = this.arrivalRadius(destination.kind);
+
+        if (distance <= stopDistance) {
+          this.setState(
+            addLog(
+              {
+                ...this.state,
+                semanticTravel: null,
+              },
+              destination.label + " 근처에 이미 도착해 있다.",
+              "floating",
+            ),
+          );
+          return;
+        }
+
+        const ratio = Math.max(0, (distance - stopDistance) / distance);
+        const target = {
+          x: current.x + dx * ratio,
+          y: destination.position.y,
+          z: current.z + dz * ratio,
+        };
+        const rotation = Math.atan2(dx, dz);
+
+        if (
+          this.adapter.sendMove(
+            target,
+            rotation,
+            destination.floorLevel,
+            { sprinting: command.sprinting ?? false },
+          )
+        ) {
+          this.setState(
+            addLog(
+              {
+                ...this.state,
+                semanticTravel: {
+                  destinationId: destination.id,
+                  label: destination.label,
+                },
+              },
+              destination.label + " 쪽으로 이동을 시작했다.",
+              "floating",
+            ),
+          );
+        }
+        return;
+      }
+
       case "DODGE":
       case "GUARD":
         this.setState(
@@ -248,6 +330,36 @@ export class OpenMmoGameSession implements GameSession {
     const variant = variantOf(message);
 
     switch (variant) {
+      case "WorldUpdate": {
+        const update = payloadOf<WorldUpdateWire>(message, variant);
+        if (!this.acceptWorldUpdate(update)) return;
+
+        let next: GameState = {
+          ...this.state,
+          player: {
+            ...this.state.player,
+            position: update.position,
+            floorLevel: update.floor_level,
+          },
+        };
+        if (update.reset) {
+          next = {
+            ...next,
+            semanticDestinations: [],
+            semanticTravel: null,
+          };
+        }
+        this.setState(this.withDestinationDistances(next));
+
+        for (const event of update.events) {
+          for (const nested of event.messages) {
+            this.applyServerMessage(nested as OpenMmoServerMessage);
+          }
+        }
+
+        this.checkSemanticArrival();
+        return;
+      }
       case "JoinSuccess": {
         const player = payloadOf<{ player: PlayerWire }>(
           message,
@@ -284,18 +396,28 @@ export class OpenMmoGameSession implements GameSession {
           floor_level: number;
           sprinting?: boolean;
         }>(message, variant);
-        if (payload.player_id !== this.currentPlayerId) return;
+        if (payload.player_id !== this.currentPlayerId) {
+          this.updateDestinationPosition(
+            "player:" + payload.player_id,
+            payload.position,
+            payload.floor_level,
+          );
+          return;
+        }
 
-        this.setState({
-          ...this.state,
-          player: {
-            ...this.state.player,
-            position: payload.position,
-            rotation: payload.rotation,
-            floorLevel: payload.floor_level,
-            sprinting: payload.sprinting ?? false,
-          },
-        });
+        this.setState(
+          this.withDestinationDistances({
+            ...this.state,
+            player: {
+              ...this.state.player,
+              position: payload.position,
+              rotation: payload.rotation,
+              floorLevel: payload.floor_level,
+              sprinting: payload.sprinting ?? false,
+            },
+          }),
+        );
+        this.checkSemanticArrival();
         return;
       }
 
@@ -353,6 +475,17 @@ export class OpenMmoGameSession implements GameSession {
           variant,
         ).monster;
         const name = monsterName(monster.monster_type);
+        if (monster.position) {
+          this.upsertDestination({
+            id: "monster:" + monster.id,
+            kind: "monster",
+            label: name,
+            position: monster.position,
+            floorLevel: monster.floor_level ?? 0,
+            distanceMeters: 0,
+            detail: monster.aggressive ? "선공 가능" : "몬스터",
+          });
+        }
         if (monster.aggressive && this.state.phase === "exploration") {
           this.setState(
             addLog(
@@ -377,6 +510,50 @@ export class OpenMmoGameSession implements GameSession {
             addLog(this.state, "주변에 " + name + "이(가) 나타났다."),
           );
         }
+        return;
+      }
+
+      case "MonsterMoved": {
+        const payload = payloadOf<{
+          monster_id: string;
+          position: { x: number; y: number; z: number };
+          floor_level?: number;
+        }>(message, variant);
+        this.updateDestinationPosition(
+          "monster:" + payload.monster_id,
+          payload.position,
+          payload.floor_level,
+        );
+        return;
+      }
+
+      case "MonsterRemoved": {
+        const payload = payloadOf<{ monster_id: string }>(message, variant);
+        this.removeDestination("monster:" + payload.monster_id);
+        return;
+      }
+
+      case "PlayerAppeared":
+      case "PlayerJoined": {
+        const player = payloadOf<{ player: PlayerWire }>(message, variant).player;
+        if (player.id !== this.currentPlayerId && player.position) {
+          this.upsertDestination({
+            id: "player:" + player.id,
+            kind: "player",
+            label: player.name,
+            position: player.position,
+            floorLevel: player.floor_level ?? 0,
+            distanceMeters: 0,
+            detail: "다른 플레이어",
+          });
+        }
+        return;
+      }
+
+      case "PlayerDisappeared":
+      case "PlayerLeft": {
+        const payload = payloadOf<{ player_id: number }>(message, variant);
+        this.removeDestination("player:" + payload.player_id);
         return;
       }
 
@@ -479,6 +656,7 @@ export class OpenMmoGameSession implements GameSession {
 
       case "MonsterDead": {
         const payload = payloadOf<{ monster_id: string }>(message, variant);
+        this.removeDestination("monster:" + payload.monster_id);
         if (this.state.combat?.enemy.id !== payload.monster_id) {
           this.setState(
             addLog(this.state, "주변 몬스터가 쓰러졌다.", "floating"),
@@ -505,14 +683,27 @@ export class OpenMmoGameSession implements GameSession {
         return;
       }
 
-      case "GroundItemSpawned": {
+      case "GroundItemSpawned":
+      case "GroundItemAppeared": {
         const item = payloadOf<{
           item: {
+            instance_id: number;
             item_def_id: string;
+            position: { x: number; y: number; z: number };
+            floor_level: number;
             quantity: number;
             dropped_by?: number | null;
           };
         }>(message, variant).item;
+        this.upsertDestination({
+          id: "loot:" + item.instance_id,
+          kind: "loot",
+          label: item.item_def_id.replaceAll("_", " "),
+          position: item.position,
+          floorLevel: item.floor_level,
+          distanceMeters: 0,
+          detail: item.quantity > 1 ? "전리품 × " + item.quantity : "전리품",
+        });
         if (item.dropped_by == null) {
           this.setState(
             addLog(
@@ -524,6 +715,12 @@ export class OpenMmoGameSession implements GameSession {
             ),
           );
         }
+        return;
+      }
+
+      case "GroundItemRemoved": {
+        const payload = payloadOf<{ instance_id: number }>(message, variant);
+        this.removeDestination("loot:" + payload.instance_id);
         return;
       }
 
@@ -600,6 +797,132 @@ export class OpenMmoGameSession implements GameSession {
         return;
       }
     }
+  }
+
+  private acceptWorldUpdate(update: WorldUpdateWire) {
+    if (update.reset || !this.worldEpoch) {
+      this.worldEpoch = update.world_epoch;
+      this.worldGeneration = update.generation;
+      this.worldSequence = update.sequence;
+      return true;
+    }
+
+    if (update.world_epoch !== this.worldEpoch) {
+      this.worldEpoch = update.world_epoch;
+      this.worldGeneration = update.generation;
+      this.worldSequence = update.sequence;
+      return true;
+    }
+
+    if (
+      update.generation < this.worldGeneration ||
+      (update.generation === this.worldGeneration &&
+        update.sequence <= this.worldSequence)
+    ) {
+      return false;
+    }
+
+    this.worldGeneration = update.generation;
+    this.worldSequence = update.sequence;
+    return true;
+  }
+
+  private arrivalRadius(kind: "monster" | "player" | "loot") {
+    if (kind === "monster") return 2.5;
+    if (kind === "player") return 1.5;
+    return 0.8;
+  }
+
+  private withDestinationDistances(state: GameState): GameState {
+    const current = state.player.position;
+    const destinations = state.semanticDestinations ?? [];
+    if (!current) return state;
+
+    return {
+      ...state,
+      semanticDestinations: destinations
+        .map((destination) => ({
+          ...destination,
+          distanceMeters: Math.hypot(
+            destination.position.x - current.x,
+            destination.position.z - current.z,
+          ),
+        }))
+        .sort((a, b) => a.distanceMeters - b.distanceMeters),
+    };
+  }
+
+  private upsertDestination(
+    destination: NonNullable<GameState["semanticDestinations"]>[number],
+  ) {
+    const destinations = this.state.semanticDestinations ?? [];
+    this.setState(
+      this.withDestinationDistances({
+        ...this.state,
+        semanticDestinations: [
+          ...destinations.filter((item) => item.id !== destination.id),
+          destination,
+        ],
+      }),
+    );
+  }
+
+  private updateDestinationPosition(
+    id: string,
+    position: { x: number; y: number; z: number },
+    floorLevel?: number,
+  ) {
+    const destinations = this.state.semanticDestinations ?? [];
+    const found = destinations.find((item) => item.id === id);
+    if (!found) return;
+    this.upsertDestination({
+      ...found,
+      position,
+      floorLevel: floorLevel ?? found.floorLevel,
+    });
+  }
+
+  private removeDestination(id: string) {
+    const destinations = this.state.semanticDestinations ?? [];
+    if (!destinations.some((item) => item.id === id)) return;
+
+    const travelling = this.state.semanticTravel?.destinationId === id;
+    let next: GameState = {
+      ...this.state,
+      semanticDestinations: destinations.filter((item) => item.id !== id),
+      semanticTravel: travelling ? null : this.state.semanticTravel,
+    };
+    if (travelling) {
+      next = addLog(next, "이동 중이던 대상이 시야에서 사라졌다.", "floating");
+    }
+    this.setState(next);
+  }
+
+  private checkSemanticArrival() {
+    const travel = this.state.semanticTravel;
+    const current = this.state.player.position;
+    if (!travel || !current) return;
+    const destination = this.state.semanticDestinations?.find(
+      (item) => item.id === travel.destinationId,
+    );
+    if (!destination) return;
+
+    const distance = Math.hypot(
+      destination.position.x - current.x,
+      destination.position.z - current.z,
+    );
+    if (distance > this.arrivalRadius(destination.kind) + 0.35) return;
+
+    this.setState(
+      addLog(
+        {
+          ...this.state,
+          semanticTravel: null,
+        },
+        travel.label + " 근처에 도착했다.",
+        "focus",
+      ),
+    );
   }
 
   private setState(state: GameState) {
