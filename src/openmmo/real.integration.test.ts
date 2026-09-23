@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
+import { getAttentionCard } from "../game/attention";
 import { OpenMmoAdapter } from "./adapter";
 import {
   createOpenMmoWasmCodec,
@@ -928,6 +929,21 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
         const targetId = targetSemanticId.startsWith("monster:")
           ? targetSemanticId.slice("monster:".length)
           : targetSemanticId;
+
+        const encounterSnapshot = session.getSnapshot();
+        expect(encounterSnapshot.phase).toBe("encounter");
+        expect(encounterSnapshot.encounter?.entityId).toBe(targetId);
+        const encounterCard = getAttentionCard(encounterSnapshot);
+        expect(encounterCard).toMatchObject({
+          level: "focus",
+          eyebrow: "WORLD ENCOUNTER",
+          title: initialTarget.label,
+        });
+        expect(
+          encounterCard?.choices.some(
+            (choice) => choice.command.type === "INVESTIGATE_ENCOUNTER",
+          ),
+        ).toBe(true);
 
         const findMonsterPath = () => {
           const position = session.getSnapshot().player.position;
