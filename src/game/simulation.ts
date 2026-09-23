@@ -45,6 +45,7 @@ function startReward(state: GameState): GameState {
 export function createInitialGameState(): GameState {
   return {
     phase: "exploration",
+    source: "local",
     worldMinutes: 18 * 60 + 42,
     currentLocationId: "forest-gate",
     nearbyOpen: false,
@@ -54,6 +55,7 @@ export function createInitialGameState(): GameState {
       mp: 7,
       maxMp: 10,
     },
+    encounter: null,
     travel: null,
     combat: null,
     reward: null,
@@ -89,6 +91,14 @@ function tickTravel(state: GameState, elapsedMs: number): GameState {
     const interrupted: GameState = {
       ...state,
       phase: "encounter",
+      encounter: {
+        kind: "monster",
+        entityId: "grey-wolf-01",
+        name: "굶주린 회색늑대",
+        hp: 18,
+        maxHp: 18,
+        aggressive: true,
+      },
       travel: { ...travel, encounterTriggered: true },
     };
     return withLog(
@@ -222,15 +232,17 @@ export function reduceGame(state: GameState, command: GameCommand): GameState {
 
     case "INVESTIGATE_ENCOUNTER": {
       if (state.phase !== "encounter") return state;
+      const encounter = state.encounter;
       const entered: GameState = {
         ...state,
         phase: "combat",
+        encounter: null,
         combat: {
           enemy: {
-            id: "grey-wolf-01",
-            name: "굶주린 회색늑대",
-            hp: 18,
-            maxHp: 18,
+            id: encounter?.entityId ?? "grey-wolf-01",
+            name: encounter?.name ?? "굶주린 회색늑대",
+            hp: encounter?.hp ?? 18,
+            maxHp: encounter?.maxHp ?? 18,
             distanceMeters: 5,
           },
           attacks: 0,
@@ -241,14 +253,18 @@ export function reduceGame(state: GameState, command: GameCommand): GameState {
       };
       return withLog(
         entered,
-        "수풀에서 굶주린 회색늑대가 모습을 드러냈다.",
+        (encounter?.name ?? "굶주린 회색늑대") + "이(가) 모습을 드러냈다.",
         "focus",
       );
     }
 
     case "IGNORE_ENCOUNTER": {
       if (state.phase !== "encounter" || !state.travel) return state;
-      const resumed: GameState = { ...state, phase: "travel" };
+      const resumed: GameState = {
+        ...state,
+        phase: "travel",
+        encounter: null,
+      };
       return withLog(resumed, "기척을 무시하고 이동을 계속했다.");
     }
 
