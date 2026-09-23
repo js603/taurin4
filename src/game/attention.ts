@@ -17,11 +17,18 @@ export interface AttentionCard {
 
 export function getAttentionCard(state: GameState): AttentionCard | null {
   if (state.phase === "encounter") {
+    const encounter = state.encounter;
     return {
       level: "focus",
-      eyebrow: "TRAVEL INTERRUPTED",
-      title: "이상한 기척",
-      body: "낮은 숨소리. 수풀 너머에서 무언가 당신을 따라오고 있다.",
+      eyebrow: state.source === "openmmo" ? "WORLD ENCOUNTER" : "TRAVEL INTERRUPTED",
+      title: encounter?.name ?? "이상한 기척",
+      body: encounter
+        ? (encounter.aggressive ? "선공형 개체가 접근했다. " : "주변에서 생명체가 감지됐다. ") +
+          encounter.hp +
+          " / " +
+          encounter.maxHp +
+          " HP"
+        : "낮은 숨소리. 수풀 너머에서 무언가 당신을 따라오고 있다.",
       choices: [
         {
           label: "살펴본다",
