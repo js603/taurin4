@@ -19,6 +19,7 @@ export interface OpenMmoSessionAdapter {
     options?: { monsterId?: string; targetPlayerId?: number },
   ): boolean;
   pickupItem(instanceId: number): boolean;
+  dropItem(instanceId: number): boolean;
   equipItem(instanceId: number): boolean;
   unequipItem(slot: OpenMmoEquipSlot): boolean;
   sendMove(
@@ -375,7 +376,17 @@ export class OpenMmoGameSession implements GameSession {
 
       case "PICKUP_ITEM":
         if (this.adapter.pickupItem(command.instanceId)) {
-          this.setState(addLog(this.state, "전리품 획득을 서버에 요청했다.", "floating"));
+          this.setState(
+            addLog(this.state, "전리품 획득을 서버에 요청했다.", "floating"),
+          );
+        }
+        return;
+
+      case "DROP_ITEM":
+        if (this.adapter.dropItem(command.instanceId)) {
+          this.setState(
+            addLog(this.state, "아이템 드롭을 서버에 요청했다.", "floating"),
+          );
         }
         return;
 
