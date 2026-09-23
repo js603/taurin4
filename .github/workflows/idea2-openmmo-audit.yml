@@ -325,48 +325,48 @@ jobs:
       - name: Movement authority
         working-directory: openmmo
         run: |
-          cargo test -p onlinerpg-server --locked server_caps_player_movement_speed -- --exact
-          cargo test -p onlinerpg-server --locked dead_player_move_is_refused_and_snapped -- --exact
+          cargo test -p onlinerpg-server --locked server_caps_player_movement_speed
+          cargo test -p onlinerpg-server --locked dead_player_move_is_refused_and_snapped
 
       - name: Monster AI and combat
         working-directory: openmmo
         run: |
-          cargo test -p onlinerpg-server --locked server_brain_chases_and_attacks_the_player -- --exact
-          cargo test -p onlinerpg-server --locked player_attack_at_melee_range_is_allowed -- --exact
-          cargo test -p onlinerpg-server --locked dead_player_cannot_attack -- --exact
+          cargo test -p onlinerpg-server --locked server_brain_chases_and_attacks_the_player
+          cargo test -p onlinerpg-server --locked player_attack_at_melee_range_is_allowed
+          cargo test -p onlinerpg-server --locked dead_player_cannot_attack
 
       - name: Loot and pickup
         working-directory: openmmo
         run: |
-          cargo test -p onlinerpg-server --locked monster_loot_is_withheld_until_the_killing_blow_lands -- --exact
-          cargo test -p onlinerpg-server --locked picked_up_stackable_joins_the_existing_stack -- --exact
+          cargo test -p onlinerpg-server --locked monster_loot_is_withheld_until_the_killing_blow_lands
+          cargo test -p onlinerpg-server --locked picked_up_stackable_joins_the_existing_stack
 
       - name: Inventory and equipment
         working-directory: openmmo
         run: |
-          cargo test -p onlinerpg-server --locked give_item_stacks_repeated_grants -- --exact
-          cargo test -p onlinerpg-server --locked great_sword_clears_and_blocks_shields_until_replaced -- --exact
+          cargo test -p onlinerpg-server --locked give_item_stacks_repeated_grants
+          cargo test -p onlinerpg-server --locked great_sword_clears_and_blocks_shields_until_replaced
 
       - name: Chat
         working-directory: openmmo
         run: |
-          cargo test -p onlinerpg-server --locked chat_uses_direct_spatial_fanout_instead_of_global_broadcast -- --exact
-          cargo test -p onlinerpg-server --locked whisper_reaches_only_the_target_regardless_of_distance -- --exact
+          cargo test -p onlinerpg-server --locked chat_uses_direct_spatial_fanout_instead_of_global_broadcast
+          cargo test -p onlinerpg-server --locked whisper_reaches_only_the_target_regardless_of_distance
 
       - name: WorldReady and death restrictions
         working-directory: openmmo
         run: |
-          cargo test -p onlinerpg-server --locked loading_player_is_shielded_until_world_ready -- --exact
-          cargo test -p onlinerpg-server --locked loading_player_cannot_attack -- --exact
+          cargo test -p onlinerpg-server --locked loading_player_is_shielded_until_world_ready
+          cargo test -p onlinerpg-server --locked loading_player_cannot_attack
 
       - name: Respawn lifecycle
         working-directory: openmmo
         run: |
-          cargo test -p onlinerpg-server --locked respawn_delay_scales_with_living_population_and_caps_at_five -- --exact
-          cargo test -p onlinerpg-server --locked scheduled_respawn_survives_population_changes_and_reentry -- --exact
+          cargo test -p onlinerpg-server --locked respawn_delay_scales_with_living_population_and_caps_at_five
+          cargo test -p onlinerpg-server --locked scheduled_respawn_survives_population_changes_and_reentry
 
       - name: Persistence
         working-directory: openmmo
         run: |
-          cargo test -p onlinerpg-server --locked item_locks_survive_save_and_reload_in_bag_and_equipment -- --exact
-          cargo test -p onlinerpg-server --locked kick_flushes_dropped_inventory_before_replacement_load -- --exact
+          cargo test -p onlinerpg-server --locked item_locks_survive_save_and_reload_in_bag_and_equipment
+          cargo test -p onlinerpg-server --locked kick_flushes_dropped_inventory_before_replacement_load
