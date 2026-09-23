@@ -161,6 +161,32 @@ describe("OpenMmoAdapter", () => {
     expect(adapter.getSnapshot().phase).toBe("in_game");
   });
 
+  it("serializes authoritative PlayerMove requests", () => {
+    const transport = new FakeTransport();
+    const adapter = new OpenMmoAdapter({ codec, transport });
+    adapter.connect("ws://127.0.0.1:10006");
+    transport.triggerOpen();
+
+    expect(
+      adapter.sendMove(
+        { x: 10, y: 2, z: -4 },
+        1.25,
+        0,
+        { sprinting: true },
+      ),
+    ).toBe(true);
+
+    expect(transport.sent.at(-1)).toEqual({
+      PlayerMove: {
+        position: { x: 10, y: 2, z: -4 },
+        rotation: 1.25,
+        floor_level: 0,
+        append: false,
+        sprinting: true,
+      },
+    });
+  });
+
   it("answers GameTimeSync with Heartbeat", () => {
     const transport = new FakeTransport();
     const adapter = new OpenMmoAdapter({ codec, transport });
