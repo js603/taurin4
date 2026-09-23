@@ -863,6 +863,83 @@ For every major milestone, architectural change, test-policy change, or verified
 If another document conflicts with this file, fix that document or explicitly update
 this file.
 
+
+## 15.1 Anti-delay investigation protocol
+
+This project must **not skip difficult verification work merely because it is slow**.
+The response to delay is to change the investigation method, not to drop the requirement.
+
+Use the following operating rules for every non-trivial implementation/debug/audit task:
+
+1. **Define the Gate before exploring**
+   - state the exact fact to prove
+   - state what evidence counts as PASS
+   - state what evidence counts as FAIL
+   - identify at least one fallback verification route
+
+2. **Bound exploratory branching**
+   - do not keep expanding source-search chains without a decision point
+   - after at most 3 exploratory branches, stop opening adjacent hypotheses and summarize
+     what is already known
+   - choose the shortest remaining route that can still prove the same Gate
+
+3. **Prefer executable evidence over deeper source archaeology**
+   - existing upstream tests
+   - deterministic runtime probes
+   - server logs / protocol messages
+   - generated deterministic outputs
+   - only then deeper static source tracing
+
+4. **Method-switch instead of scope-drop**
+   - if WASM/API/source tracing stalls, switch to a runtime probe or upstream test
+   - if runtime setup is blocked, switch to a deterministic source-derived fixture
+   - if a fixture would distort original rules, do not use it; choose another authentic path
+   - unresolved requirements remain recorded and are completed later; they are not silently removed
+
+5. **No unbounded CI polling**
+   - normally inspect a workflow once after launch and once at the next meaningful checkpoint
+   - if it is still running, continue non-conflicting work or report the current state
+   - never keep a user response open by repeatedly polling until completion
+
+6. **Avoid CI restart churn**
+   - while a long real-server Gate is running, do not push unrelated source changes that would
+     cancel/restart it
+   - batch nearby fixes into one commit when possible
+   - docs-only updates are allowed when they do not retrigger heavy workflows
+
+7. **Checkpoint before deepening**
+   - when an investigation changes from the original question into a secondary technical problem
+     (example: "prove dungeon combat" turning into "reverse-engineer WASM stair internals"),
+     explicitly checkpoint:
+       - confirmed facts
+       - remaining unknown
+       - why the current method is slow
+       - the alternate method selected
+   - then continue toward the original Gate
+
+8. **Keep verification completeness**
+   - do not mark a skipped/unverified item PASS
+   - do not remove it from the roadmap merely to advance
+   - distinguish: VERIFIED / IMPLEMENTED-NOT-VERIFIED / BLOCKED / DEFERRED-WITH-PLAN
+
+9. **User-visible progress**
+   - for multi-step work, report meaningful partial findings before long tool chains
+   - if a path is becoming a delay source, say so immediately and switch method in the same turn
+
+10. **Canonical recording**
+    - every material method change, blocker, or deferred verification item must remain in this
+      MASTER RECORD with the exact next action needed to finish it
+
+Applied example for the current M2 dungeon Gate:
+
+- required scope remains: real monster encounter → attack → kill → reward/drop observation
+- do **not** omit dungeon combat
+- do **not** spend an unbounded investigation on hidden stair internals
+- prefer the deterministic pinned dungeon layout/pathfinding/runtime route already identified
+- if that specific stair route becomes a new bottleneck, switch to another authentic original-server
+  dungeon-entry proof rather than dropping the combat Gate
+
+
 ---
 
 ## 16. Next exact action
