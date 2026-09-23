@@ -136,7 +136,7 @@ jobs:
           import sqlite3
           db = sqlite3.connect("data/game_data.db")
           rows = db.execute(
-              "select id, account_name, name, class, gender from characters where account_name=?",
+              "select id, account_name, character_name, class, gender from characters where account_name=?",
               ("npc_m15_audit",)
           ).fetchall()
           print("audit characters:", rows)
