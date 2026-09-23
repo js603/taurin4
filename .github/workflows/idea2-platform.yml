@@ -44,6 +44,41 @@ jobs:
         run: npm run check
       - name: Compile Tauri Windows app with embedded host core
         run: npm run tauri -- build --debug --no-bundle
+      - name: Stage M1 Windows LAN test package
+        shell: pwsh
+        run: |
+          $source = "src-tauri/target/debug/taurin4.exe"
+          $dest = "artifacts/idea2-m1-windows"
+
+          if (-not (Test-Path -Path $source -PathType Leaf)) {
+            throw "Windows debug executable was not produced: $source"
+          }
+
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Copy-Item -Path $source -Destination "$dest/taurin4.exe"
+
+          @(
+            "idea2 M1 Windows LAN Test"
+            ""
+            "Use this exact package on both Windows PCs."
+            "PC A: start LAN Host."
+            "PC B: enter PC A's LAN IPv4 address and connect."
+            "Allow taurin4.exe through Windows Defender Firewall on Private networks."
+            ""
+            "Full procedure:"
+            "docs/IDEA2_M1_PC_LAN_TEST.md"
+          ) | Set-Content -Path "$dest/README_M1_LAN_TEST.txt" -Encoding utf8
+
+          $hash = Get-FileHash -Path "$dest/taurin4.exe" -Algorithm SHA256
+          "$($hash.Hash.ToLowerInvariant())  taurin4.exe" |
+            Set-Content -Path "$dest/SHA256SUMS.txt" -Encoding ascii
+      - name: Upload M1 Windows LAN test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: idea2-m1-windows-x64-test
+          path: artifacts/idea2-m1-windows/
+          if-no-files-found: error
+          retention-days: 14
 
   android:
     name: Android client + host APK
