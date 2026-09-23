@@ -65,6 +65,23 @@ export interface TravelState {
   encounterTriggered: boolean;
 }
 
+export type SemanticDestinationKind = "monster" | "player" | "loot";
+
+export interface SemanticDestination {
+  id: string;
+  kind: SemanticDestinationKind;
+  label: string;
+  position: WorldPosition;
+  floorLevel: number;
+  distanceMeters: number;
+  detail?: string;
+}
+
+export interface SemanticTravelState {
+  destinationId: string;
+  label: string;
+}
+
 export type CombatOutcome = "none" | "hit" | "guard" | "perfect";
 
 export interface CombatState {
@@ -98,6 +115,8 @@ export interface GameState {
   travel: TravelState | null;
   combat: CombatState | null;
   reward: RewardState | null;
+  semanticDestinations?: readonly SemanticDestination[];
+  semanticTravel?: SemanticTravelState | null;
   logs: readonly GameLogEntry[];
   nextLogId: number;
 }
@@ -121,6 +140,11 @@ export type GameCommand =
       floorLevel: number;
       sprinting?: boolean;
       append?: boolean;
+    }
+  | {
+      type: "TRAVEL_TO_DESTINATION";
+      destinationId: string;
+      sprinting?: boolean;
     }
   | { type: "COLLECT_REWARD" };
 
