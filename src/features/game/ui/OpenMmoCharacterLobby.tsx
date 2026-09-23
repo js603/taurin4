@@ -37,11 +37,13 @@ function CharacterCard({
   character,
   busy,
   onEnter,
+  onRename,
   onDelete,
 }: {
   character: OpenMmoCharacter;
   busy: boolean;
   onEnter: (character: OpenMmoCharacter) => void;
+  onRename: (character: OpenMmoCharacter) => void;
   onDelete: (character: OpenMmoCharacter) => void;
 }) {
   return (
@@ -63,6 +65,14 @@ function CharacterCard({
           onClick={() => onEnter(character)}
         >
           입장
+        </button>
+        <button
+          type="button"
+          className="text-button"
+          disabled={busy}
+          onClick={() => onRename(character)}
+        >
+          이름 변경
         </button>
         <button
           type="button"
@@ -99,6 +109,10 @@ export function OpenMmoCharacterLobby({
   } | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [renameCharacterId, setRenameCharacterId] = useState<number | null>(
+    null,
+  );
+  const [renameName, setRenameName] = useState("");
 
   const roll = async () => {
     setBusy(true);
@@ -146,6 +160,30 @@ export function OpenMmoCharacterLobby({
     setBusy(false);
   };
 
+  const startRename = (character: OpenMmoCharacter) => {
+    setRenameCharacterId(character.id);
+    setRenameName(character.name);
+    setNotice(null);
+  };
+
+  const rename = async () => {
+    if (renameCharacterId === null || !renameName.trim()) return;
+    setBusy(true);
+    setNotice(null);
+    const result = await adapter.renameCharacter(
+      renameCharacterId,
+      renameName.trim(),
+    );
+    if (result.ok) {
+      setNotice("이름 변경 완료: " + result.name);
+      setRenameCharacterId(null);
+      setRenameName("");
+    } else {
+      setNotice(result.message);
+    }
+    setBusy(false);
+  };
+
   const remove = async (character: OpenMmoCharacter) => {
     setBusy(true);
     setNotice(null);
@@ -173,9 +211,45 @@ export function OpenMmoCharacterLobby({
             character={character}
             busy={busy}
             onEnter={enter}
+            onRename={startRename}
             onDelete={remove}
           />
         ))}
+
+        {renameCharacterId !== null ? (
+          <div className="character-rename">
+            <label>
+              <span>NEW NAME</span>
+              <input
+                value={renameName}
+                maxLength={24}
+                disabled={busy}
+                onChange={(event) => setRenameName(event.target.value)}
+              />
+            </label>
+            <div className="character-rename__actions">
+              <button
+                type="button"
+                className="game-button game-button--primary"
+                disabled={busy || !renameName.trim()}
+                onClick={rename}
+              >
+                변경
+              </button>
+              <button
+                type="button"
+                className="text-button"
+                disabled={busy}
+                onClick={() => {
+                  setRenameCharacterId(null);
+                  setRenameName("");
+                }}
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {snapshot.characters.length < 3 ? (
