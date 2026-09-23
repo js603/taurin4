@@ -187,6 +187,39 @@ describe("OpenMmoAdapter", () => {
     });
   });
 
+  it("serializes ability loot and equipment commands", () => {
+    const transport = new FakeTransport();
+    const adapter = new OpenMmoAdapter({ codec, transport });
+    adapter.connect("ws://127.0.0.1:10006");
+    transport.triggerOpen();
+
+    expect(
+      adapter.useAbility("bow_mark", { monsterId: "wolf-7" }),
+    ).toBe(true);
+    expect(transport.sent.at(-1)).toEqual({
+      UseAbility: {
+        ability: "bow_mark",
+        monster_id: "wolf-7",
+        target_player_id: null,
+      },
+    });
+
+    expect(adapter.pickupItem(77)).toBe(true);
+    expect(transport.sent.at(-1)).toEqual({
+      PickupItem: { instance_id: 77 },
+    });
+
+    expect(adapter.equipItem(41)).toBe(true);
+    expect(transport.sent.at(-1)).toEqual({
+      EquipItem: { instance_id: 41 },
+    });
+
+    expect(adapter.unequipItem("main_hand")).toBe(true);
+    expect(transport.sent.at(-1)).toEqual({
+      UnequipItem: { slot: "main_hand" },
+    });
+  });
+
   it("answers GameTimeSync with Heartbeat", () => {
     const transport = new FakeTransport();
     const adapter = new OpenMmoAdapter({ codec, transport });
