@@ -999,3 +999,57 @@ h1 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+
+.semantic-destination-stack {
+  position: absolute;
+  right: 18px;
+  bottom: 72px;
+  z-index: 4;
+  display: grid;
+  width: min(340px, calc(100% - 36px));
+  max-height: 330px;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.semantic-destination-card {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 11px 12px;
+  background: rgba(17, 20, 22, 0.94);
+  color: var(--text);
+  text-align: left;
+  backdrop-filter: blur(12px);
+}
+
+.semantic-destination-card:hover {
+  border-color: #626861;
+  transform: translateY(-1px);
+}
+
+.semantic-destination-card__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.semantic-destination-card__detail {
+  color: #aab1ae;
+  font-size: 10px;
+}
+
+@media (max-width: 700px) {
+  .semantic-destination-stack {
+    right: 10px;
+    bottom: 68px;
+    left: 10px;
+    width: auto;
+    max-height: 260px;
+  }
+}
