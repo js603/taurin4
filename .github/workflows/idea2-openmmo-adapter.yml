@@ -54,8 +54,19 @@ jobs:
           set -euo pipefail
           git init openmmo
           git -C openmmo remote add origin https://github.com/Julian-adv/OpenMMO.git
-          git -C openmmo sparse-checkout init --cone
-          git -C openmmo sparse-checkout set .cargo agent-client server shared terrain tools data-src
+          git -C openmmo sparse-checkout init --no-cone
+          git -C openmmo sparse-checkout set \
+            /Cargo.toml \
+            /Cargo.lock \
+            /.cargo/ \
+            /agent-client/ \
+            /server/ \
+            /shared/ \
+            /terrain/ \
+            /tools/ \
+            /data-src/ \
+            /data/ \
+            /client/public/models/objects/catalog.json
           git -C openmmo fetch --depth=1 --filter=blob:none origin 950e081c178d920c10c51f2d31f60c1b3383c925
           git -C openmmo checkout --detach FETCH_HEAD
           test "$(git -C openmmo rev-parse HEAD)" = "950e081c178d920c10c51f2d31f60c1b3383c925"
