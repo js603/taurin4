@@ -209,6 +209,11 @@ describe("OpenMmoAdapter", () => {
       PickupItem: { instance_id: 77 },
     });
 
+    expect(adapter.dropItem(77)).toBe(true);
+    expect(transport.sent.at(-1)).toEqual({
+      DropItem: { instance_id: 77 },
+    });
+
     expect(adapter.equipItem(41)).toBe(true);
     expect(transport.sent.at(-1)).toEqual({
       EquipItem: { instance_id: 41 },
