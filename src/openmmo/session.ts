@@ -9,6 +9,12 @@ export interface OpenMmoSessionAdapter {
     listener: (message: OpenMmoServerMessage) => void,
   ): () => void;
   sendAttack(monsterId: string): boolean;
+  sendMove(
+    position: { x: number; y: number; z: number },
+    rotation: number,
+    floorLevel: number,
+    options?: { append?: boolean; sprinting?: boolean },
+  ): boolean;
   requestRespawn(): boolean;
 }
 
@@ -17,6 +23,9 @@ type PlayerWire = {
   name: string;
   health: number;
   max_health: number;
+  position?: { x: number; y: number; z: number };
+  rotation?: number;
+  floor_level?: number;
 };
 
 type MonsterWire = {
@@ -183,10 +192,32 @@ export class OpenMmoGameSession implements GameSession {
         this.setState(
           addLog(
             this.state,
-            "후퇴/이동은 다음 OpenMMO movement mapping 단계에서 연결된다.",
+            "후퇴는 semantic destination 정책이 확정될 때 서버 이동으로 연결한다.",
             "log",
           ),
         );
+        return;
+
+      case "MOVE_TO":
+        if (
+          this.adapter.sendMove(
+            command.position,
+            command.rotation,
+            command.floorLevel,
+            {
+              append: command.append,
+              sprinting: command.sprinting,
+            },
+          )
+        ) {
+          this.setState(
+            addLog(
+              this.state,
+              "이동 요청을 서버에 보냈다. 권위 위치 응답을 기다린다.",
+              "floating",
+            ),
+          );
+        }
         return;
 
       case "DODGE":
@@ -232,12 +263,39 @@ export class OpenMmoGameSession implements GameSession {
                 ...this.state.player,
                 hp: player.health,
                 maxHp: player.max_health,
+                position: player.position ?? this.state.player.position,
+                rotation: player.rotation ?? this.state.player.rotation,
+                floorLevel: player.floor_level ?? this.state.player.floorLevel,
               },
             },
             player.name + " 캐릭터로 OpenMMO 월드에 입장했다.",
             "focus",
           ),
         );
+        return;
+      }
+
+      case "PlayerMoved":
+      case "PlayerTeleported": {
+        const payload = payloadOf<{
+          player_id: number;
+          position: { x: number; y: number; z: number };
+          rotation: number;
+          floor_level: number;
+          sprinting?: boolean;
+        }>(message, variant);
+        if (payload.player_id !== this.currentPlayerId) return;
+
+        this.setState({
+          ...this.state,
+          player: {
+            ...this.state.player,
+            position: payload.position,
+            rotation: payload.rotation,
+            floorLevel: payload.floor_level,
+            sprinting: payload.sprinting ?? false,
+          },
+        });
         return;
       }
 
