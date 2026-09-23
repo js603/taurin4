@@ -10,12 +10,12 @@
 - Repository: `js603/taurin4`
 - Branch: `idea2`
 - Base checkpoint: `370688fc7d712e823206510d9b972af0fab30e88`
-- Last verified implementation HEAD: `a2ce2dc3556412e588a35f6534bb3258b8fb399f`
-- Latest M2 implementation candidate HEAD: `b57d96a37d62bd74cb0421132db08c8251cc7047`
-- Candidate validation: run `35898869607` — **SUCCESS**
-- Candidate Pages: run `35898869614` — **SUCCESS**
-- Candidate Windows/Android: run `35898869592` — **IN PROGRESS** at last check
-- Candidate real OpenMMO regression: run `35898863607` (implementation head `4aa06e648ebc3294460cbfd4b3ce4b9d4941a76e`) — **IN PROGRESS** at last check
+- Last verified implementation HEAD: `39863b66973598dc93f8e1ca00f00a80ba1aa8fd`
+- Latest M2 implementation candidate HEAD: `39863b66973598dc93f8e1ca00f00a80ba1aa8fd`
+- Verified validation: run `35903549333` — **SUCCESS**
+- Verified Pages: run `35903549203` — **SUCCESS**
+- Verified Windows/Android: run `35903549207` — **SUCCESS**
+- Verified real OpenMMO regression: run `35903549323` — **SUCCESS**
 - Note: documentation-only commits may advance the branch HEAD. Every new session must query the actual `idea2` HEAD before work.
 - GitHub Pages preview: `https://js603.github.io/taurin4/idea2/`
 - OpenMMO reference repository: `Julian-adv/OpenMMO`
@@ -867,111 +867,76 @@ this file.
 
 ## 16. Next exact action
 
-**M2 — Real OpenMMO full-cycle regression Gate**
+**M2 — old_crypt real encounter / kill Gate**
 
-The semantic WorldUpdate / destination / ability / loot / inventory implementation has
-now been extended into a real pinned-server end-to-end regression candidate.
-
-Latest implementation candidate:
+Verified implementation baseline:
 
 `39863b66973598dc93f8e1ca00f00a80ba1aa8fd`
 
-### Previous Gate result clarified
+Verified Gates:
 
-Candidate `253fc4b57cb3d75412b80d4dcd2dd1b06cafe1e7` already passed:
+- idea2 validation — run `35903549333` — **SUCCESS**
+- Pages — run `35903549203` — **SUCCESS**
+- Windows + Android — run `35903549207` — **SUCCESS**
+- real pinned OpenMMO regression — run `35903549323` — **SUCCESS**
 
-- idea2 validation — run `35898869607` — **SUCCESS**
-- Pages — run `35898869614` — **SUCCESS**
-- Windows + Android — run `35898869592` — **SUCCESS**
-
-The previous real OpenMMO run `35898863607` was not a gameplay-server failure:
-
-- the real pinned OpenMMO integration test itself passed
-- the workflow failed later during the taurin4 production build because the
-  newly added `npc` semantic kind had not yet been included in one UI helper type
-- the OpenMMO workflow path filter also failed to retrigger for ordinary
-  `GameScreen` / `src/game/**` changes
-
-Both issues are now corrected.
-
-### Real full-cycle proof candidate
-
-The current real pinned-server test now performs:
+The real OpenMMO Gate now proves:
 
 ```text
 ClientInfo
-→ NPC audit authentication
+→ NPC audit auth
 → character create/select
 → EnterGame / WorldReady
-→ starter InventoryState
 → authoritative movement
-→ Radiance
-→ server AbilityCooldowns
-→ Unequip worn_iron_sword
-→ InventoryUpdated
-→ DropItem
-→ GroundItem semantic LOOT
-→ PickupItem
-→ InventoryUpdated
+→ Radiance / AbilityCooldowns
+→ real PlayerAttack request / PlayerAttackRejected mapping
+→ unequip
+→ DropItem / GroundItem
+→ PickupItem / InventoryUpdated
 → EquipItem
-→ InventoryUpdated
 → disconnect
-→ reconnect same account
-→ same character returned
-→ EnterGame
-→ equipped sword persisted
-→ position persisted
+→ reconnect
+→ same character / equipment / position persistence
+→ pinned browser WASM codec production/PWA build
 ```
 
-The test deliberately uses only original server rules and starter equipment.
-No test-only DB mutation or invented loot is required.
+The previous Workbox failure is closed: the pinned shared WASM codec is ~3.84 MiB and
+idea2 now explicitly allows up to 5 MiB in the precache Gate.
 
-Pinned-source basis:
+### Next runtime slice: real dungeon combat
 
-- ordinary new characters start with:
-  - `worn_iron_sword` equipped in `main_hand`
-  - `worn_torch` in the bag
-- Radiance is usable without a target or special equipment
-- disconnect/session replacement calls
-  `persist_and_detach_player` under the server persistence/session locks before the
-  replacement login reads character data
+Do not fake ambient spawning. NPC-token sessions are official NPCs in the original server
+and ambient spawning intentionally refuses to create monsters for an unwatched official NPC.
 
-Therefore reconnect itself is the persistence synchronization barrier; the test does not
-depend on an arbitrary sleep.
+Use the original dungeon system instead:
 
-### CI Gate coverage fix
+1. target `old_crypt`, the nearest registered dungeon to the world spawn
+2. obtain its deterministic layout from pinned WASM `dungeon_layout("old_crypt")`
+3. register identical dungeon passability with `dungeon_add_passability`
+4. use original WASM A* / stair waypoints to enter depth 1
+5. confirm authoritative floor change to `-1`
+6. receive real server-created `MonsterSpawned`
+7. approach a real depth-1 kobold
+8. send real `PlayerAttack` at >=1380 ms cadence
+9. observe authoritative `PlayerAttacked` / `MonsterDead`
+10. verify guaranteed XP/reward event
+11. observe/pick up a ground drop only when the original RNG actually produces one
+12. never make a probabilistic drop a required assertion
 
-`.github/workflows/idea2-openmmo-adapter.yml` now also reacts to:
+Pinned facts already audited for this slice:
 
-- `src/game/**`
-- `src/features/game/ui/GameScreen.tsx`
-- `src/styles.css`
+- `old_crypt` entrance: (-1450, 0.7, 4720)
+- depth 1 monster table: level-1 kobold
+- kobold base HP: 5
+- kobold guard: 8
+- kobold attack: 1d4, 1900 ms cadence
+- starter sword: 1d6
+- player attack cadence: 1380 ms, impact at 540 ms
+- pinned WASM pathfinding emits only regular entry/exit floor waypoints; intermediate stair
+  keys remain internal
 
-This prevents semantic gameplay/UI changes from bypassing the real OpenMMO regression Gate.
-
-### Current Gate state
-
-Current Gate snapshot for `b57d96a37d62bd74cb0421132db08c8251cc7047`:
-
-- idea2 validation — run `35901639317` — **SUCCESS**
-- Windows + Android — run `35901639473` — **IN PROGRESS** at last check
-- Pages — run `35901639397` — **IN PROGRESS** at last check
-- real OpenMMO full-cycle — run `35901639325` — **IN PROGRESS** at last check
-  - checkout/toolchain/cache setup: PASS
-  - dependency install was the active step
-  - real full-cycle test had not started yet
-
-Do not mark M2 complete until the remaining Gates are confirmed.
-
-Next order after the current Gate:
-
-1. confirm the current four workflow results once
-2. fix any failing Gate immediately
-3. if all applicable Gates pass, promote the candidate to the verified implementation HEAD
-4. record exact run IDs
-5. then verify the same full cycle through the explicit Text/Card app bootstrap surface
-6. close any remaining monster encounter/basic-attack runtime gap
-7. only then decide whether M2 meets its complete-cycle definition or requires one final runtime slice
+After this Gate, assess whether M2 has enough real runtime coverage to close, then move to
+the explicit Text/Card app-surface proof before M3.
 
 ---
 
