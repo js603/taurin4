@@ -1,0 +1,172 @@
+name: idea2 OpenMMO M1.5 Runtime Audit
+
+on:
+  push:
+    branches: ["idea2"]
+    paths:
+      - ".github/workflows/idea2-openmmo-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: idea2-openmmo-audit
+  cancel-in-progress: true
+
+jobs:
+  runtime-smoke:
+    name: Pinned OpenMMO runtime smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout idea2
+        uses: actions/checkout@v5
+        with:
+          path: taurin4
+
+      - name: Checkout pinned OpenMMO
+        uses: actions/checkout@v5
+        with:
+          repository: Julian-adv/OpenMMO
+          ref: 950e081c178d920c10c51f2d31f60c1b3383c925
+          path: openmmo
+          lfs: false
+          fetch-depth: 1
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: openmmo
+
+      - name: Build original server and agent client
+        working-directory: openmmo
+        run: cargo build -p onlinerpg-server -p agent-client --locked
+
+      - name: Prepare isolated no-terrain runtime
+        working-directory: openmmo
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f data/npc_token
+          rm -f data/game_data.db
+          rm -rf "$RUNNER_TEMP/openmmo-empty-terrain"
+          mkdir -p "$RUNNER_TEMP/openmmo-empty-terrain"
+
+          cat > agent-client/data/config.toml <<'EOF'
+          server = "ws://127.0.0.1:10006"
+          terrain = "../data/terrain"
+          auto_update = false
+          max_concurrent = 1
+          request_timeout_secs = 10
+
+          [auth]
+          mode = "npc_token"
+
+          [[npcs]]
+          account = "npc_m15_audit"
+          character_name = "M15Audit"
+          character_class = "knight"
+          gender = "male"
+          llm = "none"
+          always_active = false
+          always_sprint = false
+          EOF
+
+      - name: Start original server without Google OAuth or terrain bake
+        working-directory: openmmo
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > "$RUNNER_TEMP/openmmo-server.log"
+          ./target/debug/onlinerpg-server             --port 10006             --terrain-port 10007             --bind 127.0.0.1             --api-bind 127.0.0.1             --terrain-dir "$RUNNER_TEMP/openmmo-empty-terrain"             > "$RUNNER_TEMP/openmmo-server.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/openmmo-server.pid"
+
+          python3 - <<'PY'
+          import socket, time, sys
+          deadline=time.time()+30
+          for port in (10006,10007):
+              while time.time() < deadline:
+                  try:
+                      with socket.create_connection(("127.0.0.1", port), timeout=1):
+                          print(f"port {port} ready")
+                          break
+                  except OSError:
+                      time.sleep(0.25)
+              else:
+                  print(open("/tmp/openmmo-server.log").read() if False else "port timeout", file=sys.stderr)
+                  sys.exit(1)
+          PY
+
+          test -s data/npc_token
+          test -f data/game_data.db
+          grep -q "Google sign-in disabled" "$RUNNER_TEMP/openmmo-server.log"
+          grep -q "Connect clients to:" "$RUNNER_TEMP/openmmo-server.log"
+
+      - name: Exercise original protocol through agent client
+        working-directory: openmmo/agent-client
+        shell: bash
+        run: |
+          set +e
+          timeout 25s ../target/debug/agent-client > "$RUNNER_TEMP/openmmo-agent.log" 2>&1
+          status=$?
+          set -e
+
+          cat "$RUNNER_TEMP/openmmo-agent.log"
+
+          grep -q "Authenticated." "$RUNNER_TEMP/openmmo-agent.log"
+          grep -q "Entering game with character" "$RUNNER_TEMP/openmmo-agent.log"
+          grep -q "Joined game as" "$RUNNER_TEMP/openmmo-agent.log" ||             grep -q "JoinSuccess" "$RUNNER_TEMP/openmmo-agent.log"
+
+          # timeout is acceptable after the audited login/character/entry flow.
+          if [[ "$status" -ne 0 && "$status" -ne 124 ]]; then
+            echo "agent-client exited with unexpected status $status" >&2
+            exit "$status"
+          fi
+
+      - name: Verify persisted audit character
+        working-directory: openmmo
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import sqlite3
+          db=sqlite3.connect("data/game_data.db")
+          rows=db.execute(
+              "select id, account_name, name, class, gender from characters where account_name=?",
+              ("npc_m15_audit",)
+          ).fetchall()
+          print("audit characters:", rows)
+          assert rows, "agent authentication did not create/persist a character"
+          assert rows[0][2] == "M15Audit"
+          PY
+
+      - name: Stop original server gracefully
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$RUNNER_TEMP/openmmo-server.pid" ]]; then
+            pid=$(cat "$RUNNER_TEMP/openmmo-server.pid")
+            kill -TERM "$pid" 2>/dev/null || true
+            for _ in $(seq 1 40); do
+              kill -0 "$pid" 2>/dev/null || break
+              sleep 0.25
+            done
+            kill -KILL "$pid" 2>/dev/null || true
+          fi
+
+          echo "===== SERVER LOG ====="
+          cat "$RUNNER_TEMP/openmmo-server.log" 2>/dev/null || true
+          echo "===== AGENT LOG ====="
+          cat "$RUNNER_TEMP/openmmo-agent.log" 2>/dev/null || true
+
+      - name: Upload audit logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: idea2-openmmo-m15-runtime-logs
+          path: |
+            ${{ runner.temp }}/openmmo-server.log
+            ${{ runner.temp }}/openmmo-agent.log
+          if-no-files-found: warn
+          retention-days: 7
