@@ -397,12 +397,51 @@ Authenticated. 0 character(s)
 → server: Account 'npc_m15_audit' entered game as character 'M15Audit'
 ```
 
-The audit also exposed one original-client behavior worth preserving in documentation:
-`llm = "none"` is the agent-client's direct-control mode and intentionally does not
-send `EnterGame`. The audit therefore bootstraps the character in direct mode and
-re-enters it using the normal LLM-driven in-game path.
+The audit exposed an important inconsistency in the pinned original client:
 
-## 13. Core gameplay protocol surface
+- configuration comments describe `llm = "none"` as a mode where schedule/monster AI can drive an NPC without an LLM;
+- the actual `run_npc_session` path gates `EnterGame` behind `llm != None`;
+- `spawn_llm_task` calls `build_llm_backend` first and returns early for `None`, so the schedule file is not loaded in that path either.
+
+Therefore the pinned revision does **not** fully behave as its configuration comments imply for a generic `llm="none"` agent. This is treated as an original-project bug/regression candidate, not as an idea2 requirement.
+
+For the audit, direct mode was used only to authenticate, roll stats, and create/persist the character. A non-`none` mode was then selected solely to enter the original in-game branch. `EnterGame → JoinSuccess → WorldReady` happens before an LLM response is required, so this proves the original protocol/character-entry path; it does **not** prove that an external LLM drove gameplay.
+
+## 13. LLM vs deterministic game/agent logic
+
+Status: **SOURCE + RUNTIME VERIFIED boundary**
+
+OpenMMO separates responsibilities:
+
+```text
+Game Server
+  ├─ world simulation
+  ├─ monster definitions / combat authority
+  ├─ item / drop / dungeon rules
+  └─ authoritative validation
+
+Agent Client
+  ├─ WebSocket/protocol
+  ├─ world-state mirror
+  ├─ pathfinding / low-level movement execution
+  ├─ event/reflex handling
+  └─ optional LLM driver
+        └─ high-level intent, conversation, strategy
+```
+
+The LLM is therefore **not** the engine that makes the world exist or resolves combat.
+The runtime audit loaded the original monster/item/dungeon/NPC definitions and started the world with no LLM service involved.
+
+However, the pinned Agent Client has the `llm="none"` gating inconsistency described above. Do not copy that coupling into idea2. In idea2, deterministic schedules/reflexes/pathfinding and optional LLM high-level reasoning should remain independent modules.
+
+Preliminary idea2 classification:
+
+- server world/monster AI: **KEEP**
+- deterministic agent execution/reflex layer: **KEEP/ADAPT**
+- LLM high-level reasoning: **OPTIONAL / ADAPT**
+- original `llm != None` gate controlling whether a character may EnterGame: **DROP**
+
+## 14. Core gameplay protocol surface
 
 Status: **SOURCE VERIFIED**
 
@@ -424,7 +463,7 @@ The server is authoritative for gameplay resolution.
 
 M1.5 runtime coverage must distinguish a protocol existing from a feature actually played.
 
-## 14. Preliminary migration matrix
+## 15. Preliminary migration matrix
 
 This matrix is intentionally conservative. Runtime findings may refine it.
 
@@ -457,7 +496,7 @@ This matrix is intentionally conservative. Runtime findings may refine it.
 | Pulse admin dashboard | **DEFER** | useful operationally but not M2 gameplay |
 | original metrics/geolocation stack | **DEFER** | not needed for LAN vertical slice |
 
-## 15. M1.5 runtime audit automation
+## 16. M1.5 runtime audit automation
 
 idea2 workflow:
 
@@ -485,7 +524,7 @@ build original server + agent-client
 No OpenMMO binary is published as a taurin4 artifact.
 Only audit logs may be retained temporarily.
 
-## 16. Remaining M1.5 runtime gates
+## 17. Remaining M1.5 runtime gates
 
 Server lifecycle — run `35824184590`:
 
