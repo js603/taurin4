@@ -102,7 +102,7 @@ The adapter unit test verifies:
 These tests use a fake codec/transport. They prove orchestration, not the real
 MessagePack/WASM/server path.
 
-## M2 real-codec Gate — IMPLEMENTED / RUNNING
+## M2 real-codec Gate — PASS
 
 The real integration Gate is now implemented. It builds the exact pinned OpenMMO
 shared crate as Node-target WASM, boots the exact pinned OpenMMO server with an empty
@@ -110,7 +110,7 @@ terrain directory, and runs taurin4's adapter against it through a real binary W
 
 Workflow: `.github/workflows/idea2-openmmo-adapter.yml`
 
-The Gate must prove:
+Verified by workflow run `35888983232` (**SUCCESS**):
 
 Required proof:
 
@@ -144,7 +144,7 @@ After the real adapter path is proven:
 
 ## Not yet complete
 
-- real pinned WASM codec/server integration workflow is implemented but its current run has not yet been declared successful
+- real pinned WASM codec/server integration workflow: **PASS**
 - production runtime packaging of the pinned codec is not yet wired into the normal taurin4 app
 - `OpenMmoGameSession` semantic state mapper is not yet implemented
 - character UI is not yet wired to the adapter
@@ -153,3 +153,34 @@ After the real adapter path is proven:
 
 Do not call M2 complete until the taurin4 UI completes the full real OpenMMO gameplay
 cycle defined in the MASTER RECORD.
+
+
+## Phase 2 — semantic GameSession mapping
+
+Implemented:
+
+- `OpenMmoAdapter.subscribeMessages()`
+- `OpenMmoGameSession`
+- dynamic encounter support in shared `GameState`
+- dynamic Attention cards for OpenMMO monsters
+- semantic event mapping for:
+  - JoinSuccess
+  - GameTimeSync
+  - ManaUpdate
+  - PlayerHealthUpdate
+  - MonsterSpawned
+  - MonsterAttackedPlayer
+  - PlayerAttacked
+  - MonsterDead
+  - GroundItemSpawned
+  - ChatMessage
+  - SystemMessage
+  - PlayerDead
+  - PlayerRespawned
+  - XpGained
+
+The same idea2 `GameSession` contract can now represent either deterministic local
+simulation or semantic OpenMMO state.
+
+Phase 2 is not yet wired as the default app runtime. The next step is character/lifecycle
+UI and runtime bootstrap selection.
