@@ -270,3 +270,53 @@ Default fields:
 - NPC token: entered manually and never persisted
 
 NPC-token authentication is still an M2 engineering path, not the final player identity policy.
+
+
+## Phase 5 — authoritative movement mapping
+
+Candidate implementation:
+
+```text
+GameSession MOVE_TO
+      ↓
+OpenMmoGameSession
+      ↓
+OpenMmoAdapter.sendMove
+      ↓
+original PlayerMove
+      ↓
+real OpenMMO server authority
+      ↓
+PlayerMoved / PlayerTeleported
+      ↓
+GameState.player.position
+```
+
+Important rule:
+
+idea2 does **not** update the visible authoritative position when it sends the movement
+request. Position changes only when the original server sends `PlayerMoved` or
+`PlayerTeleported`.
+
+Mapped movement state:
+
+- x / y / z
+- rotation
+- floor level
+- sprinting
+
+The local deterministic M0 backend ignores the new `MOVE_TO` command so the common
+GameSession contract stays backward-compatible.
+
+The real OpenMMO integration test has been extended to:
+
+1. EnterGame
+2. read the initial position from JoinSuccess
+3. issue a small `MOVE_TO`
+4. wait for the real pinned server's movement update
+5. verify that OpenMmoGameSession changes position from that authoritative response
+
+Candidate HEAD: `8536ff86487c003826a9c6bf996f50eba10223f1`.
+
+At the time this section was written, the new validation/integration run had started but
+had not yet been declared successful.
