@@ -38,6 +38,7 @@ type PlayerWire = {
   position?: { x: number; y: number; z: number };
   rotation?: number;
   floor_level?: number;
+  is_official_npc?: boolean;
 };
 
 type MonsterWire = {
@@ -675,12 +676,12 @@ export class OpenMmoGameSession implements GameSession {
         if (player.id !== this.currentPlayerId && player.position) {
           this.upsertDestination({
             id: "player:" + player.id,
-            kind: "player",
+            kind: player.is_official_npc ? "npc" : "player",
             label: player.name,
             position: player.position,
             floorLevel: player.floor_level ?? 0,
             distanceMeters: 0,
-            detail: "다른 플레이어",
+            detail: player.is_official_npc ? "NPC / Agent" : "다른 플레이어",
           });
         }
         return;
@@ -981,7 +982,7 @@ export class OpenMmoGameSession implements GameSession {
     return true;
   }
 
-  private arrivalRadius(kind: "monster" | "player" | "loot") {
+  private arrivalRadius(kind: "monster" | "player" | "npc" | "loot") {
     if (kind === "monster") return 2.5;
     if (kind === "player") return 1.5;
     return 0.8;
