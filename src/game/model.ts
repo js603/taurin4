@@ -38,6 +38,15 @@ export interface EnemyState {
   distanceMeters: number;
 }
 
+export interface EncounterState {
+  kind: "monster";
+  entityId: string;
+  name: string;
+  hp: number;
+  maxHp: number;
+  aggressive: boolean;
+}
+
 export interface TravelState {
   destinationId: LocationId;
   elapsedMs: number;
@@ -70,10 +79,12 @@ export interface GameLogEntry {
 
 export interface GameState {
   phase: GamePhase;
+  source?: "local" | "openmmo";
   worldMinutes: number;
   currentLocationId: LocationId;
   nearbyOpen: boolean;
   player: PlayerState;
+  encounter?: EncounterState | null;
   travel: TravelState | null;
   combat: CombatState | null;
   reward: RewardState | null;
