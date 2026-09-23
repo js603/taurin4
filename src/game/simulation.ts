@@ -350,6 +350,9 @@ export function reduceGame(state: GameState, command: GameCommand): GameState {
       return withLog(retreated, "거리를 벌리고 전투에서 빠져나왔다.", "focus");
     }
 
+    case "MOVE_TO":
+      return state;
+
     case "COLLECT_REWARD": {
       if (state.phase !== "reward") return state;
       const resumed: GameState = {
