@@ -1087,3 +1087,108 @@ This verified baseline includes:
 The exploratory WASM dungeon stair-coordinate audit is deliberately stopped here because
 it became a long-running analysis path. Dungeon encounter/kill proof is now a separate,
 bounded Gate and must not block this verified M2 baseline.
+
+
+## 18. Checkpoint — M2 verified baseline handoff
+
+**Checkpoint date:** 2026-09-24 (Asia/Seoul)
+
+**Checkpoint branch to use for recovery/new-chat reference:**
+
+`checkpoint/idea2-m2-verified-20260924`
+
+**Active development branch:**
+
+`idea2`
+
+**Verified implementation baseline:**
+
+`39863b66973598dc93f8e1ca00f00a80ba1aa8fd`
+
+Verified workflow evidence:
+
+- validation — `35903549333` — SUCCESS
+- Pages — `35903549203` — SUCCESS
+- Windows + Android — `35903549207` — SUCCESS
+- real pinned OpenMMO — `35903549323` — SUCCESS
+
+### What is verified at this checkpoint
+
+- original OpenMMO audit M1.5 is COMPLETE
+- real pinned OpenMMO shared WASM codec
+- real pinned OpenMMO Rust server
+- ClientInfo / protocol-layout handshake
+- NPC-token engineering authentication
+- character list / roll / create / select / rename / delete
+- EnterGame / WorldReady / Heartbeat
+- semantic `OpenMmoGameSession`
+- authoritative movement / WorldUpdate unwrapping
+- semantic MONSTER / PLAYER / NPC / LOOT destinations
+- Radiance / AbilityCooldowns
+- PlayerAttack request and PlayerAttackRejected mapping
+- inventory state / update
+- equip / unequip
+- DropItem / GroundItem / PickupItem
+- disconnect / reconnect
+- same character / equipment / position persistence
+- LocalGameSession remains default
+- explicit `?runtime=openmmo` bootstrap exists
+- browser WASM production/PWA build succeeds with 5 MiB Workbox precache allowance
+- PC↔PC M1 physical LAN acceptance remains user-confirmed
+- Android remains build/play only; Android LAN runtime is excluded for now
+
+### Required next Gate — do not skip
+
+`M2 old_crypt real encounter / kill Gate`
+
+Target proof:
+
+```text
+original dungeon entry
+→ authoritative floor -1
+→ real MonsterSpawned
+→ semantic monster card
+→ approach real monster
+→ real PlayerAttack
+→ authoritative PlayerAttacked
+→ MonsterDead
+→ XP/reward
+→ observe/pick ground loot if original RNG produces it
+```
+
+Probabilistic loot must never be a required assertion.
+
+### Anti-delay rule for the next chat
+
+Do not omit the dungeon-combat Gate merely because one verification method is slow.
+
+If an investigation begins branching into a secondary problem such as hidden stair/WASM
+internals:
+
+1. checkpoint confirmed facts
+2. stop expanding after at most 3 exploratory branches
+3. switch verification method while preserving the same Gate
+4. prefer executable upstream/runtime evidence over deeper source archaeology
+5. never repeatedly poll CI until completion
+6. do not push unrelated source commits while a long real-server Gate is running
+
+The current preferred authentic route is the deterministic pinned `old_crypt` dungeon
+system. The already audited facts in Section 16 remain valid starting context; re-read them
+rather than rediscovering them from scratch.
+
+### New-chat instruction
+
+Paste or send this in the new conversation:
+
+> Continue the `js603/taurin4` project on branch `idea2`. First read
+> `docs/IDEA2_MASTER_RECORD.md` from the repository and treat it as canonical.
+> The handoff checkpoint is branch `checkpoint/idea2-m2-verified-20260924`.
+> Verify the actual current `idea2` HEAD before changing anything.
+> The verified implementation baseline is
+> `39863b66973598dc93f8e1ca00f00a80ba1aa8fd`.
+> Continue from Section 16/18: `M2 old_crypt real encounter / kill Gate`.
+> Preserve the anti-delay investigation protocol: do not skip required verification,
+> but switch methods when a path becomes a bottleneck; no unbounded source branching or
+> CI polling. Keep LocalGameSession working, preserve the real OpenMMO regression Gate,
+> and update the MASTER RECORD after material progress.
+
