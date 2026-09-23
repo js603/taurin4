@@ -55,7 +55,8 @@ export function OpenMmoBootstrap() {
     params.get("server") ?? "ws://127.0.0.1:10006",
   );
   const [codecUrl, setCodecUrl] = useState(
-    params.get("codec") ?? "/openmmo-wasm/onlinerpg_shared.js",
+    params.get("codec") ??
+      import.meta.env.BASE_URL + "openmmo-wasm/onlinerpg_shared.js",
   );
   const [accountName, setAccountName] = useState(
     params.get("account") ?? "npc_idea2_player",
@@ -161,7 +162,7 @@ export function OpenMmoBootstrap() {
           <p className="eyebrow">M2 OPENMMO BOOTSTRAP</p>
           <h1>Real Backend Connection</h1>
         </div>
-        <a className="runtime-link" href="?">
+        <a className="runtime-link" href={window.location.pathname}>
           LOCAL MODE
         </a>
       </header>
