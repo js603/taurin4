@@ -1,0 +1,109 @@
+import { pathToFileURL } from "node:url";
+import { describe, expect, it } from "vitest";
+import { OpenMmoAdapter } from "./adapter";
+import {
+  createOpenMmoWasmCodec,
+  type OpenMmoWasmExports,
+} from "./codec";
+import { WebSocketOpenMmoTransport } from "./transport";
+
+const wasmModulePath = process.env.OPENMMO_WASM_MODULE;
+const serverUrl = process.env.OPENMMO_SERVER_URL;
+const npcToken = process.env.OPENMMO_NPC_TOKEN;
+const enabled = Boolean(wasmModulePath && serverUrl && npcToken);
+
+function waitForConnected(adapter: OpenMmoAdapter, timeoutMs = 5_000) {
+  if (adapter.getSnapshot().phase === "connected") {
+    return Promise.resolve();
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      unsubscribe();
+      reject(
+        new Error(
+          "OpenMMO adapter did not connect: " +
+            JSON.stringify(adapter.getSnapshot()),
+        ),
+      );
+    }, timeoutMs);
+
+    const unsubscribe = adapter.subscribe(() => {
+      const phase = adapter.getSnapshot().phase;
+      if (phase === "connected") {
+        clearTimeout(timer);
+        unsubscribe();
+        resolve();
+      } else if (phase === "error") {
+        clearTimeout(timer);
+        unsubscribe();
+        reject(new Error(adapter.getSnapshot().lastError ?? "connection error"));
+      }
+    });
+  });
+}
+
+describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
+  it(
+    "uses the real WASM codec against the real server through EnterGame",
+    async () => {
+      if (!wasmModulePath || !serverUrl || !npcToken) {
+        throw new Error("real OpenMMO integration environment is incomplete");
+      }
+
+      expect(typeof WebSocket).toBe("function");
+
+      const imported = (await import(
+        pathToFileURL(wasmModulePath).href
+      )) as {
+        default?: OpenMmoWasmExports;
+      } & Partial<OpenMmoWasmExports>;
+
+      const wasm = (imported.default ?? imported) as OpenMmoWasmExports;
+      const codec = createOpenMmoWasmCodec(wasm);
+      expect(codec.protocolVersion()).toBe(95);
+
+      const adapter = new OpenMmoAdapter({
+        codec,
+        transport: new WebSocketOpenMmoTransport(),
+        clientVersion: "idea2-m2-real-integration",
+        requestTimeoutMs: 10_000,
+      });
+
+      adapter.connect(serverUrl);
+      await waitForConnected(adapter);
+
+      const auth = await adapter.authenticateNpc("npc_idea2_m2", npcToken);
+      expect(auth.ok).toBe(true);
+      if (!auth.ok) throw new Error(auth.message);
+
+      let character = auth.characters.find((item) => item.name === "ScoutMira");
+
+      if (!character) {
+        const roll = await adapter.rollCharacterStats("knight", "female");
+        expect(roll.ok).toBe(true);
+        if (!roll.ok) throw new Error(roll.message);
+
+        const created = await adapter.createCharacter(
+          "ScoutMira",
+          "knight",
+          "female",
+        );
+        expect(created.ok).toBe(true);
+        if (!created.ok) throw new Error(created.message);
+        character = created.character;
+      }
+
+      const entered = await adapter.enterGame(character.id);
+      expect(entered).toEqual({ ok: true });
+      expect(adapter.getSnapshot().phase).toBe("in_game");
+      expect(adapter.getSnapshot().selectedCharacterId).toBe(character.id);
+
+      expect(adapter.sendChat("idea2 M2 integration online")).toBe(true);
+      expect(adapter.requestRespawn()).toBe(true);
+
+      adapter.disconnect();
+    },
+    30_000,
+  );
+});
