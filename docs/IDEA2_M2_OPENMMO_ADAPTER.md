@@ -463,3 +463,23 @@ Still required:
 4. prove real equip/unequip mutation
 5. prove the same cycle through the explicit app bootstrap / Text-Card UI
 6. prove logout → reconnect → same character state
+
+
+## Current candidate verification snapshot
+
+Implementation candidate:
+
+`253fc4b57cb3d75412b80d4dcd2dd1b06cafe1e7`
+
+Confirmed:
+
+- idea2 validation — run `35898869607` — **SUCCESS**
+- Pages preview — run `35898869614` — **SUCCESS**
+
+Still running at the last deliberate status check:
+
+- Windows + Android — run `35898869592`
+- real OpenMMO adapter regression — run `35898863607`
+
+No repeated polling is performed. The remaining Gates must be checked once at the next
+verification point before promoting the candidate to the verified implementation baseline.
