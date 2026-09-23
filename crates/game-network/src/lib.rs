@@ -41,11 +41,23 @@ pub enum ClientPlatform {
     Unknown,
 }
 
-pub fn encode_server_message(message: &ServerControlMessage) -> Result<String, serde_json::Error> {
+pub fn encode_client_message(
+    message: &ClientControlMessage,
+) -> Result<String, serde_json::Error> {
     serde_json::to_string(message)
 }
 
 pub fn decode_client_message(raw: &str) -> Result<ClientControlMessage, serde_json::Error> {
+    serde_json::from_str(raw)
+}
+
+pub fn encode_server_message(
+    message: &ServerControlMessage,
+) -> Result<String, serde_json::Error> {
+    serde_json::to_string(message)
+}
+
+pub fn decode_server_message(raw: &str) -> Result<ServerControlMessage, serde_json::Error> {
     serde_json::from_str(raw)
 }
 
@@ -66,8 +78,23 @@ mod tests {
             }
         );
 
-        let encoded = encode_server_message(&ServerControlMessage::Pong { nonce: 42 })
+        let encoded = encode_client_message(&ClientControlMessage::Ping { nonce: 7 })
+            .expect("encode client ping");
+        assert_eq!(encoded, r#"{"type":"ping","nonce":7}"#);
+
+        let server_encoded = encode_server_message(&ServerControlMessage::Pong { nonce: 42 })
             .expect("encode pong");
-        assert_eq!(encoded, r#"{"type":"pong","nonce":42}"#);
+        assert_eq!(server_encoded, r#"{"type":"pong","nonce":42}"#);
+
+        let server_decoded =
+            decode_server_message(r#"{"type":"host_hello","protocol_version":1,"host_name":"pc-a"}"#)
+                .expect("decode host hello");
+        assert_eq!(
+            server_decoded,
+            ServerControlMessage::HostHello {
+                protocol_version: LAN_PROTOCOL_VERSION,
+                host_name: "pc-a".into(),
+            }
+        );
     }
 }
