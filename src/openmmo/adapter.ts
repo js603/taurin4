@@ -386,6 +386,22 @@ export class OpenMmoAdapter {
     return this.send({ UnequipItem: { slot } });
   }
 
+  toggleDungeonDoor(entranceId: string, depth: number, doorId: number) {
+    return this.send({
+      ToggleDungeonDoor: {
+        entrance_id: entranceId,
+        depth,
+        door_id: doorId,
+      },
+    });
+  }
+
+  requestDungeonDoors(entranceId: string) {
+    return this.send({
+      RequestDungeonDoors: { entrance_id: entranceId },
+    });
+  }
+
   sendMove(
     position: { x: number; y: number; z: number },
     rotation: number,
