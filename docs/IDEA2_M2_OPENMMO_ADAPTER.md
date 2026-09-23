@@ -626,3 +626,24 @@ A real natural encounter/kill is still intentionally separate: the automated NPC
 identity is an official NPC in the original server, and ambient spawning is suppressed for
 an official NPC when no human player is watching. That original rule will not be patched
 around merely to make the test green.
+
+
+## Verified full-cycle baseline
+
+Implementation `39863b66973598dc93f8e1ca00f00a80ba1aa8fd` is now the verified M2 baseline.
+
+Gates:
+
+- validation `35903549333` — SUCCESS
+- Pages `35903549203` — SUCCESS
+- Windows + Android `35903549207` — SUCCESS
+- real pinned OpenMMO `35903549323` — SUCCESS
+
+The real pinned-server Gate includes the actual basic attack request/rejection path and the
+full inventory/drop/pickup/equipment/reconnect cycle. The browser codec also passes the
+production PWA build with the explicit 5 MiB precache ceiling.
+
+The next slice is real dungeon combat in `old_crypt`. It must use the pinned shared
+dungeon generator/pathfinding and the original server's floor population. Probabilistic
+kobold loot is observational only; `MonsterDead` plus the guaranteed XP event are the
+deterministic kill proof.
