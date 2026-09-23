@@ -951,10 +951,17 @@ This prevents semantic gameplay/UI changes from bypassing the real OpenMMO regre
 
 ### Current Gate state
 
-The latest validation / platform / Pages / real OpenMMO workflows for
-`b57d96a37d62bd74cb0421132db08c8251cc7047` were running at the last deliberate check.
+Current Gate snapshot for `b57d96a37d62bd74cb0421132db08c8251cc7047`:
 
-Do not mark M2 complete until those results are confirmed.
+- idea2 validation — run `35901639317` — **SUCCESS**
+- Windows + Android — run `35901639473` — **IN PROGRESS** at last check
+- Pages — run `35901639397` — **IN PROGRESS** at last check
+- real OpenMMO full-cycle — run `35901639325` — **IN PROGRESS** at last check
+  - checkout/toolchain/cache setup: PASS
+  - dependency install was the active step
+  - real full-cycle test had not started yet
+
+Do not mark M2 complete until the remaining Gates are confirmed.
 
 Next order after the current Gate:
 
