@@ -1053,3 +1053,99 @@ h1 {
     max-height: 260px;
   }
 }
+
+
+.openmmo-action-panels {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.openmmo-panel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  background: rgba(13, 16, 18, 0.72);
+}
+
+.openmmo-panel__heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.openmmo-ability-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.openmmo-ability {
+  display: grid;
+  justify-items: start;
+  gap: 3px;
+  text-align: left;
+}
+
+.openmmo-ability strong {
+  font-size: 10px;
+}
+
+.openmmo-ability span {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.openmmo-inventory-list {
+  display: grid;
+  gap: 6px;
+  max-height: 230px;
+  overflow-y: auto;
+}
+
+.inventory-line {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 8px 10px;
+  background: #111416;
+  color: var(--text);
+  text-align: left;
+}
+
+.inventory-line--equipped {
+  border-color: #71684f;
+  background: var(--accent-soft);
+}
+
+.inventory-line small {
+  color: var(--muted);
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.inventory-line:disabled {
+  opacity: 0.42;
+}
+
+.openmmo-panel__empty {
+  margin: 8px 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+@media (max-width: 760px) {
+  .openmmo-action-panels {
+    grid-template-columns: 1fr;
+  }
+}
