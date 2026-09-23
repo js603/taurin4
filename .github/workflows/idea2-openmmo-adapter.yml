@@ -1,0 +1,115 @@
+name: idea2 OpenMMO Adapter Integration
+
+on:
+  push:
+    branches: ["idea2"]
+    paths:
+      - "src/openmmo/**"
+      - ".github/workflows/idea2-openmmo-adapter.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: idea2-openmmo-adapter
+  cancel-in-progress: true
+
+jobs:
+  real-adapter:
+    name: Real pinned OpenMMO adapter
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout idea2
+        uses: actions/checkout@v5
+        with:
+          path: taurin4
+
+      - name: Checkout pinned OpenMMO
+        uses: actions/checkout@v5
+        with:
+          repository: Julian-adv/OpenMMO
+          ref: 950e081c178d920c10c51f2d31f60c1b3383c925
+          path: openmmo
+          lfs: false
+          fetch-depth: 1
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: openmmo
+
+      - name: Install idea2 dependencies
+        working-directory: taurin4
+        run: npm install --no-audit --no-fund
+
+      - name: Build pinned OpenMMO server
+        working-directory: openmmo
+        run: cargo build -p onlinerpg-server --locked
+
+      - name: Build pinned shared codec for Node
+        working-directory: openmmo/shared
+        run: |
+          wasm-pack build             --target nodejs             --release             --out-dir ../../taurin4/.tmp/openmmo-wasm
+
+      - name: Start isolated pinned OpenMMO server
+        working-directory: openmmo
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f data/npc_token data/game_data.db
+          rm -rf "$RUNNER_TEMP/openmmo-empty-terrain"
+          mkdir -p "$RUNNER_TEMP/openmmo-empty-terrain"
+
+          ./target/debug/onlinerpg-server             --port 10006             --terrain-port 10007             --bind 127.0.0.1             --api-bind 127.0.0.1             --terrain-dir "$RUNNER_TEMP/openmmo-empty-terrain"             > "$RUNNER_TEMP/openmmo-m2-server.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/openmmo-m2-server.pid"
+
+          for _ in $(seq 1 120); do
+            if grep -q "MMORPG Server listening on: 127.0.0.1:10006" "$RUNNER_TEMP/openmmo-m2-server.log"; then
+              break
+            fi
+            sleep 0.25
+          done
+
+          grep -q "MMORPG Server listening on: 127.0.0.1:10006" "$RUNNER_TEMP/openmmo-m2-server.log"
+          test -s data/npc_token
+
+          echo "OPENMMO_SERVER_URL=ws://127.0.0.1:10006" >> "$GITHUB_ENV"
+          echo "OPENMMO_NPC_TOKEN=$(cat data/npc_token)" >> "$GITHUB_ENV"
+          echo "OPENMMO_WASM_MODULE=$GITHUB_WORKSPACE/taurin4/.tmp/openmmo-wasm/onlinerpg_shared.js" >> "$GITHUB_ENV"
+
+      - name: Run taurin4 adapter against real pinned server
+        working-directory: taurin4
+        run: npx vitest run src/openmmo/real.integration.test.ts
+
+      - name: Stop pinned OpenMMO server
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$RUNNER_TEMP/openmmo-m2-server.pid" ]]; then
+            kill -TERM "$(cat "$RUNNER_TEMP/openmmo-m2-server.pid")" 2>/dev/null || true
+          fi
+          echo "===== M2 OPENMMO SERVER LOG ====="
+          cat "$RUNNER_TEMP/openmmo-m2-server.log" 2>/dev/null || true
+
+      - name: Upload M2 integration log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: idea2-m2-openmmo-adapter-log
+          path: ${{ runner.temp }}/openmmo-m2-server.log
+          if-no-files-found: warn
+          retention-days: 7
