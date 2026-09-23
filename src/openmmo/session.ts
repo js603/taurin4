@@ -43,7 +43,7 @@ function monsterName(monsterType: string) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
-
+}
 
 function addLog(
   state: GameState,
