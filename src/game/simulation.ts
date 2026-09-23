@@ -61,6 +61,8 @@ export function createInitialGameState(): GameState {
     reward: null,
     semanticDestinations: [],
     semanticTravel: null,
+    abilities: [],
+    inventory: { bag: [], equipped: [], activeAmmo: null },
     nextLogId: 3,
     logs: [
       {
@@ -354,6 +356,10 @@ export function reduceGame(state: GameState, command: GameCommand): GameState {
 
     case "MOVE_TO":
     case "TRAVEL_TO_DESTINATION":
+    case "USE_ABILITY":
+    case "PICKUP_ITEM":
+    case "EQUIP_ITEM":
+    case "UNEQUIP_ITEM":
       return state;
 
     case "COLLECT_REWARD": {
