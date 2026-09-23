@@ -1,0 +1,101 @@
+name: idea2 OpenMMO M1.5 Client Audit
+
+on:
+  push:
+    branches: ["idea2"]
+    paths:
+      - ".github/workflows/idea2-openmmo-client-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: idea2-openmmo-client-audit
+  cancel-in-progress: true
+
+jobs:
+  client-smoke:
+    name: Pinned OpenMMO browser client smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout pinned OpenMMO
+        uses: actions/checkout@v5
+        with:
+          repository: Julian-adv/OpenMMO
+          ref: 950e081c178d920c10c51f2d31f60c1b3383c925
+          path: openmmo
+          lfs: false
+          fetch-depth: 1
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: openmmo/client/package-lock.json
+
+      - name: Install original client dependencies
+        working-directory: openmmo/client
+        run: npm ci
+
+      - name: Build original shared Rust WASM codec
+        working-directory: openmmo/client
+        run: npm run build:wasm
+
+      - name: Type-check original browser client
+        working-directory: openmmo/client
+        run: npm run check
+
+      - name: Build original browser bundle without full binary asset fetch
+        working-directory: openmmo/client
+        env:
+          VITE_GOOGLE_CLIENT_ID: m15-audit.apps.googleusercontent.com
+        run: npx vite build
+
+      - name: Start original client preview and verify HTTP startup
+        working-directory: openmmo/client
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx vite preview --host 127.0.0.1 --port 10004 > "$RUNNER_TEMP/openmmo-client.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/openmmo-client.pid"
+
+          for _ in $(seq 1 80); do
+            if curl -fsS http://127.0.0.1:10004/ > "$RUNNER_TEMP/openmmo-index.html"; then
+              break
+            fi
+            sleep 0.25
+          done
+
+          test -s "$RUNNER_TEMP/openmmo-index.html"
+          grep -q "<div id=\"app\"></div>" "$RUNNER_TEMP/openmmo-index.html"
+          grep -q "Local:" "$RUNNER_TEMP/openmmo-client.log"
+
+      - name: Stop original client preview
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$RUNNER_TEMP/openmmo-client.pid" ]]; then
+            kill "$(cat "$RUNNER_TEMP/openmmo-client.pid")" 2>/dev/null || true
+          fi
+          cat "$RUNNER_TEMP/openmmo-client.log" 2>/dev/null || true
+
+      - name: Upload client smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: idea2-openmmo-m15-client-logs
+          path: |
+            ${{ runner.temp }}/openmmo-client.log
+            ${{ runner.temp }}/openmmo-index.html
+          if-no-files-found: warn
+          retention-days: 7
