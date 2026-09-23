@@ -10,7 +10,7 @@
 - Repository: `js603/taurin4`
 - Branch: `idea2`
 - Base checkpoint: `370688fc7d712e823206510d9b972af0fab30e88`
-- Last verified implementation HEAD: `728e9d2fc8fffecb5ecd39a190b749bfb3418ebe`
+- Last verified implementation HEAD: `dcdd42b927cc4b0c4a80284cdc25347575c383c0`
 - Note: documentation-only commits may advance the branch HEAD. Every new session must query the actual `idea2` HEAD before work.
 - GitHub Pages preview: `https://js603.github.io/taurin4/idea2/`
 - OpenMMO reference repository: `Julian-adv/OpenMMO`
@@ -672,9 +672,37 @@ Every relevant original feature is classified as:
 
 No major OpenMMO system should be changed before this matrix exists.
 
-### M2 — taurin4 + Real OpenMMO Backend
+### M2 — taurin4 + Real OpenMMO Backend — STARTED
 
 Goal: complete one actual OpenMMO gameplay cycle through our taurin4 client.
+
+Phase 1 implementation is now present:
+
+- `src/openmmo/types.ts`
+- `src/openmmo/codec.ts`
+- `src/openmmo/transport.ts`
+- `src/openmmo/adapter.ts`
+- `src/openmmo/adapter.test.ts`
+- `docs/IDEA2_M2_OPENMMO_ADAPTER.md`
+
+Implemented adapter flow:
+
+```text
+connect
+→ mandatory ClientInfo
+→ NPC/Google auth boundary
+→ character list
+→ stat roll
+→ create/delete/rename
+→ EnterGame
+→ JoinSuccess
+→ automatic WorldReady
+→ GameTimeSync → Heartbeat
+```
+
+This is currently a tested orchestration layer using an injected codec/transport.
+It is **not yet proof of taurin4 talking to the real OpenMMO server**. The next M2 Gate
+must inject the real pinned shared WASM codec and connect to the real pinned server.
 
 First success definition:
 
@@ -822,28 +850,27 @@ this file.
 
 ## 16. Next exact action
 
-**M1.5 — Original OpenMMO Runtime & Flow Audit**
+**M1.5 final Gate + M2 real-codec integration**
 
-M1 is complete. Do not reopen LAN Client work unless a regression appears.
+M1.5 gameplay-system workflow has been launched and must be checked once on the next
+verification pass. Do not poll it repeatedly.
 
-Current order:
+In parallel, M2 Phase 1 is implemented.
 
-1. use pinned OpenMMO commit `950e081c178d920c10c51f2d31f60c1b3383c925`
-2. verify original server build and real process startup without full terrain/assets
-3. verify exact auth paths: browser Google vs NPC token vs agent Google device flow
-4. verify SQLite/NPC-token/state-dir behavior
-5. execute original protocol login → character list → roll/create/select → EnterGame where possible
-6. identify the minimum terrain/assets needed beyond server/character lifecycle
-7. verify original browser client build/start prerequisites
-8. execute pinned original gameplay-system runtime tests for movement/combat/loot/inventory/chat/death/respawn/persistence
-9. finalize KEEP / ADAPT / REPLACE / DROP migration matrix
-10. close M1.5 when the gameplay runtime Gate passes; full 73 GB terrain and complete visual asset download are not required
-11. then begin M2 taurin4 ↔ real OpenMMO adapter
+Next implementation order:
 
-Current runtime-audit workflow:
-`.github/workflows/idea2-openmmo-audit.yml`
+1. confirm the M1.5 original gameplay-system Gate result once
+2. if successful, mark M1.5 COMPLETE
+3. build/package the pinned OpenMMO shared WASM codec as an integration dependency
+4. inject that real codec into `OpenMmoAdapter`
+5. start the real pinned OpenMMO server in an isolated integration environment
+6. connect taurin4 adapter through binary WebSocket
+7. prove ClientInfo → NPC audit auth → character list → EnterGame → WorldReady → Heartbeat
+8. only after that real path passes, implement `OpenMmoGameSession` semantic world mapping
+9. then wire Text/Card character select/create UI
+10. continue with movement/combat/loot/inventory translation
 
-Do not download/bake the full ~73 GB terrain during M1.5 unless a later verified blocker proves it is unavoidable.
+Do not claim M2 runtime integration success while the adapter is still using only mock codec/transport tests.
 
 ---
 
