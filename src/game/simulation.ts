@@ -358,6 +358,7 @@ export function reduceGame(state: GameState, command: GameCommand): GameState {
     case "TRAVEL_TO_DESTINATION":
     case "USE_ABILITY":
     case "PICKUP_ITEM":
+    case "DROP_ITEM":
     case "EQUIP_ITEM":
     case "UNEQUIP_ITEM":
       return state;
