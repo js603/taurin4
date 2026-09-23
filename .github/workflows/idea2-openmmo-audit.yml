@@ -202,3 +202,102 @@ jobs:
             ${{ runner.temp }}/openmmo-agent-ingame.log
           if-no-files-found: warn
           retention-days: 7
+
+
+  browser-client:
+    name: Original browser client build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout pinned OpenMMO
+        uses: actions/checkout@v5
+        with:
+          repository: Julian-adv/OpenMMO
+          ref: 950e081c178d920c10c51f2d31f60c1b3383c925
+          path: openmmo
+          lfs: false
+          fetch-depth: 1
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: openmmo/client/package-lock.json
+
+      - name: Install browser client dependencies
+        working-directory: openmmo/client
+        run: npm ci
+
+      - name: Build shared Rust WASM codec
+        working-directory: openmmo/client
+        run: npm run build:wasm
+
+      - name: Validate browser client source
+        working-directory: openmmo/client
+        run: |
+          npm run check
+          npm run lint
+
+      - name: Build original browser client without LFS asset fetch
+        working-directory: openmmo/client
+        env:
+          VITE_GOOGLE_CLIENT_ID: m15-audit.invalid.apps.googleusercontent.com
+          VITE_BACKEND_HOST: 127.0.0.1
+        run: npx vite build
+
+      - name: Smoke-start built browser client
+        working-directory: openmmo/client
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx vite preview --host 127.0.0.1 --port 4173 > "$RUNNER_TEMP/openmmo-client-preview.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/openmmo-client-preview.pid"
+
+          for _ in $(seq 1 80); do
+            if curl -fsS http://127.0.0.1:4173/ > "$RUNNER_TEMP/openmmo-client-index.html"; then
+              break
+            fi
+            sleep 0.25
+          done
+
+          grep -q '<div id="app">' "$RUNNER_TEMP/openmmo-client-index.html"
+          grep -q 'src="/assets/' "$RUNNER_TEMP/openmmo-client-index.html"
+
+      - name: Record OAuth and asset boundary
+        working-directory: openmmo
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "VITE_GOOGLE_CLIENT_ID is not configured" client/src/lib/components/LoginScreen.svelte
+          grep -q "https://accounts.google.com/gsi/client" client/src/lib/components/LoginScreen.svelte
+          grep -q "bash tools/fetch-assets.sh" README.md
+          grep -q "262,144" README.md
+          grep -q "73 GB" README.md
+
+      - name: Stop browser preview
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$RUNNER_TEMP/openmmo-client-preview.pid" ]]; then
+            kill "$(cat "$RUNNER_TEMP/openmmo-client-preview.pid")" 2>/dev/null || true
+          fi
+          cat "$RUNNER_TEMP/openmmo-client-preview.log" 2>/dev/null || true
+
+      - name: Upload browser audit logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: idea2-openmmo-m15-browser-audit
+          path: |
+            ${{ runner.temp }}/openmmo-client-preview.log
+            ${{ runner.temp }}/openmmo-client-index.html
+          if-no-files-found: warn
+          retention-days: 7
