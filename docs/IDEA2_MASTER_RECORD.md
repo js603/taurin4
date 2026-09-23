@@ -981,3 +981,32 @@ Natural ambient monster spawn / kill is not claimed yet. NPC-token sessions are 
 `is_official_npc=true` by the original server, and ambient spawning deliberately refuses
 to spawn monsters for an unwatched official NPC. A normal human-auth integration identity
 is therefore required before that slice can be automated without modifying original rules.
+
+
+## M2 verified baseline — 2026-09-24
+
+Implementation HEAD:
+
+`39863b66973598dc93f8e1ca00f00a80ba1aa8fd`
+
+All four current Gates passed:
+
+- idea2 validation — run `35903549333` — **SUCCESS**
+- Pages — run `35903549203` — **SUCCESS**
+- Windows + Android — run `35903549207` — **SUCCESS**
+- real pinned OpenMMO adapter — run `35903549323` — **SUCCESS**
+
+This verified baseline includes:
+
+- real pinned-server character lifecycle
+- authoritative movement
+- real ability/cooldown
+- inventory / equip / unequip
+- DropItem / GroundItem / PickupItem
+- disconnect / reconnect persistence
+- PlayerAttack request and authoritative PlayerAttackRejected mapping
+- production web build with the pinned ~3.84 MiB OpenMMO WASM codec precached successfully
+
+The exploratory WASM dungeon stair-coordinate audit is deliberately stopped here because
+it became a long-running analysis path. Dungeon encounter/kill proof is now a separate,
+bounded Gate and must not block this verified M2 baseline.
