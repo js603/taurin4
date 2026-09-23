@@ -483,3 +483,94 @@ Still running at the last deliberate status check:
 
 No repeated polling is performed. The remaining Gates must be checked once at the next
 verification point before promoting the candidate to the verified implementation baseline.
+
+
+## Phase 8 — real gameplay and persistence cycle Gate
+
+Latest implementation candidate:
+
+`b57d96a37d62bd74cb0421132db08c8251cc7047`
+
+The real pinned-server integration test no longer stops at lifecycle/movement. It now
+exercises a self-contained gameplay/persistence cycle using the original starter kit.
+
+### Server-backed scenario
+
+```text
+EnterGame
+→ InventoryState
+→ worn_iron_sword equipped / worn_torch in bag
+→ MOVE_TO
+→ authoritative WorldUpdate position
+→ UseAbility(radiance)
+→ AbilityCooldowns(radiance > 0)
+→ UnequipItem(main_hand)
+→ InventoryUpdated: sword in bag
+→ DropItem(sword)
+→ InventoryUpdated + GroundItemSpawned
+→ semantic LOOT destination
+→ PickupItem(ground instance)
+→ InventoryUpdated: sword in bag
+→ GroundItemRemoved
+→ EquipItem(picked sword)
+→ InventoryUpdated: main_hand
+→ disconnect
+→ reconnect same account
+→ same character
+→ EnterGame
+→ InventoryState still has sword in main_hand
+→ persisted position restored
+```
+
+### Why Radiance
+
+Pinned server source shows Radiance has no class, target, or equipment requirement.
+It only requires a live unmounted player, then sets the original server cooldown and
+returns `AbilityCooldowns`. This makes it a stable real-server ability proof.
+
+### Persistence synchronization
+
+Pinned server disconnect flow is:
+
+```text
+connection close
+→ end_account_session
+→ cleanup_player_session
+→ persist_and_detach_player
+→ save_batch
+→ unregister / remove player
+```
+
+If a reconnect races the old socket teardown, account-session replacement uses the same
+session/persistence locks and persists the replaced player before the new character list
+is loaded. The integration test therefore uses reconnect itself as the persistence barrier
+instead of sleeping for an arbitrary amount of time.
+
+### New protocol action
+
+idea2 now also maps:
+
+- client `DropItem { instance_id }`
+- GameSession `DROP_ITEM`
+
+This action is currently primarily useful to prove the real loot/pickup loop and can later
+be surfaced in inventory UI when the UX policy is finalized.
+
+### Regression workflow coverage
+
+The real OpenMMO workflow now triggers for semantic gameplay changes under:
+
+- `src/openmmo/**`
+- `src/game/**`
+- `src/features/game/ui/OpenMmo*.tsx`
+- `src/features/game/ui/GameScreen.tsx`
+- `src/styles.css`
+
+This closes the earlier gap where a GameScreen semantic-type regression could pass without
+starting a new real OpenMMO run.
+
+### Verification state
+
+The full-cycle candidate workflows were running at the last deliberate check. Code presence
+is not proof; this phase becomes verified only after the real pinned-server workflow and
+normal quality/platform Gates succeed.
