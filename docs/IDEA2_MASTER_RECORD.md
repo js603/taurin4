@@ -10,7 +10,7 @@
 - Repository: `js603/taurin4`
 - Branch: `idea2`
 - Base checkpoint: `370688fc7d712e823206510d9b972af0fab30e88`
-- Last verified implementation HEAD: `ef47f8cc5390a42a23854aeca463eed55fb581e5`
+- Last verified implementation HEAD: `728e9d2fc8fffecb5ecd39a190b749bfb3418ebe`
 - Note: documentation-only commits may advance the branch HEAD. Every new session must query the actual `idea2` HEAD before work.
 - GitHub Pages preview: `https://js603.github.io/taurin4/idea2/`
 - OpenMMO reference repository: `Julian-adv/OpenMMO`
@@ -307,24 +307,30 @@ Android LAN Host/Client 기능을 제거하는 것이 아니다.
 
 ## 8. Verified CI / build results
 
-Runtime/build results below were verified against implementation HEAD `ef47f8cc5390a42a23854aeca463eed55fb581e5`.
+Runtime/build results below are current through implementation HEAD `728e9d2fc8fffecb5ecd39a190b749bfb3418ebe`.
 Subsequent documentation-only commits do not represent additional runtime implementation.
 
 ### idea2 validation
 
 - Workflow: `.github/workflows/idea2-ci.yml`
-- Run ID: `35796424962`
+- Run ID: `35811464640`
 - Result: **SUCCESS**
 - Scope:
-  - ESLint
-  - Vitest
-  - TypeScript
-  - Vite production build
+  - ESLint: PASS
+  - Vitest: **4 files / 11 tests PASS**
+  - TypeScript: PASS
+  - Vite production build: PASS
+- M1 TypeScript coverage includes:
+  - LAN protocol encode/decode/endpoint normalization
+  - LAN client handshake
+  - Ping RTT
+  - bounded reconnect
+  - protocol mismatch fail-fast
 
 ### Windows + Android platform validation
 
 - Workflow: `.github/workflows/idea2-platform.yml`
-- Run ID: `35796424960`
+- Run ID: `35811466046`
 - Result: **SUCCESS**
 
 Verified:
@@ -332,20 +338,35 @@ Verified:
 - Shared Rust network protocol tests: PASS
 - Persistence contract tests: PASS
 - Host start/bind/stop test: PASS
-- Windows Tauri + embedded Host Core compile: PASS
-- Android Tauri Debug APK + embedded Host Core build: PASS
+- Real localhost WebSocket integration test: PASS
+  - HostHello
+  - Hello(platform=windows)
+  - ClientAccepted
+  - Ping/Pong
+  - disconnect client count
+  - reconnect
+- Windows Tauri + embedded Host/Client compile: PASS
+- Windows M1 test artifact staging/upload: PASS
+- Android Tauri Debug APK + embedded shared Rust core build: PASS
 - Android APK artifact upload: PASS
+
+Windows M1 artifact:
+
+- Artifact ID: `10729769734`
+- Artifact name: `idea2-m1-windows-x64-test`
+- Contains the same `taurin4.exe` intended for both PC A and PC B runtime testing.
 
 Android artifact:
 
-- Artifact ID: `10724826042`
+- Artifact ID: `10729884292`
 - Artifact name: `idea2-android-host-debug-apk`
+- Android LAN runtime remains outside the current Gate.
 - Note: GitHub Actions artifacts are temporary and should not be treated as permanent release storage.
 
 ### Pages
 
 - Workflow: `.github/workflows/pages-idea2.yml`
-- Run ID: `35796424918`
+- Run ID: `35811464692`
 - Result: **SUCCESS**
 
 Preview:
@@ -493,9 +514,34 @@ Not yet:
 - character import/export
 - multiplayer final-state reconciliation
 
-### M1 — Windows PC ↔ Windows PC LAN — NEXT
+### M1 — Windows PC ↔ Windows PC LAN — IN PROGRESS
 
-Goal: actual two-PC LAN connection.
+**Implementation and automated/local integration are complete. The remaining Gate is the real Windows PC A ↔ PC B LAN runtime test.**
+
+Implemented:
+
+- typed TypeScript LAN control protocol
+- manual Host address normalization
+- LAN Client state machine
+- `CONNECTING → HANDSHAKING → CONNECTED`
+- HostHello protocol version validation
+- Hello / ClientAccepted
+- Ping/Pong + RTT
+- bounded reconnect delays: 0.5s / 1.5s / 3.0s
+- protocol mismatch fail-fast
+- Host + Client native control panels
+- real localhost Rust WebSocket integration test
+- Windows M1 test artifact
+- formal runtime checklist: `docs/IDEA2_M1_PC_LAN_TEST.md`
+
+Still required before M1 COMPLETE:
+
+- run the same Windows artifact on two real PCs
+- verify TCP 10006 through the real LAN/firewall
+- verify Host `CLIENTS 0 → 1 → 0 → 1`
+- verify RTT
+- verify manual disconnect/reconnect
+- verify bounded reconnect after Host interruption
 
 Required sequence:
 
@@ -756,21 +802,28 @@ this file.
 
 ## 16. Next exact action
 
-**M1 — Windows PC ↔ Windows PC LAN Client implementation**
+**M1 Runtime Gate — real Windows PC A ↔ Windows PC B LAN test**
+
+Use the exact same `idea2-m1-windows-x64-test` artifact on both PCs and follow
+`docs/IDEA2_M1_PC_LAN_TEST.md`.
 
 Order:
 
-1. keep Android build gate intact
-2. implement Windows/client WebSocket connection to the existing Host Core
-3. manual Host address first
-4. verify HostHello / Hello / ClientAccepted
-5. verify Ping/Pong
-6. expose connected-client state
-7. verify disconnect and reconnect
-8. build Windows test artifacts
-9. perform actual PC↔PC LAN runtime test
-10. only then implement LAN automatic discovery
-11. after M1 completes, begin M1.5 original OpenMMO runtime + full user-flow audit
+1. extract the same test package on PC A and PC B
+2. PC A: start `LAN Host`
+3. PC A: identify the active LAN IPv4 address
+4. if needed, allow `taurin4.exe` on Windows Private networks
+5. PC B: verify `Test-NetConnection <PC-A-IP> -Port 10006`
+6. PC B: enter `<PC-A-IP>:10006` and connect
+7. verify `CONNECTING → HANDSHAKING → CONNECTED`
+8. verify PC A `CLIENTS 0 → 1`
+9. verify Ping RTT
+10. verify manual disconnect `1 → 0` and reconnect `0 → 1`
+11. stop/restart Host and verify bounded reconnect behavior
+12. only after all checks pass, mark M1 COMPLETE
+13. then begin M1.5 original OpenMMO runtime + full user-flow audit
+
+Do **not** add automatic LAN discovery before this real two-PC Gate passes.
 
 ---
 
@@ -779,4 +832,3 @@ Order:
 When starting a new ChatGPT conversation, use this instruction:
 
 > Continue the `js603/taurin4` `idea2` project. Treat `docs/IDEA2_MASTER_RECORD.md` on the `idea2` branch as the canonical project state. Read it first, then verify the actual current `idea2` branch HEAD and relevant CI state before making changes. Do not infer progress from old chat memory when repository state disagrees. Continue from "Next exact action". Keep Windows PC↔PC as the only current LAN runtime validation Gate. Android remains a build/play platform, but Android LAN runtime testing is currently excluded. Update the MASTER RECORD after every material milestone or policy change.
-
