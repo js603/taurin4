@@ -13,6 +13,12 @@ export type OpenMmoCharacterClass =
 
 export type OpenMmoGender = "male" | "female";
 
+export interface OpenMmoPosition {
+  x: number;
+  y: number;
+  z: number;
+}
+
 export interface OpenMmoCharacterAttributes {
   str: number;
   dex: number;
@@ -64,7 +70,16 @@ export type OpenMmoClientMessage =
   | "Heartbeat"
   | "RequestRespawn"
   | { ChatMessage: { message: string } }
-  | { PlayerAttack: { monster_id: string } };
+  | { PlayerAttack: { monster_id: string } }
+  | {
+      PlayerMove: {
+        position: OpenMmoPosition;
+        rotation: number;
+        floor_level: number;
+        append: boolean;
+        sprinting: boolean;
+      };
+    };
 
 export type OpenMmoServerMessage =
   | {
@@ -87,6 +102,23 @@ export type OpenMmoServerMessage =
   | { CharacterError: { message: string } }
   | { JoinSuccess: Record<string, unknown> }
   | { GameTimeSync: Record<string, unknown> }
+  | {
+      PlayerMoved: {
+        player_id: number;
+        position: OpenMmoPosition;
+        rotation: number;
+        floor_level: number;
+        sprinting: boolean;
+      };
+    }
+  | {
+      PlayerTeleported: {
+        player_id: number;
+        position: OpenMmoPosition;
+        rotation: number;
+        floor_level: number;
+      };
+    }
   | { PlayerRespawned: Record<string, unknown> }
   | Record<string, unknown>;
 
