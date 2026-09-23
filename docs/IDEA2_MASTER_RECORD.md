@@ -11,7 +11,7 @@
 - Branch: `idea2`
 - Base checkpoint: `370688fc7d712e823206510d9b972af0fab30e88`
 - Last verified implementation HEAD: `a2ce2dc3556412e588a35f6534bb3258b8fb399f`
-- Latest M2 implementation candidate HEAD: `fc5b97cc325e7e2cbf50512d2b64def261e99932` (validation pending at last check)
+- Latest M2 implementation candidate HEAD: `8536ff86487c003826a9c6bf996f50eba10223f1` (validation / real movement Gate running at last check)
 - Note: documentation-only commits may advance the branch HEAD. Every new session must query the actual `idea2` HEAD before work.
 - GitHub Pages preview: `https://js603.github.io/taurin4/idea2/`
 - OpenMMO reference repository: `Julian-adv/OpenMMO`
@@ -881,12 +881,25 @@ Implemented in the current candidate:
 - the OpenMMO CI Gate now also builds the browser-target codec and verifies it is included
   in the taurin4 production bundle.
 
+Current movement implementation:
+
+- added `MOVE_TO` to the shared GameSession command contract
+- OpenMmoAdapter serializes original `PlayerMove { position, rotation, floor_level, append, sprinting }`
+- OpenMmoGameSession does **not** optimistically overwrite player position
+- player position changes only after authoritative `PlayerMoved` or `PlayerTeleported`
+- JoinSuccess seeds initial server position/rotation/floor
+- local simulation treats `MOVE_TO` as a no-op
+- real integration Gate now sends a small move against the pinned real server and waits for a server-authoritative position update
+
+A prior bootstrap validation failure was traced to the generic `Result` default type in
+`OpenMmoAdapter`; that type definition has been corrected in the current candidate.
+
 Next implementation order:
 
-1. confirm validation of the current bootstrap candidate once
-2. if successful, record the new verified implementation HEAD
-3. add authoritative movement mapping
-4. continue combat/loot/inventory translation incrementally
+1. confirm current validation + real movement Gate once
+2. if successful, record `8536ff86487c003826a9c6bf996f50eba10223f1` or its successor as verified
+3. design semantic destination discovery on top of the proven movement primitive
+4. continue combat ability / loot / inventory translation incrementally
 5. replace NPC-token player bootstrap with the final LAN/local identity design later
 6. keep the pinned real-server integration workflow as a regression Gate
 
