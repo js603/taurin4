@@ -11,7 +11,7 @@
 - Branch: `idea2`
 - Base checkpoint: `370688fc7d712e823206510d9b972af0fab30e88`
 - Last verified implementation HEAD: `a2ce2dc3556412e588a35f6534bb3258b8fb399f`
-- Latest M2 implementation candidate HEAD: `8536ff86487c003826a9c6bf996f50eba10223f1` (validation / real movement Gate running at last check)
+- Latest M2 implementation candidate HEAD: `253fc4b57cb3d75412b80d4dcd2dd1b06cafe1e7` (validation / platform / real OpenMMO regression pending at last check)
 - Note: documentation-only commits may advance the branch HEAD. Every new session must query the actual `idea2` HEAD before work.
 - GitHub Pages preview: `https://js603.github.io/taurin4/idea2/`
 - OpenMMO reference repository: `Julian-adv/OpenMMO`
@@ -863,47 +863,115 @@ this file.
 
 ## 16. Next exact action
 
-**M2 — character/lifecycle UI + runtime bootstrap**
+**M2 — Semantic World + Combat/Loot/Inventory integration candidate**
 
-M1.5 is complete and the real M2 codec/server Gate has passed.
+M1.5 is complete and the original real lifecycle adapter Gate remains verified by
+run `35888983232`.
 
-Implemented in the current candidate:
+The newest M2 candidate now goes beyond lifecycle/bootstrap:
 
-- LocalGameSession remains the default app runtime.
-- `?runtime=openmmo` opens the explicit M2 OpenMMO bootstrap.
-- bootstrap loads a generated browser WASM codec, connects to the real OpenMMO WebSocket,
-  authenticates with the temporary NPC-token M2 path, opens the Text/Card character lobby,
-  then transitions into the same `GameScreen` backed by `OpenMmoGameSession`.
-- NPC token is kept only in React memory and is not persisted.
-- `npm run openmmo:codec` builds the exact audited OpenMMO shared crate from a separate
-  pinned checkout supplied through `OPENMMO_SOURCE_DIR`.
-- generated browser codec files live under `public/openmmo-wasm/` and are gitignored.
-- the OpenMMO CI Gate now also builds the browser-target codec and verifies it is included
-  in the taurin4 production bundle.
+### WorldUpdate / authoritative movement
 
-Current movement implementation:
+A previous real movement test timed out even though `PlayerMove` reached the server.
+Pinned-source inspection showed why:
 
-- added `MOVE_TO` to the shared GameSession command contract
-- OpenMmoAdapter serializes original `PlayerMove { position, rotation, floor_level, append, sprinting }`
-- OpenMmoGameSession does **not** optimistically overwrite player position
-- player position changes only after authoritative `PlayerMoved` or `PlayerTeleported`
-- JoinSuccess seeds initial server position/rotation/floor
-- local simulation treats `MOVE_TO` as a no-op
-- real integration Gate now sends a small move against the pinned real server and waits for a server-authoritative position update
+```text
+PlayerMove
+  ↓
+server movement queue/tick
+  ↓
+Interest / WorldUpdate envelope
+  ↓
+WorldUpdate.events[].messages[]
+  └─ PlayerMoved / nearby state
+```
 
-A prior bootstrap validation failure was traced to the generic `Result` default type in
-`OpenMmoAdapter`; that type definition has been corrected in the current candidate.
+The original client recursively unwraps `WorldUpdate`; idea2 now does the same.
+
+Current candidate behavior:
+
+- `WorldUpdate.position / floor_level` updates the authoritative local-player pose.
+- nested `WorldUpdate.events[].messages[]` are fed back through the semantic mapper.
+- epoch/generation/sequence are tracked so stale updates are ignored.
+- reset updates clear the current semantic AOI list.
+- raw `MOVE_TO` never changes visible player position optimistically.
+- semantic arrival is determined only from server-authoritative position updates.
+
+### Semantic destination layer
+
+The UI no longer requires raw coordinates.
+
+Current target types:
+
+- MONSTER
+- PLAYER
+- NPC / Agent
+- LOOT
+
+Targets originate only from authoritative OpenMMO AOI messages.
+
+`TRAVEL_TO_DESTINATION`:
+
+1. resolves the selected semantic target
+2. computes an approach point and facing
+3. sends original `PlayerMove`
+4. keeps the client pose unchanged
+5. completes only when authoritative server position reaches the target radius
+
+Official OpenMMO agents are identified from `Player.is_official_npc` and presented as
+NPC rather than normal players.
+
+### Ability / loot / inventory
+
+Implemented protocol/UI candidate:
+
+- all five audited abilities:
+  - `guardian_ward`
+  - `radiance`
+  - `bow_mark`
+  - `dagger_double_slash`
+  - `auscultation`
+- `UseAbility`
+- `AbilityCooldowns`
+- `AbilityRejected`
+- `PickupItem`
+- `GroundItemSpawned / Appeared / Removed / QuantityChanged`
+- `InventoryState / InventoryUpdated`
+- `EquipItem / UnequipItem`
+
+The Text/Card UI now contains:
+
+- semantic nearby-target cards
+- near-loot "pickup" action
+- server-cooldown ability buttons
+- bag list
+- equipped list
+- equip / unequip actions
+
+All mutations remain server-authoritative.
+
+### Current verification status
+
+Latest implementation candidate:
+
+`253fc4b57cb3d75412b80d4dcd2dd1b06cafe1e7`
+
+At the last check, current validation/platform/real-OpenMMO regression workflows were still
+running or pending. Do not promote this candidate to "Last verified implementation HEAD"
+until those results are confirmed.
 
 Next implementation order:
 
-1. confirm current validation + real movement Gate once
-2. if successful, record `8536ff86487c003826a9c6bf996f50eba10223f1` or its successor as verified
-3. design semantic destination discovery on top of the proven movement primitive
-4. continue combat ability / loot / inventory translation incrementally
-5. replace NPC-token player bootstrap with the final LAN/local identity design later
-6. keep the pinned real-server integration workflow as a regression Gate
+1. confirm the current candidate workflows once
+2. if successful, promote the verified implementation HEAD and record exact run IDs
+3. exercise semantic movement through the real pinned-server Gate
+4. extend real runtime proof from lifecycle/movement into one safe ability server response
+5. create an end-to-end loot → pickup → `InventoryUpdated` proof
+6. verify equip/unequip mutation against the real server
+7. then close the remaining M2 full-cycle gaps: logout/reconnect/same-character state
+8. only after the full real cycle works, proceed to M3 controlled native migration
 
-Do not claim M2 runtime integration success while the adapter is still using only mock codec/transport tests.
+Do not claim full M2 completion from unit/mock coverage alone.
 
 ---
 
