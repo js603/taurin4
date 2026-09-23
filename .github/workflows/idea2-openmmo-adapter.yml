@@ -48,14 +48,17 @@ jobs:
         with:
           path: taurin4
 
-      - name: Checkout pinned OpenMMO
-        uses: actions/checkout@v5
-        with:
-          repository: Julian-adv/OpenMMO
-          ref: 950e081c178d920c10c51f2d31f60c1b3383c925
-          path: openmmo
-          lfs: false
-          fetch-depth: 1
+      - name: Checkout pinned OpenMMO with partial sparse clone
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init openmmo
+          git -C openmmo remote add origin https://github.com/Julian-adv/OpenMMO.git
+          git -C openmmo sparse-checkout init --cone
+          git -C openmmo sparse-checkout set .cargo agent-client server shared terrain tools data-src
+          git -C openmmo fetch --depth=1 --filter=blob:none origin 950e081c178d920c10c51f2d31f60c1b3383c925
+          git -C openmmo checkout --detach FETCH_HEAD
+          test "$(git -C openmmo rev-parse HEAD)" = "950e081c178d920c10c51f2d31f60c1b3383c925"
 
       - uses: dtolnay/rust-toolchain@stable
         with:
