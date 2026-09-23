@@ -374,6 +374,10 @@ export class OpenMmoAdapter {
     return this.send({ PickupItem: { instance_id: instanceId } });
   }
 
+  dropItem(instanceId: number) {
+    return this.send({ DropItem: { instance_id: instanceId } });
+  }
+
   equipItem(instanceId: number) {
     return this.send({ EquipItem: { instance_id: instanceId } });
   }
