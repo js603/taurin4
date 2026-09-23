@@ -120,6 +120,14 @@ export type OpenMmoClientMessage =
   | { EquipItem: { instance_id: number } }
   | { UnequipItem: { slot: OpenMmoEquipSlot } }
   | {
+      ToggleDungeonDoor: {
+        entrance_id: string;
+        depth: number;
+        door_id: number;
+      };
+    }
+  | { RequestDungeonDoors: { entrance_id: string } }
+  | {
       PlayerMove: {
         position: OpenMmoPosition;
         rotation: number;
@@ -189,6 +197,20 @@ export type OpenMmoServerMessage =
       PlayerAttackRejected: {
         monster_id: string;
         reason: string;
+      };
+    }
+  | {
+      DungeonDoorToggled: {
+        entrance_id: string;
+        depth: number;
+        door_id: number;
+        is_open: boolean;
+      };
+    }
+  | {
+      DungeonDoorsState: {
+        entrance_id: string;
+        doors: Array<[number, number]>;
       };
     }
   | {
