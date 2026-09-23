@@ -200,6 +200,14 @@ export type OpenMmoServerMessage =
       };
     }
   | {
+      DungeonDoorState: {
+        entrance_id: string;
+        depth: number;
+        door_id: number;
+        is_open: boolean | null;
+      };
+    }
+  | {
       DungeonDoorToggled: {
         entrance_id: string;
         depth: number;
