@@ -56,6 +56,12 @@ function DestinationCard({
   );
 }
 
+function semanticKindLabel(kind: "monster" | "player" | "loot") {
+  if (kind === "monster") return "MONSTER";
+  if (kind === "player") return "PLAYER";
+  return "LOOT";
+}
+
 function FloatingAttention({
   session,
 }: {
@@ -191,7 +197,10 @@ export function GameScreen({
                   state.combat.enemy.distanceMeters +
                   "m 앞에서 공격 기회를 노리고 있다."
                 : openMmo
-                  ? "원본 OpenMMO 서버의 권위 상태를 Text/Card 이벤트로 표현하고 있다."
+                  ? state.semanticTravel
+                    ? state.semanticTravel.label +
+                      " 쪽으로 이동 중이다. 좌표 대신 의미 있는 대상만 표시한다."
+                    : "원본 OpenMMO 서버의 권위 상태를 Text/Card 이벤트로 표현하고 있다."
                   : currentLocation.description}
           </p>
 
@@ -210,6 +219,38 @@ export function GameScreen({
             </div>
           ) : null}
         </div>
+
+        {openMmo && (state.semanticDestinations?.length ?? 0) > 0 ? (
+          <div
+            className="semantic-destination-stack"
+            aria-label="OpenMMO 주변 대상"
+          >
+            {state.semanticDestinations?.slice(0, 6).map((destination) => (
+              <button
+                key={destination.id}
+                className="semantic-destination-card"
+                type="button"
+                onClick={() =>
+                  send({
+                    type: "TRAVEL_TO_DESTINATION",
+                    destinationId: destination.id,
+                  })
+                }
+              >
+                <span className="semantic-destination-card__meta">
+                  <span>{semanticKindLabel(destination.kind)}</span>
+                  <span>{destination.distanceMeters.toFixed(1)}m</span>
+                </span>
+                <strong>{destination.label}</strong>
+                <span className="semantic-destination-card__detail">
+                  {state.semanticTravel?.destinationId === destination.id
+                    ? "이동 중"
+                    : destination.detail ?? "접근 가능"}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         {!openMmo && state.nearbyOpen ? (
           <div className="destination-stack" aria-label="이동 가능한 장소">
