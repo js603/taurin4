@@ -755,7 +755,10 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
         expect(initialTarget).toBeDefined();
         if (!initialTarget) throw new Error("No real dungeon monster entered AOI");
 
-        const targetId = initialTarget.id;
+        const targetSemanticId = initialTarget.id;
+        const targetId = targetSemanticId.startsWith("monster:")
+          ? targetSemanticId.slice("monster:".length)
+          : targetSemanticId;
         const openDoorIds = new Set<number>();
 
         const stateStart = observed.length;
@@ -786,7 +789,7 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
 
         const findMonsterPath = () => {
           const position = session.getSnapshot().player.position;
-          const target = currentDungeonMonster(session, targetId);
+          const target = currentDungeonMonster(session, targetSemanticId);
           if (!position || !target) return null;
           return pathResult(
             wasm.passability_find_path_budget(
@@ -802,7 +805,7 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
         };
 
         for (let doorPass = 0; doorPass <= doors.length; doorPass += 1) {
-          const target = currentDungeonMonster(session, targetId);
+          const target = currentDungeonMonster(session, targetSemanticId);
           if (!target) break;
           if (target.distanceMeters <= 1.8) break;
 
@@ -887,7 +890,7 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
         }
 
         for (let approach = 0; approach < 3; approach += 1) {
-          const target = currentDungeonMonster(session, targetId);
+          const target = currentDungeonMonster(session, targetSemanticId);
           if (!target || target.distanceMeters <= 1.8) break;
           const path = findMonsterPath();
           if (!path?.found || path.waypoints.length === 0) {
@@ -897,7 +900,7 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
           await delay(200);
         }
 
-        const inRange = currentDungeonMonster(session, targetId);
+        const inRange = currentDungeonMonster(session, targetSemanticId);
         expect(inRange).toBeDefined();
         if (!inRange) throw new Error("Kobold disappeared before combat");
         expect(inRange.distanceMeters).toBeLessThanOrEqual(2.2);
