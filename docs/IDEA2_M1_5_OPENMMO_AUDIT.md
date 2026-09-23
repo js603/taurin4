@@ -197,7 +197,7 @@ idea2 should **KEEP** this early incompatibility detection principle.
 
 ## 7. Original browser user journey
 
-Status: **SOURCE VERIFIED / runtime verification pending**
+Status: **BROWSER BUILD/RUNTIME SHELL VERIFIED / external Google OAuth play login pending**
 
 ```text
 LOGIN
@@ -230,6 +230,20 @@ GAME
 ```
 
 The current browser UI limits the account to 3 visible/createable slots.
+
+Runtime audit run `35829696982` additionally verified the original browser client itself can be prepared without LFS asset download:
+
+- npm dependencies install: PASS
+- shared Rust WASM codec build: PASS
+- Svelte/TypeScript checks: PASS
+- ESLint: PASS
+- Vite production bundle: PASS
+- built browser bundle starts under `vite preview`: PASS
+- HTTP index is served: PASS
+
+The browser login screen remains Google-only and loads Google Identity Services from
+`https://accounts.google.com/gsi/client`. A real browser account login was not executed
+inside CI and must not be represented as runtime-verified authentication.
 
 ## 8. Character creation contract
 
@@ -524,7 +538,28 @@ build original server + agent-client
 No OpenMMO binary is published as a taurin4 artifact.
 Only audit logs may be retained temporarily.
 
-## 17. Remaining M1.5 runtime gates
+## 17. Original gameplay-system runtime audit
+
+A pinned-source gameplay-system Gate was added to
+`.github/workflows/idea2-openmmo-audit.yml`.
+
+It executes the original server's own runtime tests for:
+
+- authoritative movement and dead-player movement rejection
+- monster chase/attack AI
+- melee attack validation and dead-player attack rejection
+- monster loot release and ground pickup/stack merge
+- inventory grants and equipment constraints
+- spatial chat and whisper delivery
+- WorldReady loading shield
+- respawn scheduling
+- persistence across save/reload/replacement sessions
+
+This is intentionally different from source inspection: the original Rust game logic is
+compiled and executed. It is also different from a human visual play session, so the audit
+records it as **server runtime verified**, not "visually played".
+
+## 18. Remaining M1.5 runtime gates
 
 Server lifecycle — run `35824184590`:
 
@@ -541,11 +576,35 @@ Server lifecycle — run `35824184590`:
 - [x] server records the character as entered in-game
 - [x] graceful shutdown succeeds
 
-Still pending:
+Browser client — run `35829696982`:
 
-- [ ] original browser client WASM/build prerequisites are validated
-- [ ] original browser bundle starts over HTTP
-- [ ] original browser Google login is executed or explicitly recorded as external-OAuth-only
-- [ ] visual world/core play audit is completed to the extent possible without the huge asset/terrain download
+- [x] original browser client WASM/build prerequisites are validated
+- [x] original browser bundle starts over HTTP
+- [x] browser Google login dependency is explicitly isolated as external-OAuth-only
+- [ ] a real Google account login has not been executed in the audit environment
+
+Gameplay-system runtime:
+
+- [ ] movement authority test Gate
+- [ ] monster AI / combat test Gate
+- [ ] loot / pickup test Gate
+- [ ] inventory / equipment test Gate
+- [ ] chat test Gate
+- [ ] WorldReady / death restriction test Gate
+- [ ] respawn test Gate
+- [ ] persistence test Gate
+
+Visual-original limitations:
+
+- [ ] full 3D visual world was not audited because that would require the original visual
+  asset/terrain pipeline that idea2 intentionally does not adopt.
+
+M1.5 completion rule for idea2:
+
+A full 73 GB terrain bake or complete original visual-asset download is **not** required.
+M1.5 may close when server/runtime systems, character lifecycle, browser build boundary,
+authentication boundary, and core gameplay-server tests are verified and the migration
+matrix is stable. A real Google browser login remains an external integration test rather
+than a prerequisite for the LAN-first idea2 architecture.
 
 M1.5 is not complete until source-only findings and actual runtime findings are clearly separated.
