@@ -590,3 +590,39 @@ At the last deliberate inspection, the real OpenMMO job had completed checkout,
 Rust/tool installation, Node setup and Rust cache setup, and was installing taurin4
 dependencies. The actual full-cycle test had therefore not yet run and must not be
 reported as passed.
+
+
+## Phase 8 verification clarification
+
+Real workflow `35901639325` failed only after the gameplay regression completed.
+
+The real test itself reported:
+
+```text
+src/openmmo/real.integration.test.ts
+1 test passed
+full gameplay/persistence cycle passed
+546 ms
+```
+
+Server logs independently showed the real sword drop and pickup transfers, disconnect,
+persistence, reconnect, and re-entry.
+
+The later failure was PWA packaging:
+
+```text
+openmmo-wasm/onlinerpg_shared_bg.wasm = 3.84 MB
+Workbox default precache maximum = 2 MiB
+```
+
+idea2 now sets a 5 MiB Workbox precache cap because the pinned shared codec is an explicit
+OpenMMO web runtime dependency.
+
+The latest candidate also covers `PlayerAttackRejected` semantically and sends a real
+`PlayerAttack` for an invalid monster id in the pinned-server integration test. This proves
+the basic attack request/rejection wire path without inventing a monster.
+
+A real natural encounter/kill is still intentionally separate: the automated NPC-token
+identity is an official NPC in the original server, and ambient spawning is suppressed for
+an official NPC when no human player is watching. That original rule will not be patched
+around merely to make the test green.
