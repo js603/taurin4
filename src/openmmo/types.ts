@@ -13,6 +13,43 @@ export type OpenMmoCharacterClass =
 
 export type OpenMmoGender = "male" | "female";
 
+export type OpenMmoAbilityId =
+  | "guardian_ward"
+  | "radiance"
+  | "bow_mark"
+  | "dagger_double_slash"
+  | "auscultation";
+
+export type OpenMmoEquipSlot =
+  | "head"
+  | "main_hand"
+  | "off_hand"
+  | "chest"
+  | "ear"
+  | "neck"
+  | "belt"
+  | "pants"
+  | "boots"
+  | "ring"
+  | "ring_left"
+  | "hands"
+  | "back"
+  | "shirt";
+
+export interface OpenMmoItemInstance {
+  instance_id: number;
+  item_def_id: string;
+  quantity: number;
+  enchant: number;
+  locked: boolean;
+}
+
+export interface OpenMmoInventory {
+  bag: OpenMmoItemInstance[];
+  equipped: Partial<Record<OpenMmoEquipSlot, OpenMmoItemInstance>>;
+  active_ammo?: string | null;
+}
+
 export interface OpenMmoPosition {
   x: number;
   y: number;
@@ -72,6 +109,16 @@ export type OpenMmoClientMessage =
   | { ChatMessage: { message: string } }
   | { PlayerAttack: { monster_id: string } }
   | {
+      UseAbility: {
+        ability: OpenMmoAbilityId;
+        monster_id: string | null;
+        target_player_id: number | null;
+      };
+    }
+  | { PickupItem: { instance_id: number } }
+  | { EquipItem: { instance_id: number } }
+  | { UnequipItem: { slot: OpenMmoEquipSlot } }
+  | {
       PlayerMove: {
         position: OpenMmoPosition;
         rotation: number;
@@ -121,6 +168,22 @@ export type OpenMmoServerMessage =
       };
     }
   | { GameTimeSync: Record<string, unknown> }
+  | { InventoryState: { inventory: OpenMmoInventory } }
+  | { InventoryUpdated: { inventory: OpenMmoInventory } }
+  | {
+      AbilityCooldowns: {
+        cooldowns: Array<{
+          ability: OpenMmoAbilityId;
+          remaining_ms: number;
+        }>;
+      };
+    }
+  | {
+      AbilityRejected: {
+        ability: OpenMmoAbilityId;
+        reason: string;
+      };
+    }
   | {
       PlayerMoved: {
         player_id: number;
