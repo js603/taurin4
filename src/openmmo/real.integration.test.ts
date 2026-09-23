@@ -234,6 +234,17 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
         5_000,
       );
 
+      expect(adapter.sendAttack("idea2-missing-monster")).toBe(true);
+      await waitForSession(
+        session,
+        () =>
+          session
+            .getSnapshot()
+            .logs.some((entry) => entry.text.includes("공격 거부")),
+        5_000,
+      );
+      expect(session.getSnapshot().logs.at(-1)?.text).toContain("대상이 사라졌다");
+
       session.command({ type: "UNEQUIP_ITEM", slot: "main_hand" });
       await waitForSession(
         session,
