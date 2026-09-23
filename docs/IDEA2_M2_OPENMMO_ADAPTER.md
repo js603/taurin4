@@ -320,3 +320,146 @@ Candidate HEAD: `8536ff86487c003826a9c6bf996f50eba10223f1`.
 
 At the time this section was written, the new validation/integration run had started but
 had not yet been declared successful.
+
+
+## Phase 6 — WorldUpdate + semantic destination layer
+
+Candidate HEAD lineage culminates in:
+`253fc4b57cb3d75412b80d4dcd2dd1b06cafe1e7`.
+
+### Why the first movement Gate failed
+
+The first real movement roundtrip test timed out after a successful `PlayerMove`.
+The pinned OpenMMO server does not guarantee that the mover consumes a standalone
+`PlayerMoved` frame in the shape idea2 initially expected.
+
+The authoritative movement/state feed is delivered through the interest system as:
+
+```text
+WorldUpdate {
+  position,
+  floor_level,
+  events: [
+    {
+      subject,
+      revision,
+      change,
+      messages: [ ...ServerMessage ]
+    }
+  ]
+}
+```
+
+The original browser client recursively dispatches each nested event message.
+
+idea2 now mirrors that protocol boundary.
+
+### Implemented
+
+- typed `WorldUpdate` envelope
+- world epoch / generation / sequence tracking
+- stale-update rejection
+- reset handling
+- authoritative local-player position from `WorldUpdate.position`
+- recursive nested message dispatch
+- semantic AOI destination collection
+
+Destination kinds:
+
+- `monster`
+- `player`
+- `npc`
+- `loot`
+
+Official OpenMMO NPC/Agent sessions are distinguished with
+`Player.is_official_npc`.
+
+### Semantic travel
+
+`TRAVEL_TO_DESTINATION` converts a semantic target into an original OpenMMO
+`PlayerMove` approach request.
+
+The client:
+
+- never exposes raw coordinates as the primary UX
+- never commits local position optimistically
+- keeps the destination label in semantic travel state
+- decides arrival from authoritative world position only
+
+Approximate interaction radii in the idea2 projection:
+
+- monster: 2.5 m
+- player / NPC: 1.5 m
+- loot: 0.8 m
+
+These are UI approach radii; the server still performs the real rule/range validation.
+
+## Phase 7 — abilities, loot, inventory and equipment
+
+Implemented protocol boundary:
+
+### Ability
+
+Original ability IDs:
+
+- `guardian_ward`
+- `radiance`
+- `bow_mark`
+- `dagger_double_slash`
+- `auscultation`
+
+Mapped messages:
+
+- client `UseAbility`
+- server `AbilityCooldowns`
+- server `AbilityRejected`
+
+The UI displays server-provided remaining cooldowns and disables buttons while a
+cooldown is active.
+
+### Loot
+
+Mapped messages:
+
+- `GroundItemSpawned`
+- `GroundItemAppeared`
+- `GroundItemQuantityChanged`
+- `GroundItemRemoved`
+- client `PickupItem`
+
+Ground items become semantic LOOT destinations. When the authoritative player position
+is close enough, the destination action changes from travel to pickup.
+
+### Inventory / equipment
+
+Mapped messages:
+
+- `InventoryState`
+- `InventoryUpdated`
+- client `EquipItem`
+- client `UnequipItem`
+
+The current Text/Card panel renders:
+
+- equipped items
+- bag items
+- quantity
+- enchantment level
+- locked state
+- active server-backed equip / unequip requests
+
+This is still an implementation candidate until the current CI and real OpenMMO
+regression workflow finish successfully.
+
+## Remaining M2 proof gaps
+
+Code presence is not considered runtime proof.
+
+Still required:
+
+1. confirm the new WorldUpdate-based movement roundtrip against the real pinned server
+2. confirm at least one real ability request and server response
+3. prove real ground loot → pickup → InventoryUpdated
+4. prove real equip/unequip mutation
+5. prove the same cycle through the explicit app bootstrap / Text-Card UI
+6. prove logout → reconnect → same character state
