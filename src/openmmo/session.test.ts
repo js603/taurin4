@@ -7,6 +7,7 @@ class FakeAdapter {
   sendAttack = vi.fn(() => true);
   useAbility = vi.fn(() => true);
   pickupItem = vi.fn(() => true);
+  dropItem = vi.fn(() => true);
   equipItem = vi.fn(() => true);
   unequipItem = vi.fn(() => true);
   sendMove = vi.fn(() => true);
@@ -314,6 +315,9 @@ describe("OpenMmoGameSession", () => {
 
     session.command({ type: "PICKUP_ITEM", instanceId: 77 });
     expect(adapter.pickupItem).toHaveBeenCalledWith(77);
+
+    session.command({ type: "DROP_ITEM", instanceId: 41 });
+    expect(adapter.dropItem).toHaveBeenCalledWith(41);
   });
 
   it("maps authoritative combat, loot, death and respawn events", () => {
