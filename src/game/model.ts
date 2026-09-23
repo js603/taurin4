@@ -23,11 +23,21 @@ export interface Location {
   tags: readonly string[];
 }
 
+export interface WorldPosition {
+  x: number;
+  y: number;
+  z: number;
+}
+
 export interface PlayerState {
   hp: number;
   maxHp: number;
   mp: number;
   maxMp: number;
+  position?: WorldPosition;
+  rotation?: number;
+  floorLevel?: number;
+  sprinting?: boolean;
 }
 
 export interface EnemyState {
@@ -104,6 +114,14 @@ export type GameCommand =
   | { type: "GUARD" }
   | { type: "COUNTER" }
   | { type: "RETREAT" }
+  | {
+      type: "MOVE_TO";
+      position: WorldPosition;
+      rotation: number;
+      floorLevel: number;
+      sprinting?: boolean;
+      append?: boolean;
+    }
   | { type: "COLLECT_REWARD" };
 
 export const LOCATIONS: Record<LocationId, Location> = {
