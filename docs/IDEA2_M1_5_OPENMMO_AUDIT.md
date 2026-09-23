@@ -1,4 +1,4 @@
-# idea2 M1.5 — Original OpenMMO Runtime & Flow Audit
+# idea2 M1.5 — Original OpenMMO Runtime & Flow Audit — COMPLETE
 
 > Reference pin: `Julian-adv/OpenMMO@950e081c178d920c10c51f2d31f60c1b3383c925`
 >
@@ -585,14 +585,14 @@ Browser client — run `35829696982`:
 
 Gameplay-system runtime:
 
-- [ ] movement authority test Gate
-- [ ] monster AI / combat test Gate
-- [ ] loot / pickup test Gate
-- [ ] inventory / equipment test Gate
-- [ ] chat test Gate
-- [ ] WorldReady / death restriction test Gate
-- [ ] respawn test Gate
-- [ ] persistence test Gate
+- [x] movement authority test Gate
+- [x] monster AI / combat test Gate
+- [x] loot / pickup test Gate
+- [x] inventory / equipment test Gate
+- [x] chat test Gate
+- [x] WorldReady / death restriction test Gate
+- [x] respawn test Gate
+- [x] persistence test Gate
 
 Visual-original limitations:
 
@@ -608,3 +608,37 @@ matrix is stable. A real Google browser login remains an external integration te
 than a prerequisite for the LAN-first idea2 architecture.
 
 M1.5 is not complete until source-only findings and actual runtime findings are clearly separated.
+
+
+## 19. Completion evidence
+
+M1.5 is complete for the idea2 migration scope.
+
+Successful workflow:
+
+- Run ID: `35887895372`
+- Result: **SUCCESS**
+- Pinned revision: `950e081c178d920c10c51f2d31f60c1b3383c925`
+
+Runtime-verified jobs:
+
+- Pinned OpenMMO runtime smoke: PASS
+- Original browser client build: PASS
+- Original gameplay systems: PASS
+
+The gameplay-system job executed and passed every configured Gate:
+
+- movement authority
+- monster AI / combat
+- loot / pickup
+- inventory / equipment
+- chat / whisper
+- WorldReady / death restrictions
+- respawn lifecycle
+- persistence
+
+A real Google browser login remains an external OAuth integration test and is not required
+for closing M1.5 because idea2's final LAN identity model will not depend on Google OAuth.
+
+The full ~73 GB terrain bake and complete visual asset pack are also intentionally outside
+the M1.5 completion requirement.
