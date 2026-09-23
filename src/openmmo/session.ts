@@ -39,9 +39,11 @@ function payloadOf<T>(message: OpenMmoServerMessage, variant: string): T {
 
 function monsterName(monsterType: string) {
   return monsterType
-    .replaceAll("_", " ")
-    .replace(/w/g, (letter) => letter.toUpperCase());
-}
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
 
 function addLog(
   state: GameState,
