@@ -921,23 +921,27 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
           10_000,
         );
 
-        const initialTarget = currentDungeonMonster(session);
-        expect(initialTarget).toBeDefined();
-        if (!initialTarget) throw new Error("No real dungeon monster entered AOI");
-
-        const targetSemanticId = initialTarget.id;
-        const targetId = targetSemanticId.startsWith("monster:")
-          ? targetSemanticId.slice("monster:".length)
-          : targetSemanticId;
-
         const encounterSnapshot = session.getSnapshot();
         expect(encounterSnapshot.phase).toBe("encounter");
-        expect(encounterSnapshot.encounter?.entityId).toBe(targetId);
+        const targetId = encounterSnapshot.encounter?.entityId;
+        expect(targetId).toBeTruthy();
+        if (!targetId) throw new Error("Real monster did not create an encounter");
+
+        const targetSemanticId = "monster:" + targetId;
+        const initialTarget = currentDungeonMonster(
+          session,
+          targetSemanticId,
+        );
+        expect(initialTarget).toBeDefined();
+        if (!initialTarget) {
+          throw new Error("Encounter monster was not projected as a semantic MONSTER card");
+        }
+
         const encounterCard = getAttentionCard(encounterSnapshot);
         expect(encounterCard).toMatchObject({
           level: "focus",
           eyebrow: "WORLD ENCOUNTER",
-          title: initialTarget.label,
+          title: encounterSnapshot.encounter?.name,
         });
         expect(
           encounterCard?.choices.some(
