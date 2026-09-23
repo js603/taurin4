@@ -574,3 +574,19 @@ starting a new real OpenMMO run.
 The full-cycle candidate workflows were running at the last deliberate check. Code presence
 is not proof; this phase becomes verified only after the real pinned-server workflow and
 normal quality/platform Gates succeed.
+
+
+## Full-cycle candidate Gate status
+
+For implementation candidate
+`b57d96a37d62bd74cb0421132db08c8251cc7047`:
+
+- quality validation — run `35901639317` — **SUCCESS**
+- Windows + Android — run `35901639473` — **IN PROGRESS** at last check
+- Pages — run `35901639397` — **IN PROGRESS** at last check
+- real pinned OpenMMO full-cycle — run `35901639325` — **IN PROGRESS** at last check
+
+At the last deliberate inspection, the real OpenMMO job had completed checkout,
+Rust/tool installation, Node setup and Rust cache setup, and was installing taurin4
+dependencies. The actual full-cycle test had therefore not yet run and must not be
+reported as passed.
