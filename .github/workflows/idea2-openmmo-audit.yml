@@ -157,8 +157,10 @@ jobs:
 
           echo "===== SERVER LOG ====="
           cat "$RUNNER_TEMP/openmmo-server.log" 2>/dev/null || true
-          echo "===== AGENT LOG ====="
-          cat "$RUNNER_TEMP/openmmo-agent.log" 2>/dev/null || true
+          echo "===== BOOTSTRAP AGENT LOG ====="
+          cat "$RUNNER_TEMP/openmmo-agent-bootstrap.log" 2>/dev/null || true
+          echo "===== IN-GAME AGENT LOG ====="
+          cat "$RUNNER_TEMP/openmmo-agent-ingame.log" 2>/dev/null || true
 
       - name: Upload audit logs
         if: always()
@@ -167,6 +169,7 @@ jobs:
           name: idea2-openmmo-m15-runtime-logs
           path: |
             ${{ runner.temp }}/openmmo-server.log
-            ${{ runner.temp }}/openmmo-agent.log
+            ${{ runner.temp }}/openmmo-agent-bootstrap.log
+            ${{ runner.temp }}/openmmo-agent-ingame.log
           if-no-files-found: warn
           retention-days: 7
