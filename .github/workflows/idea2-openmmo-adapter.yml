@@ -5,9 +5,12 @@ on:
     branches: ["idea2"]
     paths:
       - "src/openmmo/**"
+      - "src/game/**"
       - "src/app/**"
       - "src/features/game/ui/OpenMmo*.tsx"
+      - "src/features/game/ui/GameScreen.tsx"
       - "src/App.tsx"
+      - "src/styles.css"
       - "scripts/prepare-openmmo-codec.mjs"
       - "package.json"
       - ".github/workflows/idea2-openmmo-adapter.yml"
