@@ -56,6 +56,13 @@ function DestinationCard({
   );
 }
 
+function abilityLabel(id: string) {
+  return id
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function semanticKindLabel(kind: "monster" | "player" | "loot") {
   if (kind === "monster") return "MONSTER";
   if (kind === "player") return "PLAYER";
@@ -230,12 +237,24 @@ export function GameScreen({
                 key={destination.id}
                 className="semantic-destination-card"
                 type="button"
-                onClick={() =>
+                onClick={() => {
+                  if (
+                    destination.kind === "loot" &&
+                    destination.distanceMeters <= 1.2
+                  ) {
+                    const instanceId = Number(
+                      destination.id.slice("loot:".length),
+                    );
+                    if (Number.isFinite(instanceId)) {
+                      send({ type: "PICKUP_ITEM", instanceId });
+                      return;
+                    }
+                  }
                   send({
                     type: "TRAVEL_TO_DESTINATION",
                     destinationId: destination.id,
-                  })
-                }
+                  });
+                }}
               >
                 <span className="semantic-destination-card__meta">
                   <span>{semanticKindLabel(destination.kind)}</span>
@@ -245,7 +264,10 @@ export function GameScreen({
                 <span className="semantic-destination-card__detail">
                   {state.semanticTravel?.destinationId === destination.id
                     ? "이동 중"
-                    : destination.detail ?? "접근 가능"}
+                    : destination.kind === "loot" &&
+                        destination.distanceMeters <= 1.2
+                      ? "줍기"
+                      : destination.detail ?? "접근 가능"}
                 </span>
               </button>
             ))}
@@ -296,6 +318,104 @@ export function GameScreen({
 
         <FloatingAttention session={session} />
       </section>
+
+      {openMmo ? (
+        <section className="openmmo-action-panels" aria-label="OpenMMO actions">
+          <div className="openmmo-panel">
+            <div className="openmmo-panel__heading">
+              <span>ABILITIES</span>
+              <span>SERVER VALIDATED</span>
+            </div>
+            <div className="openmmo-ability-grid">
+              {(state.abilities ?? []).map((ability) => (
+                <button
+                  key={ability.id}
+                  type="button"
+                  className="text-button openmmo-ability"
+                  disabled={ability.remainingMs > 0}
+                  onClick={() =>
+                    send({
+                      type: "USE_ABILITY",
+                      ability: ability.id,
+                    })
+                  }
+                >
+                  <strong>{abilityLabel(ability.id)}</strong>
+                  <span>
+                    {ability.remainingMs > 0
+                      ? (ability.remainingMs / 1000).toFixed(1) + "s"
+                      : "READY"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="openmmo-panel">
+            <div className="openmmo-panel__heading">
+              <span>INVENTORY</span>
+              <span>
+                {(state.inventory?.bag.length ?? 0) +
+                  (state.inventory?.equipped.length ?? 0)}{" "}
+                ITEMS
+              </span>
+            </div>
+
+            <div className="openmmo-inventory-list">
+              {(state.inventory?.equipped ?? []).map((item) => (
+                <button
+                  key={"equipped-" + item.instanceId}
+                  type="button"
+                  className="inventory-line inventory-line--equipped"
+                  onClick={() =>
+                    item.equippedSlot
+                      ? send({
+                          type: "UNEQUIP_ITEM",
+                          slot: item.equippedSlot,
+                        })
+                      : undefined
+                  }
+                >
+                  <span>
+                    {item.itemDefId.replaceAll("_", " ")}
+                    {item.enchant ? " +" + item.enchant : ""}
+                  </span>
+                  <small>{item.equippedSlot ?? "EQUIPPED"}</small>
+                </button>
+              ))}
+
+              {(state.inventory?.bag ?? []).slice(0, 10).map((item) => (
+                <button
+                  key={"bag-" + item.instanceId}
+                  type="button"
+                  className="inventory-line"
+                  disabled={item.locked}
+                  onClick={() =>
+                    send({
+                      type: "EQUIP_ITEM",
+                      instanceId: item.instanceId,
+                    })
+                  }
+                >
+                  <span>
+                    {item.itemDefId.replaceAll("_", " ")}
+                    {item.quantity > 1 ? " × " + item.quantity : ""}
+                    {item.enchant ? " +" + item.enchant : ""}
+                  </span>
+                  <small>{item.locked ? "LOCKED" : "장착 시도"}</small>
+                </button>
+              ))}
+
+              {(state.inventory?.bag.length ?? 0) === 0 &&
+              (state.inventory?.equipped.length ?? 0) === 0 ? (
+                <p className="openmmo-panel__empty">
+                  서버 인벤토리 상태를 기다리고 있다.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="event-log" aria-label="이벤트 로그">
         <div className="event-log__heading">
