@@ -5,6 +5,11 @@ on:
     branches: ["idea2"]
     paths:
       - "src/openmmo/**"
+      - "src/app/**"
+      - "src/features/game/ui/OpenMmo*.tsx"
+      - "src/App.tsx"
+      - "scripts/prepare-openmmo-codec.mjs"
+      - "package.json"
       - ".github/workflows/idea2-openmmo-adapter.yml"
   workflow_dispatch:
 
@@ -94,6 +99,20 @@ jobs:
       - name: Run taurin4 adapter against real pinned server
         working-directory: taurin4
         run: npx vitest run src/openmmo/real.integration.test.ts
+
+      - name: Prepare pinned browser codec through idea2 script
+        working-directory: taurin4
+        env:
+          OPENMMO_SOURCE_DIR: ${{ github.workspace }}/openmmo
+        run: npm run openmmo:codec
+
+      - name: Build taurin4 with pinned browser codec
+        working-directory: taurin4
+        run: |
+          npm run build
+          test -f dist/openmmo-wasm/onlinerpg_shared.js
+          test -f dist/openmmo-wasm/onlinerpg_shared_bg.wasm
+          grep -q "source_commit=950e081c178d920c10c51f2d31f60c1b3383c925" dist/openmmo-wasm/PINNED_OPENMMO.txt
 
       - name: Stop pinned OpenMMO server
         if: always()
