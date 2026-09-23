@@ -186,6 +186,12 @@ export type OpenMmoServerMessage =
       };
     }
   | {
+      PlayerAttackRejected: {
+        monster_id: string;
+        reason: string;
+      };
+    }
+  | {
       PlayerMoved: {
         player_id: number;
         position: OpenMmoPosition;
