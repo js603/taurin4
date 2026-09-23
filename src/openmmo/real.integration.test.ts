@@ -282,12 +282,6 @@ async function waitForObserved<T>(
   );
 }
 
-function passabilityFloor(constants: DungeonConstants, wireFloor: number) {
-  return wireFloor < 0
-    ? constants.floorIndexBase + Math.abs(wireFloor) - 1
-    : wireFloor;
-}
-
 function dungeonOrigin(constants: DungeonConstants) {
   return {
     x: Math.floor(OLD_CRYPT.x) - constants.grid / 2,
