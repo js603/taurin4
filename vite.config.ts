@@ -17,6 +17,11 @@ export default defineConfig({
           VitePWA({
             registerType: "autoUpdate",
             workbox: {
+              // The pinned OpenMMO shared codec is currently ~3.84 MiB.
+              // It is a required offline runtime asset for the explicit
+              // OpenMMO web bootstrap, so raise Workbox's default 2 MiB cap
+              // rather than silently excluding the codec from precache.
+              maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
               navigateFallbackDenylist: [/^\/taurin4\/submain(?:\/|$)/],
             },
             manifest: {
