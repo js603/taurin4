@@ -49,8 +49,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f data/npc_token
-          rm -f data/game_data.db
+          rm -f data/npc_token data/game_data.db
           rm -rf "$RUNNER_TEMP/openmmo-empty-terrain"
           mkdir -p "$RUNNER_TEMP/openmmo-empty-terrain"
 
@@ -80,48 +79,52 @@ jobs:
         run: |
           set -euo pipefail
           : > "$RUNNER_TEMP/openmmo-server.log"
-          ./target/debug/onlinerpg-server             --port 10006             --terrain-port 10007             --bind 127.0.0.1             --api-bind 127.0.0.1             --terrain-dir "$RUNNER_TEMP/openmmo-empty-terrain"             > "$RUNNER_TEMP/openmmo-server.log" 2>&1 &
+
+          ./target/debug/onlinerpg-server \
+            --port 10006 \
+            --terrain-port 10007 \
+            --bind 127.0.0.1 \
+            --api-bind 127.0.0.1 \
+            --terrain-dir "$RUNNER_TEMP/openmmo-empty-terrain" \
+            > "$RUNNER_TEMP/openmmo-server.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/openmmo-server.pid"
 
-          python3 - <<'PY'
-          import socket, time, sys
-          deadline=time.time()+30
-          for port in (10006,10007):
-              while time.time() < deadline:
-                  try:
-                      with socket.create_connection(("127.0.0.1", port), timeout=1):
-                          print(f"port {port} ready")
-                          break
-                  except OSError:
-                      time.sleep(0.25)
-              else:
-                  print(open("/tmp/openmmo-server.log").read() if False else "port timeout", file=sys.stderr)
-                  sys.exit(1)
-          PY
+          # Probe the HTTP listener only. A raw TCP probe on 10006 looks like a
+          # broken WebSocket handshake in the original server log.
+          for _ in $(seq 1 120); do
+            if curl -fsS -o /dev/null http://127.0.0.1:10007/api/terrain/height/0/0; then
+              break
+            fi
+            if grep -q "Terrain REST API listening on:" "$RUNNER_TEMP/openmmo-server.log"; then
+              break
+            fi
+            sleep 0.25
+          done
 
+          grep -q "MMORPG Server listening on: 127.0.0.1:10006" "$RUNNER_TEMP/openmmo-server.log"
+          grep -q "Terrain REST API listening on: 127.0.0.1:10007" "$RUNNER_TEMP/openmmo-server.log"
+          grep -q "Google sign-in disabled" "$RUNNER_TEMP/openmmo-server.log"
           test -s data/npc_token
           test -f data/game_data.db
-          grep -q "Google sign-in disabled" "$RUNNER_TEMP/openmmo-server.log"
-          grep -q "Connect clients to:" "$RUNNER_TEMP/openmmo-server.log"
 
-      - name: Exercise original protocol through agent client
+      - name: Bootstrap original NPC account and character
         working-directory: openmmo/agent-client
         shell: bash
         run: |
           set +e
-          timeout 25s ../target/debug/agent-client > "$RUNNER_TEMP/openmmo-agent.log" 2>&1
+          timeout 6s ../target/debug/agent-client > "$RUNNER_TEMP/openmmo-agent-bootstrap.log" 2>&1
           status=$?
           set -e
 
-          cat "$RUNNER_TEMP/openmmo-agent.log"
+          cat "$RUNNER_TEMP/openmmo-agent-bootstrap.log"
+          grep -q "Connected" "$RUNNER_TEMP/openmmo-agent-bootstrap.log"
+          grep -q "Authenticated. 0 character(s)" "$RUNNER_TEMP/openmmo-agent-bootstrap.log"
+          grep -q "Roll 1/20:" "$RUNNER_TEMP/openmmo-agent-bootstrap.log"
+          grep -q "Created character 'M15Audit'" "$RUNNER_TEMP/openmmo-agent-bootstrap.log"
+          grep -q "Running in direct mode" "$RUNNER_TEMP/openmmo-agent-bootstrap.log"
 
-          grep -q "Authenticated." "$RUNNER_TEMP/openmmo-agent.log"
-          grep -q "Entering game with character" "$RUNNER_TEMP/openmmo-agent.log"
-          grep -q "Joined game as" "$RUNNER_TEMP/openmmo-agent.log" ||             grep -q "JoinSuccess" "$RUNNER_TEMP/openmmo-agent.log"
-
-          # timeout is acceptable after the audited login/character/entry flow.
           if [[ "$status" -ne 0 && "$status" -ne 124 ]]; then
-            echo "agent-client exited with unexpected status $status" >&2
+            echo "bootstrap agent exited with unexpected status $status" >&2
             exit "$status"
           fi
 
@@ -131,8 +134,8 @@ jobs:
         run: |
           python3 - <<'PY'
           import sqlite3
-          db=sqlite3.connect("data/game_data.db")
-          rows=db.execute(
+          db = sqlite3.connect("data/game_data.db")
+          rows = db.execute(
               "select id, account_name, name, class, gender from characters where account_name=?",
               ("npc_m15_audit",)
           ).fetchall()
@@ -140,6 +143,32 @@ jobs:
           assert rows, "agent authentication did not create/persist a character"
           assert rows[0][2] == "M15Audit"
           PY
+
+      - name: Re-enter existing character through original in-game path
+        working-directory: openmmo/agent-client
+        shell: bash
+        run: |
+          # llm=none is OpenMMO's deliberate direct-control mode and therefore
+          # does not send EnterGame. The character already exists now. Enabling
+          # an LLM mode selects the normal in-game path; EnterGame/JoinSuccess
+          # happen before any background LLM response is required.
+          sed -i 's/llm = "none"/llm = "codex"/' data/config.toml
+
+          set +e
+          timeout 12s ../target/debug/agent-client > "$RUNNER_TEMP/openmmo-agent-ingame.log" 2>&1
+          status=$?
+          set -e
+
+          cat "$RUNNER_TEMP/openmmo-agent-ingame.log"
+          grep -q "Authenticated. 1 character(s)" "$RUNNER_TEMP/openmmo-agent-ingame.log"
+          grep -q "Entering game with character" "$RUNNER_TEMP/openmmo-agent-ingame.log"
+          grep -q "Running in LLM-driven mode" "$RUNNER_TEMP/openmmo-agent-ingame.log"
+          grep -q "Account 'npc_m15_audit' entered game as character 'M15Audit'" "$RUNNER_TEMP/openmmo-server.log"
+
+          if [[ "$status" -ne 0 && "$status" -ne 124 ]]; then
+            echo "in-game agent exited with unexpected status $status" >&2
+            exit "$status"
+          fi
 
       - name: Stop original server gracefully
         if: always()
