@@ -995,7 +995,7 @@ export class OpenMmoGameSession implements GameSession {
 
   private arrivalRadius(kind: "monster" | "player" | "npc" | "loot") {
     if (kind === "monster") return 2.5;
-    if (kind === "player") return 1.5;
+    if (kind === "player" || kind === "npc") return 1.5;
     return 0.8;
   }
 
