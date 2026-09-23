@@ -601,3 +601,137 @@ h1 {
     grid-column: 1 / -1;
   }
 }
+
+.network-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.network-controls .host-control {
+  margin-top: 12px;
+}
+
+.lan-client {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: rgba(13, 16, 18, 0.72);
+}
+
+.lan-client__summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.lan-client__summary strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
+.lan-client__meta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px 12px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.lan-client__connection {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.lan-client__connection label {
+  display: grid;
+  gap: 6px;
+}
+
+.lan-client__connection label > span,
+.lan-client__detail {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.lan-client__connection input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 11px;
+  background: #111416;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+.lan-client__connection input:focus {
+  border-color: #71684f;
+  box-shadow: 0 0 0 1px rgba(200, 178, 123, 0.12);
+}
+
+.lan-client__connection input:disabled {
+  opacity: 0.45;
+}
+
+.lan-client__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.lan-client__detail {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 860px) {
+  .network-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .network-controls .host-control,
+  .lan-client {
+    margin-top: 12px;
+  }
+}
+
+@media (max-width: 700px) {
+  .lan-client__summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .lan-client__meta {
+    justify-content: flex-start;
+  }
+
+  .lan-client__connection {
+    grid-template-columns: 1fr;
+  }
+
+  .lan-client__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .lan-client__actions .text-button:only-child {
+    grid-column: 1 / -1;
+  }
+}
