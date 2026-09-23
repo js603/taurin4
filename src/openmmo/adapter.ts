@@ -3,8 +3,10 @@ import type { OpenMmoTransport } from "./transport";
 import type {
   OpenMmoAdapterSnapshot,
   OpenMmoCharacter,
+  OpenMmoAbilityId,
   OpenMmoCharacterClass,
   OpenMmoClientMessage,
+  OpenMmoEquipSlot,
   OpenMmoGender,
   OpenMmoServerMessage,
 } from "./types";
@@ -353,6 +355,31 @@ export class OpenMmoAdapter {
 
   sendAttack(monsterId: string) {
     return this.send({ PlayerAttack: { monster_id: monsterId } });
+  }
+
+  useAbility(
+    ability: OpenMmoAbilityId,
+    options: { monsterId?: string; targetPlayerId?: number } = {},
+  ) {
+    return this.send({
+      UseAbility: {
+        ability,
+        monster_id: options.monsterId ?? null,
+        target_player_id: options.targetPlayerId ?? null,
+      },
+    });
+  }
+
+  pickupItem(instanceId: number) {
+    return this.send({ PickupItem: { instance_id: instanceId } });
+  }
+
+  equipItem(instanceId: number) {
+    return this.send({ EquipItem: { instance_id: instanceId } });
+  }
+
+  unequipItem(slot: OpenMmoEquipSlot) {
+    return this.send({ UnequipItem: { slot } });
   }
 
   sendMove(
