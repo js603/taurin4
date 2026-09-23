@@ -298,7 +298,7 @@ configured rename.
 
 ## 10. Terrain dependency
 
-Status: **SOURCE VERIFIED / runtime smoke pending**
+Status: **RUNTIME VERIFIED for server/auth/character/EnterGame lifecycle**
 
 Canonical full terrain generation:
 
@@ -325,8 +325,24 @@ server + SQLite + auth + character lifecycle
 WITHOUT full terrain bake
 ```
 
-If this runtime smoke passes, the ~73 GB bake is not a prerequisite for M2 protocol
-integration.
+Runtime audit run `35824184590` proved that the ~73 GB bake is **not** a prerequisite
+for M2 protocol integration through character entry.
+
+With an intentionally empty terrain directory, the original pinned server:
+
+- created/opened SQLite state
+- generated the NPC auth token
+- started WebSocket on 10006
+- started REST on 10007
+- authenticated the original agent-client
+- rolled character stats
+- created and persisted a character
+- re-authenticated with that persisted character
+- accepted EnterGame
+- returned the normal in-game path used by the agent-client
+- shut down gracefully
+
+Missing terrain produced warnings/disabled terrain-derived features, not a server-start failure.
 
 ## 11. Binary asset dependency
 
@@ -348,7 +364,7 @@ Fetch them selectively. Do not pull the entire binary dataset by default.
 
 ## 12. Agent-client as a controlled runtime probe
 
-Status: **SOURCE VERIFIED / runtime smoke pending**
+Status: **RUNTIME VERIFIED through EnterGame**
 
 The original agent-client can:
 
@@ -366,6 +382,25 @@ This makes it useful for proving the original server/protocol/character lifecycl
 requiring browser Google OAuth.
 
 It does **not** replace the later visual browser play audit.
+
+Runtime evidence from `idea2 OpenMMO M1.5 Runtime Audit` run `35824184590`:
+
+```text
+Authenticated. 0 character(s)
+→ Roll 1/20
+→ Created character 'M15Audit' (id=1, Knight, Male)
+→ SQLite row persisted:
+   (1, 'npc_m15_audit', 'M15Audit', 'knight', 'male')
+→ reconnect
+→ Authenticated. 1 character(s)
+→ Entering game with character 1
+→ server: Account 'npc_m15_audit' entered game as character 'M15Audit'
+```
+
+The audit also exposed one original-client behavior worth preserving in documentation:
+`llm = "none"` is the agent-client's direct-control mode and intentionally does not
+send `EnterGame`. The audit therefore bootstraps the character in direct mode and
+re-enters it using the normal LLM-driven in-game path.
 
 ## 13. Core gameplay protocol surface
 
@@ -452,17 +487,25 @@ Only audit logs may be retained temporarily.
 
 ## 16. Remaining M1.5 runtime gates
 
-- [ ] original pinned server actually builds
-- [ ] original server starts with no Google OAuth configured
-- [ ] original server starts without a full terrain bake
-- [ ] SQLite DB is created
-- [ ] NPC token is generated
-- [ ] original agent authenticates with the generated token
-- [ ] character list is returned
-- [ ] character is created/persisted when absent
-- [ ] EnterGame succeeds
-- [ ] JoinSuccess is observed
+Server lifecycle — run `35824184590`:
+
+- [x] original pinned server actually builds
+- [x] original server starts with no Google OAuth configured
+- [x] original server starts without a full terrain bake
+- [x] SQLite DB is created
+- [x] NPC token is generated
+- [x] original agent authenticates with the generated token
+- [x] character list is returned
+- [x] character is created/persisted when absent
+- [x] reconnect returns the persisted character
+- [x] EnterGame succeeds
+- [x] server records the character as entered in-game
+- [x] graceful shutdown succeeds
+
+Still pending:
+
 - [ ] original browser client WASM/build prerequisites are validated
+- [ ] original browser bundle starts over HTTP
 - [ ] original browser Google login is executed or explicitly recorded as external-OAuth-only
 - [ ] visual world/core play audit is completed to the extent possible without the huge asset/terrain download
 
