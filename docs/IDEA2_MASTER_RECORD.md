@@ -11,7 +11,11 @@
 - Branch: `idea2`
 - Base checkpoint: `370688fc7d712e823206510d9b972af0fab30e88`
 - Last verified implementation HEAD: `a2ce2dc3556412e588a35f6534bb3258b8fb399f`
-- Latest M2 implementation candidate HEAD: `253fc4b57cb3d75412b80d4dcd2dd1b06cafe1e7` (validation / platform / real OpenMMO regression pending at last check)
+- Latest M2 implementation candidate HEAD: `253fc4b57cb3d75412b80d4dcd2dd1b06cafe1e7`
+- Candidate validation: run `35898869607` — **SUCCESS**
+- Candidate Pages: run `35898869614` — **SUCCESS**
+- Candidate Windows/Android: run `35898869592` — **IN PROGRESS** at last check
+- Candidate real OpenMMO regression: run `35898863607` (implementation head `4aa06e648ebc3294460cbfd4b3ce4b9d4941a76e`) — **IN PROGRESS** at last check
 - Note: documentation-only commits may advance the branch HEAD. Every new session must query the actual `idea2` HEAD before work.
 - GitHub Pages preview: `https://js603.github.io/taurin4/idea2/`
 - OpenMMO reference repository: `Julian-adv/OpenMMO`
@@ -956,9 +960,15 @@ Latest implementation candidate:
 
 `253fc4b57cb3d75412b80d4dcd2dd1b06cafe1e7`
 
-At the last check, current validation/platform/real-OpenMMO regression workflows were still
-running or pending. Do not promote this candidate to "Last verified implementation HEAD"
-until those results are confirmed.
+Current evidence:
+
+- quality validation: run `35898869607` — **SUCCESS**
+- Pages build/deploy: run `35898869614` — **SUCCESS**
+- Windows/Android platform build: run `35898869592` — still running at the last check
+- real OpenMMO regression: run `35898863607` — still running at the last check
+
+Do not promote this candidate to the final verified implementation baseline until the
+remaining applicable Gates are confirmed.
 
 Next implementation order:
 
