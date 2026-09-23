@@ -59,6 +59,8 @@ export function createInitialGameState(): GameState {
     travel: null,
     combat: null,
     reward: null,
+    semanticDestinations: [],
+    semanticTravel: null,
     nextLogId: 3,
     logs: [
       {
@@ -351,6 +353,7 @@ export function reduceGame(state: GameState, command: GameCommand): GameState {
     }
 
     case "MOVE_TO":
+    case "TRAVEL_TO_DESTINATION":
       return state;
 
     case "COLLECT_REWARD": {
