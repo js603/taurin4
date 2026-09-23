@@ -647,3 +647,21 @@ The next slice is real dungeon combat in `old_crypt`. It must use the pinned sha
 dungeon generator/pathfinding and the original server's floor population. Probabilistic
 kobold loot is observational only; `MonsterDead` plus the guaranteed XP event are the
 deterministic kill proof.
+
+
+## Verified M2 baseline
+
+`39863b66973598dc93f8e1ca00f00a80ba1aa8fd` is now verified.
+
+Gate evidence:
+
+- validation `35903549333` — SUCCESS
+- Pages `35903549203` — SUCCESS
+- platform `35903549207` — SUCCESS
+- real OpenMMO `35903549323` — SUCCESS
+
+The real OpenMMO Gate now includes the PlayerAttack wire path and authoritative attack
+rejection, and the production PWA build succeeds with the pinned shared WASM codec.
+
+The dungeon stair/layout audit is no longer part of this baseline. It is split into a
+separate bounded combat-runtime Gate to avoid another long-running blocking investigation.
