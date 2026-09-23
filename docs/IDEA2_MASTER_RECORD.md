@@ -10,7 +10,7 @@
 - Repository: `js603/taurin4`
 - Branch: `idea2`
 - Base checkpoint: `370688fc7d712e823206510d9b972af0fab30e88`
-- Last verified implementation HEAD: `a2ce2dc3556412e588a35f6534bb3258b8fb399f`
+- Last verified implementation HEAD: `1b6f94f14fc6d6cc8df9bc063f2c779739db474a`
 - Note: documentation-only commits may advance the branch HEAD. Every new session must query the actual `idea2` HEAD before work.
 - GitHub Pages preview: `https://js603.github.io/taurin4/idea2/`
 - OpenMMO reference repository: `Julian-adv/OpenMMO`
@@ -678,7 +678,7 @@ No major OpenMMO system should be changed before this matrix exists.
 
 Goal: complete one actual OpenMMO gameplay cycle through our taurin4 client.
 
-Phase 1 implementation is now present:
+Phase 1 and early Phase 2 implementation are now present:
 
 - `src/openmmo/types.ts`
 - `src/openmmo/codec.ts`
@@ -687,6 +687,10 @@ Phase 1 implementation is now present:
 - `src/openmmo/adapter.test.ts`
 - `src/openmmo/real.integration.test.ts`
 - `.github/workflows/idea2-openmmo-adapter.yml`
+- `src/openmmo/session.ts`
+- `src/openmmo/session.test.ts`
+- `src/openmmo/runtime.ts`
+- `src/features/game/ui/OpenMmoCharacterLobby.tsx`
 - `docs/IDEA2_M2_OPENMMO_ADAPTER.md`
 
 Implemented adapter flow:
@@ -860,14 +864,13 @@ M1.5 is complete and the real M2 codec/server Gate has passed.
 
 Next implementation order:
 
-1. finish validation of the new `OpenMmoGameSession` semantic mapper
-2. add runtime bootstrap selection without removing `LocalGameSession`
-3. implement Text/Card character list / create / select flow
-4. wire the OpenMMO lifecycle adapter into that UI
-5. expose real world/player/monster semantic state in the main GameScreen
-6. add movement mapping
-7. add combat/loot/inventory translation incrementally
-8. keep the pinned real-server integration workflow as a regression Gate
+1. confirm latest validation for semantic session/runtime/lobby once
+2. wire an explicit OpenMMO runtime bootstrap path while preserving LocalGameSession as default
+3. connect Text/Card character lobby to that runtime bootstrap
+4. expose real OpenMMO GameScreen after character entry
+5. add authoritative movement mapping
+6. continue combat/loot/inventory translation incrementally
+7. keep the pinned real-server integration workflow as a regression Gate
 
 Do not claim M2 runtime integration success while the adapter is still using only mock codec/transport tests.
 
