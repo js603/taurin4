@@ -93,6 +93,116 @@ describe("OpenMmoGameSession", () => {
     expect(adapter.sendAttack).toHaveBeenCalledWith("wolf-7");
   });
 
+  it("unwraps WorldUpdate into semantic destinations and authoritative position", () => {
+    const adapter = new FakeAdapter();
+    const session = new OpenMmoGameSession(adapter);
+    session.start();
+
+    adapter.emit({
+      JoinSuccess: {
+        player: {
+          id: 11,
+          name: "ScoutMira",
+          health: 30,
+          max_health: 30,
+          position: { x: 0, y: 0, z: 0 },
+          rotation: 0,
+          floor_level: 0,
+        },
+      },
+    });
+
+    adapter.emit({
+      WorldUpdate: {
+        world_epoch: "epoch-a",
+        generation: 1,
+        sequence: 1,
+        position: { x: 2, y: 0, z: 3 },
+        floor_level: 0,
+        reset: true,
+        ready: true,
+        events: [
+          {
+            subject: "monster:wolf-7",
+            revision: 1,
+            change: "Enter",
+            messages: [
+              {
+                MonsterSpawned: {
+                  monster: {
+                    id: "wolf-7",
+                    monster_type: "grey_wolf",
+                    position: { x: 8, y: 0, z: 3 },
+                    floor_level: 0,
+                    health: 22,
+                    max_health: 22,
+                    aggressive: false,
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(session.getSnapshot().player.position).toEqual({ x: 2, y: 0, z: 3 });
+    expect(session.getSnapshot().semanticDestinations).toEqual([
+      expect.objectContaining({
+        id: "monster:wolf-7",
+        label: "Grey Wolf",
+        distanceMeters: 6,
+      }),
+    ]);
+  });
+
+  it("travels to a semantic target and waits for server authority", () => {
+    const adapter = new FakeAdapter();
+    const session = new OpenMmoGameSession(adapter);
+    session.start();
+
+    adapter.emit({
+      JoinSuccess: {
+        player: {
+          id: 11,
+          name: "ScoutMira",
+          health: 30,
+          max_health: 30,
+          position: { x: 0, y: 0, z: 0 },
+          rotation: 0,
+          floor_level: 0,
+        },
+      },
+    });
+    adapter.emit({
+      MonsterSpawned: {
+        monster: {
+          id: "wolf-7",
+          monster_type: "grey_wolf",
+          position: { x: 10, y: 0, z: 0 },
+          floor_level: 0,
+          health: 22,
+          max_health: 22,
+          aggressive: false,
+        },
+      },
+    });
+
+    session.command({
+      type: "TRAVEL_TO_DESTINATION",
+      destinationId: "monster:wolf-7",
+    });
+
+    expect(adapter.sendMove).toHaveBeenCalledWith(
+      { x: 7.5, y: 0, z: 0 },
+      Math.PI / 2,
+      0,
+      { sprinting: false },
+    );
+    expect(session.getSnapshot().player.position).toEqual({ x: 0, y: 0, z: 0 });
+    expect(session.getSnapshot().semanticTravel?.label).toBe("Grey Wolf");
+  });
+
   it("sends movement requests but updates position only from server authority", () => {
     const adapter = new FakeAdapter();
     const session = new OpenMmoGameSession(adapter);
