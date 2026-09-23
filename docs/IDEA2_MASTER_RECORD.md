@@ -1022,18 +1022,18 @@ the explicit Text/Card app-surface proof before M3.
 
 Implementation candidate:
 
-`b80d165213bdf82f9e9502f53bb3e85082123288`
+`91054770e7ed6c56cbb7c416e6cb00ce9e1e0828`
 
 Status: **IMPLEMENTED-NOT-VERIFIED**
 
-The existing candidate integration slice now contains an executable real-server proof for:
+The executable real-server Gate now requires:
 
 ```text
 old_crypt real entry
 → authoritative floor -1
 → real MonsterSpawned
 → semantic MONSTER destination
-→ GameScreen Text/Card MONSTER projection
+→ actual WORLD ENCOUNTER Text/Card witness
 → authentic dungeon door/path approach
 → real PlayerAttack
 → authoritative PlayerAttacked
@@ -1047,28 +1047,78 @@ old_crypt real entry
      → InventoryUpdated
 ```
 
-Important verification details confirmed against the exact pinned OpenMMO revision:
+Important verified source/data facts for this Gate:
 
-- `XpGained` includes `monster_id: Option<String>`; tying XP to the killed kobold is authentic.
-- normal engineering `npc_` accounts still receive the standard starter `worn_iron_sword`; only registered world NPC names skip starter gear.
-- `GameScreen` renders `semanticDestinations` as Text/Card buttons and labels monster destinations as `MONSTER`.
+- `XpGained` includes `monster_id: Option<String>`; kill XP can be tied to the exact kobold.
+- normal engineering `npc_` accounts receive the standard starter `worn_iron_sword`; only registered world NPC names skip starter gear.
+- pinned `old_crypt` is registered at `(-1450, 0.7, 4720)`.
+- pinned kobold is dungeon depth 1-4, level 1, guard 8, HP 5, attack cooldown 1900 ms, damage 1d4, and `dungeonAggressive=true`.
 - probabilistic dungeon loot remains observational only and is never required for PASS.
-- commit `b80d1652...` strengthened the optional-drop branch so a real drop, when produced, must be picked up and acknowledged by both `GroundItemRemoved` and `InventoryUpdated`.
+- if a real drop does occur, the Gate requires authoritative pickup acknowledgement through both `GroundItemRemoved` and `InventoryUpdated`.
 
-Validation state at this checkpoint:
+### Anti-delay method changes already applied
 
-- branch HEAD immediately after the implementation commit matched `b80d165213bdf82f9e9502f53bb3e85082123288`
-- the connected GitHub status surface exposed no push-triggered Actions run/status yet
-- no repeated CI polling was performed
-- therefore the dungeon Gate is **not** marked PASS yet
+The connected GitHub status surface does not expose push-triggered workflow runs reliably.
+Instead of polling blindly, the real OpenMMO workflow now also supports `pull_request`
+verification and a temporary draft PR is used only to expose the same Gate to the connector.
+
+The pinned OpenMMO checkout was also a delay source. The workflow now uses an exact-revision
+partial sparse clone rather than downloading the full repository working tree. The clone:
+
+- fetches exact commit `950e081c178d920c10c51f2d31f60c1b3383c925`
+- asserts `rev-parse HEAD` equals that pin
+- includes the Rust workspace, `data-src`, required generated/static `data`, and the small
+  object catalog required by `include_str!`
+- does not fetch bulk GLB assets or terrain data
+
+Push and pull-request runs now use separate concurrency groups so verification runs do not
+cancel or block each other merely because the same workflow exists on both event types.
+
+### Runtime evidence collected so far
+
+Observable PR run `35914892932` reached the real runtime Gate after all infrastructure passed:
+
+- partial sparse pinned OpenMMO checkout — PASS
+- pinned OpenMMO server build — PASS
+- pinned shared WASM codec build — PASS
+- isolated pinned server boot — PASS
+- prior full-cycle movement/ability/inventory/equipment/reconnect regression — PASS
+- real `old_crypt` runtime creation — observed
+- real depth-1 kobolds `m1`, `m2`, `m3` — observed
+- real dungeon door opens — observed
+
+That run failed only on a late Text/Card assertion:
+
+```text
+expected phase: encounter
+received phase: combat
+```
+
+The failure is not evidence that the encounter was skipped. `MonsterAttackedPlayer`
+authentically advances `OpenMmoGameSession` from `encounter` to `combat`, and the
+aggressive kobold can do that while the test is opening doors.
+
+Candidate `91054770...` fixes the verification timing without weakening the Gate:
+
+- session state is observed continuously
+- the Gate records a witness only when the real monster exists as a floor -1 semantic
+  `MONSTER` and `getAttentionCard` yields the `WORLD ENCOUNTER` focus card with the
+  investigate action
+- later `combat` is accepted only as the legitimate successor state, and if already in
+  combat the enemy id must equal the witnessed encounter monster id
+- the same witnessed monster id continues through approach, attack, death and XP proof
+
+Latest observable validation is running against the synced temporary PR head. Do not mark
+this Gate PASS until that real pinned-server run reaches `MonsterDead` and `XpGained`.
 
 Exact next verification action:
 
-1. inspect the next meaningful Actions checkpoint for implementation `b80d1652...`
-2. if the real pinned OpenMMO job fails, inspect only the failing job/step log first
-3. fix the shortest authentic failure path without dropping any Gate requirement
-4. if the real Gate passes, promote the verified implementation baseline and then perform the explicit Text/Card app-surface proof before M3
-
+1. inspect the next meaningful checkpoint of the real pinned-server run for candidate
+   `91054770...`
+2. if it fails, inspect only the failing runtime assertion/job log and repair that authentic path
+3. if it passes, promote the verified implementation baseline, record the run, close the
+   temporary verification PR without merging, and proceed to explicit real app-surface proof
+   before M3
 
 ## 17. New-chat bootstrap
 
