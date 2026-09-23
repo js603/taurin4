@@ -735,3 +735,113 @@ h1 {
     grid-column: 1 / -1;
   }
 }
+
+.character-lobby {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px;
+  background: rgba(13, 16, 18, 0.78);
+}
+
+.character-lobby__header,
+.character-create__heading,
+.character-card,
+.character-card__actions,
+.character-create__actions,
+.character-roll {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.character-lobby__list {
+  display: grid;
+  gap: 10px;
+}
+
+.character-card {
+  align-items: flex-end;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 13px;
+  background: rgba(17, 20, 22, 0.84);
+}
+
+.character-card h3 {
+  margin: 4px 0;
+}
+
+.character-card__stats,
+.character-lobby__notice,
+.character-roll span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.character-card__actions,
+.character-create__actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.character-create {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.character-create__fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 0.5fr) minmax(110px, 0.4fr);
+  gap: 10px;
+}
+
+.character-create__fields label {
+  display: grid;
+  gap: 6px;
+}
+
+.character-create__fields label > span {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+
+.character-create input,
+.character-create select {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #111416;
+  color: var(--text);
+  font: inherit;
+}
+
+.character-roll {
+  align-items: flex-start;
+  flex-direction: column;
+  border-left: 2px solid #71684f;
+  padding-left: 10px;
+}
+
+@media (max-width: 700px) {
+  .character-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .character-card__actions,
+  .character-create__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .character-create__fields {
+    grid-template-columns: 1fr;
+  }
+}
