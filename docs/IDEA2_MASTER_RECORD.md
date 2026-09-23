@@ -514,9 +514,9 @@ Not yet:
 - character import/export
 - multiplayer final-state reconciliation
 
-### M1 — Windows PC ↔ Windows PC LAN — IN PROGRESS
+### M1 — Windows PC ↔ Windows PC LAN — COMPLETE
 
-**Implementation and automated/local integration are complete. The remaining Gate is the real Windows PC A ↔ PC B LAN runtime test.**
+**Implementation, automated/local integration, and the real Windows PC A ↔ PC B LAN runtime Gate are complete. The user confirmed the two-PC test on 2026-09-23.**
 
 Implemented:
 
@@ -534,16 +534,13 @@ Implemented:
 - Windows M1 test artifact
 - formal runtime checklist: `docs/IDEA2_M1_PC_LAN_TEST.md`
 
-Still required before M1 COMPLETE:
+Runtime Gate result:
 
-- run the same Windows artifact on two real PCs
-- verify TCP 10006 through the real LAN/firewall
-- verify Host `CLIENTS 0 → 1 → 0 → 1`
-- verify RTT
-- verify manual disconnect/reconnect
-- verify bounded reconnect after Host interruption
+- same Windows artifact used on the real PC↔PC LAN path
+- user confirmed the M1 LAN test succeeded on 2026-09-23
+- M1 is now closed; automatic discovery remains intentionally deferred
 
-Required sequence:
+Reference sequence:
 
 ```text
 PC A
@@ -802,28 +799,27 @@ this file.
 
 ## 16. Next exact action
 
-**M1 Runtime Gate — real Windows PC A ↔ Windows PC B LAN test**
+**M1.5 — Original OpenMMO Runtime & Flow Audit**
 
-Use the exact same `idea2-m1-windows-x64-test` artifact on both PCs and follow
-`docs/IDEA2_M1_PC_LAN_TEST.md`.
+M1 is complete. Do not reopen LAN Client work unless a regression appears.
 
-Order:
+Current order:
 
-1. extract the same test package on PC A and PC B
-2. PC A: start `LAN Host`
-3. PC A: identify the active LAN IPv4 address
-4. if needed, allow `taurin4.exe` on Windows Private networks
-5. PC B: verify `Test-NetConnection <PC-A-IP> -Port 10006`
-6. PC B: enter `<PC-A-IP>:10006` and connect
-7. verify `CONNECTING → HANDSHAKING → CONNECTED`
-8. verify PC A `CLIENTS 0 → 1`
-9. verify Ping RTT
-10. verify manual disconnect `1 → 0` and reconnect `0 → 1`
-11. stop/restart Host and verify bounded reconnect behavior
-12. only after all checks pass, mark M1 COMPLETE
-13. then begin M1.5 original OpenMMO runtime + full user-flow audit
+1. use pinned OpenMMO commit `950e081c178d920c10c51f2d31f60c1b3383c925`
+2. verify original server build and real process startup without full terrain/assets
+3. verify exact auth paths: browser Google vs NPC token vs agent Google device flow
+4. verify SQLite/NPC-token/state-dir behavior
+5. execute original protocol login → character list → roll/create/select → EnterGame where possible
+6. identify the minimum terrain/assets needed beyond server/character lifecycle
+7. verify original browser client build/start prerequisites
+8. document character lifecycle and core-play source/runtime findings
+9. produce KEEP / ADAPT / REPLACE / DROP migration matrix
+10. only after the audit is sufficiently evidenced, begin M2 taurin4 ↔ real OpenMMO adapter
 
-Do **not** add automatic LAN discovery before this real two-PC Gate passes.
+Current runtime-audit workflow:
+`.github/workflows/idea2-openmmo-audit.yml`
+
+Do not download/bake the full ~73 GB terrain during M1.5 unless a later verified blocker proves it is unavoidable.
 
 ---
 
