@@ -320,6 +320,36 @@ describe("OpenMmoGameSession", () => {
     expect(adapter.dropItem).toHaveBeenCalledWith(41);
   });
 
+  it("reports authoritative attack rejection and clears an invalid target", () => {
+    const adapter = new FakeAdapter();
+    const session = new OpenMmoGameSession(adapter);
+    session.start();
+
+    adapter.emit({
+      MonsterSpawned: {
+        monster: {
+          id: "wolf-gone",
+          monster_type: "grey_wolf",
+          health: 20,
+          max_health: 20,
+          aggressive: true,
+        },
+      },
+    });
+    session.command({ type: "INVESTIGATE_ENCOUNTER" });
+
+    adapter.emit({
+      PlayerAttackRejected: {
+        monster_id: "wolf-gone",
+        reason: "invalid_target",
+      },
+    });
+
+    expect(session.getSnapshot().combat).toBeNull();
+    expect(session.getSnapshot().phase).toBe("exploration");
+    expect(session.getSnapshot().logs.at(-1)?.text).toContain("대상이 사라졌다");
+  });
+
   it("maps authoritative combat, loot, death and respawn events", () => {
     const adapter = new FakeAdapter();
     const session = new OpenMmoGameSession(adapter);
