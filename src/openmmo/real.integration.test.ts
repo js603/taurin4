@@ -5,6 +5,7 @@ import {
   createOpenMmoWasmCodec,
   type OpenMmoWasmExports,
 } from "./codec";
+import { OpenMmoGameSession } from "./session";
 import { WebSocketOpenMmoTransport } from "./transport";
 
 const wasmModulePath = process.env.OPENMMO_WASM_MODULE;
@@ -43,6 +44,33 @@ function waitForConnected(adapter: OpenMmoAdapter, timeoutMs = 5_000) {
   });
 }
 
+function waitForSession(
+  session: OpenMmoGameSession,
+  predicate: () => boolean,
+  timeoutMs = 5_000,
+) {
+  if (predicate()) return Promise.resolve();
+
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      unsubscribe();
+      reject(
+        new Error(
+          "OpenMMO session condition timed out: " +
+            JSON.stringify(session.getSnapshot()),
+        ),
+      );
+    }, timeoutMs);
+
+    const unsubscribe = session.subscribe(() => {
+      if (!predicate()) return;
+      clearTimeout(timer);
+      unsubscribe();
+      resolve();
+    });
+  });
+}
+
 describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
   it(
     "uses the real WASM codec against the real server through EnterGame",
@@ -69,6 +97,9 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
         clientVersion: "idea2-m2-real-integration",
         requestTimeoutMs: 10_000,
       });
+
+      const session = new OpenMmoGameSession(adapter);
+      session.start();
 
       adapter.connect(serverUrl);
       await waitForConnected(adapter);
@@ -99,9 +130,45 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
       expect(adapter.getSnapshot().phase).toBe("in_game");
       expect(adapter.getSnapshot().selectedCharacterId).toBe(character.id);
 
+      const initialPosition = session.getSnapshot().player.position;
+      expect(initialPosition).toBeDefined();
+      if (!initialPosition) throw new Error("JoinSuccess did not provide player position");
+
+      const initialRotation = session.getSnapshot().player.rotation ?? 0;
+      const floorLevel = session.getSnapshot().player.floorLevel ?? 0;
+      const target = {
+        x: initialPosition.x + 0.5,
+        y: initialPosition.y,
+        z: initialPosition.z,
+      };
+
+      session.command({
+        type: "MOVE_TO",
+        position: target,
+        rotation: initialRotation,
+        floorLevel,
+      });
+
+      await waitForSession(
+        session,
+        () => {
+          const current = session.getSnapshot().player.position;
+          return Boolean(
+            current &&
+              Math.abs(current.x - initialPosition.x) > 0.01,
+          );
+        },
+        8_000,
+      );
+
+      const authoritativePosition = session.getSnapshot().player.position;
+      expect(authoritativePosition).toBeDefined();
+      expect(authoritativePosition?.x).not.toBe(initialPosition.x);
+
       expect(adapter.sendChat("idea2 M2 integration online")).toBe(true);
       expect(adapter.requestRespawn()).toBe(true);
 
+      session.stop();
       adapter.disconnect();
     },
     30_000,
