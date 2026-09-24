@@ -1423,6 +1423,49 @@ M3-B CI-verified recovery checkpoint:
 - commit: `3ab64df06648d7e228f9a2c38b65cb6bf74a5ec1`
 - human acceptance guide: `docs/IDEA2_M3B_WINDOWS_ACCEPTANCE.md`
 
+
+### Automated human-replacement acceptance — 2026-09-24
+
+Because direct user-side testing is currently difficult, the human acceptance Gate is being
+executed on a Windows GitHub runner using the actual Tauri executable and WebView2
+automation. This is not a renderer-only mock test.
+
+Official Tauri v2 supports WebDriver-based desktop E2E on Windows. The acceptance harness:
+
+1. boots the exact pinned OpenMMO Rust server
+2. creates/persists `CryptMira` inside real `old_crypt` using the already verified real
+   integration path
+3. builds the pinned browser WASM codec
+4. builds the actual Windows Tauri debug executable
+5. launches it through `tauri-driver` / Edge WebDriver
+6. verifies Character Lobby and `CryptMira`
+7. clicks the real `입장` button
+8. verifies the actual GameScreen
+9. requires a real `MONSTER` plus encounter/combat surface
+10. clicks `살펴본다` when the WORLD ENCOUNTER card is still visible; if the aggressive
+    kobold legitimately advances to combat first, accepts that authoritative successor state
+11. clicks the visible `빠른 공격` control repeatedly at the existing safe cadence
+12. requires a visible authoritative kill/reward result and the
+    `SERVER AUTHORITATIVE` marker
+13. captures Character Lobby, GameScreen, encounter, and combat-result screenshots
+
+Implementation:
+
+- `e2e/package.json`
+- `e2e/wdio.conf.mjs`
+- `e2e/specs/openmmo-playable.e2e.mjs`
+- `.github/workflows/idea2-windows-human-e2e.yml`
+
+Verification PR:
+
+- PR #5 — `ci/idea2-m3b-human-e2e-20260924`
+- probe head: `2f21fbb10a67ad834cf8d62479bd94283231d4f9`
+- Windows Tauri acceptance run: `35950234236` — latest status **queued**
+- PR Quality run: `35950234238` — latest status **queued**
+
+M3-B must remain **IMPLEMENTED-CI-VERIFIED** until the Windows Tauri acceptance run itself
+finishes SUCCESS. A renderer-only success is not sufficient.
+
 Final **M3-B VERIFIED** still requires the human Windows acceptance run:
 
 ```text
