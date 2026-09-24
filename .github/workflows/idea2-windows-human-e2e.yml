@@ -1,0 +1,198 @@
+name: idea2 Windows Human Acceptance E2E
+
+on:
+  pull_request:
+    branches: ["idea2"]
+    paths:
+      - "e2e/**"
+      - ".github/workflows/idea2-windows-human-e2e.yml"
+      - "src-tauri/**"
+      - "src/App.tsx"
+      - "src/openmmo/**"
+      - "src/features/game/ui/OpenMmo*.tsx"
+      - "src/features/game/ui/GameScreen.tsx"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: idea2-windows-human-e2e-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-human-e2e:
+    name: Windows Tauri real OpenMMO acceptance
+    runs-on: windows-2022
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout taurin4
+        uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+
+      - name: Checkout pinned OpenMMO with partial sparse clone
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init openmmo
+          git -C openmmo remote add origin https://github.com/Julian-adv/OpenMMO.git
+          git -C openmmo sparse-checkout init --no-cone
+          git -C openmmo sparse-checkout set \
+            /Cargo.toml \
+            /Cargo.lock \
+            /.cargo/ \
+            /agent-client/ \
+            /server/ \
+            /shared/ \
+            /terrain/ \
+            /tools/ \
+            /data-src/ \
+            /data/ \
+            /client/public/models/objects/catalog.json
+          git -C openmmo fetch --depth=1 --filter=blob:none origin 950e081c178d920c10c51f2d31f60c1b3383c925
+          git -C openmmo checkout --detach FETCH_HEAD
+          test "$(git -C openmmo rev-parse HEAD)" = "950e081c178d920c10c51f2d31f60c1b3383c925"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            openmmo
+            src-tauri
+
+      - name: Install taurin4 dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Install WebDriverIO acceptance dependencies
+        working-directory: e2e
+        run: npm install --no-audit --no-fund
+
+      - name: Build pinned OpenMMO server
+        working-directory: openmmo
+        run: cargo build -p onlinerpg-server --locked
+
+      - name: Build pinned shared codec for Node seed
+        working-directory: openmmo/shared
+        shell: bash
+        run: |
+          wasm-pack build \
+            --target nodejs \
+            --release \
+            --out-dir ../../.tmp/openmmo-wasm
+
+      - name: Start isolated pinned OpenMMO server
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Remove-Item "openmmo\data\npc_token" -Force -ErrorAction SilentlyContinue
+          Remove-Item "openmmo\data\game_data.db" -Force -ErrorAction SilentlyContinue
+
+          $terrain = Join-Path $env:RUNNER_TEMP "openmmo-empty-terrain"
+          New-Item -ItemType Directory -Force -Path $terrain | Out-Null
+
+          $stdout = Join-Path $env:RUNNER_TEMP "openmmo-e2e-server.stdout.log"
+          $stderr = Join-Path $env:RUNNER_TEMP "openmmo-e2e-server.stderr.log"
+          $exe = (Resolve-Path "openmmo\target\debug\onlinerpg-server.exe").Path
+          $working = (Resolve-Path "openmmo").Path
+          $serverArgs = @("--port","10006","--terrain-port","10007","--bind","127.0.0.1","--api-bind","127.0.0.1","--terrain-dir",$terrain)
+
+          $process = Start-Process -FilePath $exe -ArgumentList $serverArgs -WorkingDirectory $working -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+
+          Set-Content -Path (Join-Path $env:RUNNER_TEMP "openmmo-e2e-server.pid") -Value $process.Id -NoNewline
+
+          $ready = $false
+          for ($attempt = 0; $attempt -lt 120; $attempt++) {
+            if ($process.HasExited) {
+              throw "OpenMMO server exited before becoming ready."
+            }
+
+            if ((Test-Path "openmmo\data\npc_token") -and (Select-String -Path $stdout -Pattern "MMORPG Server listening on: 127.0.0.1:10006" -Quiet -ErrorAction SilentlyContinue)) {
+              $ready = $true
+              break
+            }
+            Start-Sleep -Milliseconds 250
+          }
+
+          if (-not $ready) {
+            Get-Content $stdout -ErrorAction SilentlyContinue
+            Get-Content $stderr -ErrorAction SilentlyContinue
+            throw "OpenMMO server did not become ready."
+          }
+
+          $token = (Get-Content "openmmo\data\npc_token" -Raw).Trim()
+          $nodeCodec = (Resolve-Path ".tmp\openmmo-wasm\onlinerpg_shared.js").Path
+
+          "OPENMMO_SERVER_URL=ws://127.0.0.1:10006" >> $env:GITHUB_ENV
+          "OPENMMO_NPC_TOKEN=$token" >> $env:GITHUB_ENV
+          "OPENMMO_WASM_MODULE=$nodeCodec" >> $env:GITHUB_ENV
+
+          "TAURIN4_OPENMMO_SERVER_URL=ws://127.0.0.1:10006" >> $env:GITHUB_ENV
+          "TAURIN4_OPENMMO_ACCOUNT=npc_idea2_dungeon" >> $env:GITHUB_ENV
+          "TAURIN4_OPENMMO_NPC_TOKEN=$token" >> $env:GITHUB_ENV
+          "TAURIN4_OPENMMO_AUTOSTART=1" >> $env:GITHUB_ENV
+
+      - name: Seed a real persisted old_crypt character
+        run: >
+          npx vitest run src/openmmo/real.integration.test.ts
+          -t "enters old_crypt and kills a real server-spawned kobold"
+
+      - name: Prepare pinned browser codec
+        shell: pwsh
+        run: |
+          $env:OPENMMO_SOURCE_DIR = (Resolve-Path "openmmo").Path
+          npm run openmmo:codec
+
+      - name: Build real Tauri debug app
+        run: npm run tauri -- build --debug --no-bundle
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --locked
+
+      - name: Install matching Edge WebDriver
+        shell: pwsh
+        run: |
+          cargo install --git https://github.com/chippers/msedgedriver-tool
+          & "$HOME\.cargo\bin\msedgedriver-tool.exe"
+          $PWD.Path >> $env:GITHUB_PATH
+
+      - name: Run actual Tauri WebView2 acceptance
+        working-directory: e2e
+        run: npm test
+
+      - name: Upload acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: idea2-m3b-windows-human-e2e
+          path: |
+            e2e/artifacts/**
+            ${{ runner.temp }}/openmmo-e2e-server.stdout.log
+            ${{ runner.temp }}/openmmo-e2e-server.stderr.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Stop pinned OpenMMO server
+        if: always()
+        shell: pwsh
+        run: |
+          $pidFile = Join-Path $env:RUNNER_TEMP "openmmo-e2e-server.pid"
+          if (Test-Path $pidFile) {
+            $serverPid = [int](Get-Content $pidFile -Raw)
+            Stop-Process -Id $serverPid -Force -ErrorAction SilentlyContinue
+          }
+
+          Write-Host "===== OpenMMO stdout ====="
+          Get-Content (Join-Path $env:RUNNER_TEMP "openmmo-e2e-server.stdout.log") -ErrorAction SilentlyContinue
+          Write-Host "===== OpenMMO stderr ====="
+          Get-Content (Join-Path $env:RUNNER_TEMP "openmmo-e2e-server.stderr.log") -ErrorAction SilentlyContinue
