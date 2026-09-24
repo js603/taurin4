@@ -10,8 +10,8 @@
 - Repository: `js603/taurin4`
 - Branch: `idea2`
 - Base checkpoint: `370688fc7d712e823206510d9b972af0fab30e88`
-- Last verified implementation HEAD: `39863b66973598dc93f8e1ca00f00a80ba1aa8fd`
-- Latest M2 implementation candidate HEAD: `39863b66973598dc93f8e1ca00f00a80ba1aa8fd`
+- Last verified implementation HEAD: `e85d4d4c56753b7e2313449b06fd803a95d2ff97`
+- Latest M2 implementation candidate HEAD: `e85d4d4c56753b7e2313449b06fd803a95d2ff97`
 - Verified validation: run `35903549333` — **SUCCESS**
 - Verified Pages: run `35903549203` — **SUCCESS**
 - Verified Windows/Android: run `35903549207` — **SUCCESS**
@@ -1020,11 +1020,19 @@ the explicit Text/Card app-surface proof before M3.
 
 ### Current old_crypt Gate candidate — 2026-09-24
 
-Implementation candidate:
+Verified implementation HEAD:
 
-`91054770e7ed6c56cbb7c416e6cb00ce9e1e0828`
+`e85d4d4c56753b7e2313449b06fd803a95d2ff97`
 
-Status: **IMPLEMENTED-NOT-VERIFIED**
+Status: **VERIFIED**
+
+Verification evidence:
+
+- observable PR head: `d8d236c2cabbe4bc7085dd0d0df8cb2891369328`
+- real pinned OpenMMO workflow: run `35915829210` — **SUCCESS**
+- PR Quality: run `35915829045` — **SUCCESS**
+- current `idea2` workflow blob is byte-identical to the successful run
+- current `idea2` real integration test differs from the successful PR test only by the temporary PR probe comment, so executable test logic is identical
 
 The executable real-server Gate now requires:
 
@@ -1108,17 +1116,36 @@ Candidate `91054770...` fixes the verification timing without weakening the Gate
   combat the enemy id must equal the witnessed encounter monster id
 - the same witnessed monster id continues through approach, attack, death and XP proof
 
-Latest observable validation is running against the synced temporary PR head. Do not mark
-this Gate PASS until that real pinned-server run reaches `MonsterDead` and `XpGained`.
+The bounded real pinned-server Gate is now **PASS**. Run `35915829210` completed the
+full real adapter job, including the authoritative `old_crypt` integration test and the
+production browser/PWA build.
+
+Verified Gate chain:
+
+```text
+old_crypt real entry
+→ authoritative floor -1
+→ real MonsterSpawned
+→ semantic MONSTER destination
+→ WORLD ENCOUNTER Text/Card witness
+→ authentic dungeon door/path approach
+→ real PlayerAttack
+→ authoritative PlayerAttacked
+→ MonsterDead
+→ XpGained tied to the killed monster
+→ optional original RNG GroundItem pickup path when a drop occurs
+```
+
+Probabilistic loot remains non-mandatory. The test only requires pickup acknowledgement
+when the original server actually produces a `GroundItem`.
 
 Exact next verification action:
 
-1. inspect the next meaningful checkpoint of the real pinned-server run for candidate
-   `91054770...`
-2. if it fails, inspect only the failing runtime assertion/job log and repair that authentic path
-3. if it passes, promote the verified implementation baseline, record the run, close the
-   temporary verification PR without merging, and proceed to explicit real app-surface proof
-   before M3
+1. close the temporary verification PR without merging
+2. add an explicit `GameScreen` app-surface test proving the real semantic MONSTER /
+   WORLD ENCOUNTER state renders through the actual Text/Card UI surface
+3. run the normal quality Gate for that app-surface proof
+4. only after that proof, assess M2 closure and M3 readiness
 
 ## 17. New-chat bootstrap
 
