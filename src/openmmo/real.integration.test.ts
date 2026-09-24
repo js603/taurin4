@@ -1098,6 +1098,14 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
         if (!inRange) throw new Error("Kobold disappeared before combat");
         expect(inRange.distanceMeters).toBeLessThanOrEqual(2.2);
 
+        const beforeCombatInput = session.getSnapshot();
+        if (beforeCombatInput.phase === "encounter") {
+          expect(beforeCombatInput.encounter?.entityId).toBe(targetId);
+          session.command({ type: "INVESTIGATE_ENCOUNTER" });
+        }
+        expect(session.getSnapshot().phase).toBe("combat");
+        expect(session.getSnapshot().combat?.enemy.id).toBe(targetId);
+
         const combatStart = observed.length;
         let killed = false;
 
@@ -1121,7 +1129,7 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
             throw new Error("Dungeon test character died before killing kobold");
           }
 
-          expect(adapter.sendAttack(targetId)).toBe(true);
+          session.command({ type: "ATTACK" });
           await delay(1_500);
         }
 
