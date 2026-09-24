@@ -679,7 +679,7 @@ Every relevant original feature is classified as:
 
 No major OpenMMO system should be changed before this matrix exists.
 
-### M2 — taurin4 + Real OpenMMO Backend — STARTED
+### M2 — taurin4 + Real OpenMMO Backend — COMPLETE
 
 Goal: complete one actual OpenMMO gameplay cycle through our taurin4 client.
 
@@ -1153,7 +1153,7 @@ Implementation candidate:
 
 `beea00867a4255daa86869df23790177c667aac1`
 
-Status: **IMPLEMENTED-NOT-CI-VERIFIED**
+Status: **VERIFIED**
 
 Added `src/features/game/ui/GameScreen.test.tsx` using the actual `GameScreen`
 component and React `renderToStaticMarkup`, with no new dependency.
@@ -1175,23 +1175,85 @@ Verification route:
 - temporary PR: #2, `ci/idea2-app-surface-gate-20260924`
 - PR probe head: `5205f6c0fdfb7cf4c8f1acc88a9452a634a2e68c`
 - PR Quality run: `35937617812`
-- latest inspected status: **in_progress**
+- final status: **SUCCESS**
 
 Anti-delay handling:
 
 - no repeated CI polling after observing `in_progress`
 - direct container checkout was attempted as the fallback execution route, but the
   execution environment cannot resolve `github.com`; that route was stopped immediately
-- do not mark this UI Gate PASS until the quality run is observed as SUCCESS
-- do not re-run the long real OpenMMO Gate for this UI-only test; the old_crypt real
-  authoritative Gate is already VERIFIED by run `35915829210`
+- PR Quality run `35937617812` completed **SUCCESS**
+- temporary PR #2 was closed without merging after verification
+- the long real OpenMMO Gate was not re-run for this UI-only proof
 
-Exact next action:
+This closes the final M2 app-surface requirement.
 
-1. at the next meaningful checkpoint, inspect PR Quality run `35937617812` once
-2. on SUCCESS, mark this app-surface Gate VERIFIED and close PR #2 without merging
-3. on FAILURE, inspect only the failing quality step/log and repair the shortest path
-4. after SUCCESS, assess M2 closure and M3 readiness
+### M2 completion decision — 2026-09-24
+
+Status: **M2 COMPLETE**
+
+The M2 first-success definition is now satisfied end-to-end:
+
+```text
+taurin4 launch/runtime bootstrap
+→ character list
+→ create/select character
+→ real OpenMMO EnterGame
+→ actual Text/Card world surface
+→ authoritative movement/travel
+→ real old_crypt MonsterSpawned
+→ WORLD ENCOUNTER card
+→ real combat
+→ authoritative PlayerAttacked
+→ MonsterDead
+→ XP reward
+→ GroundItem / PickupItem path when an original drop exists
+→ real inventory update
+→ logout/disconnect
+→ reconnect
+→ same character/equipment/position persistence
+```
+
+Completion evidence:
+
+- baseline validation — run `35903549333` — SUCCESS
+- Pages — run `35903549203` — SUCCESS
+- Windows + Android — run `35903549207` — SUCCESS
+- baseline real pinned OpenMMO — run `35903549323` — SUCCESS
+- authoritative `old_crypt` real encounter/kill Gate — run `35915829210` — SUCCESS
+- actual `GameScreen` Text/Card app-surface Gate — run `35937617812` — SUCCESS
+
+The optional dungeon item drop remains intentionally probabilistic and is not required for
+PASS. When the original server produces one, the integration path observes and acquires it
+through the authoritative GroundItem protocol.
+
+### M3 entry decision
+
+M3 may now start.
+
+The first M3 Gate is **Controlled Combat Input Migration**:
+
+```text
+real MonsterSpawned
+→ semantic MONSTER card
+→ actual GameScreen WORLD ENCOUNTER
+→ INVESTIGATE_ENCOUNTER through GameSession
+→ combat attention card
+→ ATTACK through GameSession
+→ OpenMmoAdapter PlayerAttack
+→ authoritative combat result
+```
+
+Purpose:
+
+- remove the remaining test-only shortcut where the old_crypt integration Gate invokes
+  `adapter.sendAttack(...)` directly
+- prove that the real app-facing `GameSession` command path drives original OpenMMO combat
+- preserve server authority; do not move combat rules into React/Tauri
+- keep the Text/Card / attention presentation while replacing original 3D interaction
+
+PASS requires an executable test proving the command reaches the real adapter/server path.
+Do not rewrite movement, auth, persistence, and combat simultaneously.
 
 ## 17. New-chat bootstrap
 
