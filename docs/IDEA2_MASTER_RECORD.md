@@ -1319,57 +1319,104 @@ Exact next action:
 4. finish with a human-playable Windows acceptance path
 
 
-### M3-B prepared next slice — Playable Runtime Entry
+### M3-B — Playable Runtime Entry — 2026-09-24
 
-Status: **PREPARED / NOT STARTED**
+Status: **IMPLEMENTED-NOT-VERIFIED**
 
-Reason for choosing this as the next slice:
+Implementation candidate:
 
-The real OpenMMO runtime is already reachable from taurin4 through
-`?runtime=openmmo`, and the pinned browser codec path plus default local websocket are
-already wired. However the current entry surface is explicitly an M2 engineering screen
-and still asks the player to manually provide:
+`0d530da337f12e9d51a7114bf3a80e5f6b5c0d97`
 
-- server websocket
-- codec URL
-- audit account
-- NPC token
+M3-A is already VERIFIED, so M3-B source implementation has started.
 
-Current defaults already reduce two fields:
-
-- server: `ws://127.0.0.1:10006`
-- codec: packaged pinned `openmmo-wasm/onlinerpg_shared.js`
-- account: `npc_idea2_player`
-
-The remaining human-play friction is therefore primarily local server startup/auth token
-handoff, not missing combat or world UI.
-
-M3-B goal:
+Implemented path:
 
 ```text
-launch taurin4
-→ choose/enter Real OpenMMO mode
-→ connect to a local pinned OpenMMO server with minimal engineering setup
-→ character lobby
-→ enter character
+npm run openmmo:play:windows
+→ G:\taurin4-openmmo-runtime
+→ exact pinned OpenMMO sparse checkout
+→ reuse/build pinned Rust server
+→ reuse/build pinned browser WASM codec
+→ start hidden local OpenMMO server
+→ read original server data/npc_token
+→ pass server/account/token only through Tauri process environment
+→ Tauri openmmo_local_launch_config command
+→ React detects native autostart config
+→ OpenMmoBootstrap auto-connect/auth
+→ Character Lobby
 → GameScreen
-→ MONSTER / WORLD ENCOUNTER
-→ player clicks investigation/combat controls
-→ authoritative server gameplay
 ```
 
-M3-B will not change OpenMMO combat rules, persistence, or world authority. It is a
-player-facing entry/launch slice.
+Implemented files:
 
-Acceptance boundary:
+- `scripts/play-openmmo-windows.ps1`
+- `src/openmmo/nativeLaunch.ts`
+- `src-tauri/src/lib.rs`
+- `src/App.tsx`
+- `src/features/game/ui/OpenMmoBootstrap.tsx`
+- `package.json`
+- `.github/workflows/idea2-windows-playable.yml`
 
-1. preserve the verified pinned codec and server protocol
-2. avoid persisting the NPC token in browser storage
-3. remove M2/audit-only wording from the normal playable path
-4. provide a reproducible local-play setup for Windows
-5. finish with a human acceptance run in taurin4, not only unit/CI tests
+Storage/security policy:
 
-Do not start M3-B source changes while M3-A real-server run is still executing.
+- default runtime root is fixed to `G:\taurin4-openmmo-runtime`
+- OpenMMO source, Cargo download cache, target artifacts, server logs, and empty terrain
+  workspace are placed under that G: runtime root
+- existing server build and browser codec are reused when the audited pin matches
+- `game_data.db` is not deleted, so local character/world state persists between plays
+- the NPC token is never placed in URL parameters, localStorage, or sessionStorage
+- the launcher passes the token only through the Tauri process environment and the
+  Tauri command returns it to the current React process in memory
+- the launcher removes its inherited OpenMMO environment variables when the Tauri dev
+  process exits
+
+Player-facing entry wording is no longer M2/audit-only. The native launcher bypasses
+manual server/account/token entry and automatically proceeds to the real Character Lobby.
+The existing explicit `?runtime=openmmo` manual path remains as a web/development fallback.
+
+One-command Windows entry:
+
+```powershell
+npm run openmmo:play:windows
+```
+
+Optional clean rebuild:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/play-openmmo-windows.ps1 -ForceRebuild
+```
+
+Runtime diagnostics:
+
+- server stdout: `G:\taurin4-openmmo-runtime\openmmo-server.stdout.log`
+- server stderr: `G:\taurin4-openmmo-runtime\openmmo-server.stderr.log`
+- managed server pid: `G:\taurin4-openmmo-runtime\openmmo-server.pid`
+
+Verification PR:
+
+- PR #4 — `ci/idea2-m3b-playable-entry-20260924`
+- probe head: `b3283852e8fb2f713e8a7d6cc821c1d6073f286a`
+- PR Quality run: `35949166290` — latest status **queued**
+- Windows Playable Entry run: `35949166292` — latest status **queued**
+
+Windows Playable Entry Gate checks:
+
+1. `npm run check`
+2. `cargo check --manifest-path src-tauri/Cargo.toml`
+3. PowerShell parser validation for the launcher
+4. static enforcement of G: default runtime root
+5. Tauri native launch bridge presence
+6. no browser storage use in playable bootstrap
+
+Anti-delay rule:
+
+- do not repeatedly poll the queued runs
+- at the next meaningful checkpoint inspect both once
+- on failure, inspect only the failing step and repair that path
+- on success, close PR #4 without merging and promote M3-B to
+  **IMPLEMENTED-CI-VERIFIED**
+- final **M3-B VERIFIED** still requires the human Windows acceptance run:
+  launcher → character lobby → enter character → GameScreen
 
 ## 17. New-chat bootstrap
 
