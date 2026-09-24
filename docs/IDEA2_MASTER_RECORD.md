@@ -1469,7 +1469,18 @@ Verification PR:
 - retry PR head: `ca469837cf77058cb7866203b4d1236f6bc75e2b`
 - fix switches Windows checkout to cone sparse mode and explicitly asserts
   `openmmo/Cargo.toml` and `openmmo/Cargo.lock` before build
-- first retry workflow lookup returned no runs yet; no repeated polling was performed
+- retry run `36074065737` progressed further:
+  - OpenMMO server build — PASS
+  - Node codec build — PASS
+  - isolated OpenMMO server boot — PASS
+  - old_crypt seed — FAIL before auth because the Node seed process could not reconnect
+    across the Windows Actions step boundary
+- server log proved OpenMMO was fully ready on `127.0.0.1:10006` before the boundary
+- second infrastructure fix commit: `13182a260db73f0f1f85114ad0343056203e969f`
+- new method keeps server start → real old_crypt seed → actual Tauri/WebView2 acceptance
+  inside one PowerShell step, guaranteeing the same server process lifetime
+- retry PR head: `d7e2057cd01bbc4d530a5b960989db73e65d8a19`
+- first lookup for that head returned no runs yet; no repeated polling was performed
 
 M3-B must remain **IMPLEMENTED-CI-VERIFIED** until the Windows Tauri acceptance run itself
 finishes SUCCESS. A renderer-only success is not sufficient.
@@ -1497,6 +1508,34 @@ Human acceptance PASS evidence:
 5. at least one authoritative combat result is visible
 6. closing taurin4 stops the managed server process
 7. rerun preserves the local character/world database
+
+### M3-C Android transport preflight — 2026-09-25
+
+No M3-C source change is being pushed while the Windows M3-B real-app Gate is active.
+
+Preflight finding:
+
+- Tauri v2 provides an official Rust-backed WebSocket plugin on Android and iOS.
+- The existing `OpenMmoTransport` abstraction means Android does not need a fork of
+  OpenMMO gameplay/session logic.
+- Preferred implementation is:
+  - browser/Web fallback: existing `WebSocketOpenMmoTransport`
+  - Tauri desktop/mobile: a plugin-backed `OpenMmoTransport`
+  - `OpenMmoAdapter`, `OpenMmoGameSession`, semantic Text/Card state and server authority
+    remain shared.
+- This avoids making Android correctness depend on Android WebView cleartext-WebSocket
+  policy and keeps transport concerns below the game/session layer.
+- Android platform configuration can live in Tauri's supported
+  `tauri.android.conf.json` merge layer when platform-specific settings are required.
+
+First M3-C implementation after M3-B closes:
+
+1. add Tauri WebSocket plugin and capability
+2. implement a plugin-backed transport conforming to `OpenMmoTransport`
+3. select transport by runtime/platform without changing session rules
+4. add Android server-endpoint entry/preset suitable for LAN/remote testing
+5. build/install debug APK
+6. run real Android app acceptance against an isolated pinned OpenMMO server
 
 ### M3-C — Android real OpenMMO play client — NEXT AFTER M3-B
 
