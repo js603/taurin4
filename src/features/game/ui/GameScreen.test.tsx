@@ -1,3 +1,4 @@
+// PR validation probe: verifies the same GameScreen app-surface Gate.
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { GameState } from "../../../game/model";
