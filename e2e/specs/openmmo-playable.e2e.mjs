@@ -1,3 +1,4 @@
+// PR validation probe: actual Windows Tauri human-replacement acceptance.
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
