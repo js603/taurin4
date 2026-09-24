@@ -1314,6 +1314,59 @@ Exact next action:
 3. if both succeed, mark M3-A VERIFIED and close PR #3 without merging
 4. then select the next single controlled migration slice; do not batch unrelated M3 systems
 
+
+### M3-B prepared next slice — Playable Runtime Entry
+
+Status: **PREPARED / NOT STARTED**
+
+Reason for choosing this as the next slice:
+
+The real OpenMMO runtime is already reachable from taurin4 through
+`?runtime=openmmo`, and the pinned browser codec path plus default local websocket are
+already wired. However the current entry surface is explicitly an M2 engineering screen
+and still asks the player to manually provide:
+
+- server websocket
+- codec URL
+- audit account
+- NPC token
+
+Current defaults already reduce two fields:
+
+- server: `ws://127.0.0.1:10006`
+- codec: packaged pinned `openmmo-wasm/onlinerpg_shared.js`
+- account: `npc_idea2_player`
+
+The remaining human-play friction is therefore primarily local server startup/auth token
+handoff, not missing combat or world UI.
+
+M3-B goal:
+
+```text
+launch taurin4
+→ choose/enter Real OpenMMO mode
+→ connect to a local pinned OpenMMO server with minimal engineering setup
+→ character lobby
+→ enter character
+→ GameScreen
+→ MONSTER / WORLD ENCOUNTER
+→ player clicks investigation/combat controls
+→ authoritative server gameplay
+```
+
+M3-B will not change OpenMMO combat rules, persistence, or world authority. It is a
+player-facing entry/launch slice.
+
+Acceptance boundary:
+
+1. preserve the verified pinned codec and server protocol
+2. avoid persisting the NPC token in browser storage
+3. remove M2/audit-only wording from the normal playable path
+4. provide a reproducible local-play setup for Windows
+5. finish with a human acceptance run in taurin4, not only unit/CI tests
+
+Do not start M3-B source changes while M3-A real-server run is still executing.
+
 ## 17. New-chat bootstrap
 
 When starting a new ChatGPT conversation, use this instruction:
