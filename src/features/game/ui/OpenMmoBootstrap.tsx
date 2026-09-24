@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { GameScreen } from "./GameScreen";
 import { OpenMmoCharacterLobby } from "./OpenMmoCharacterLobby";
 import { loadOpenMmoBrowserCodec } from "../../../openmmo/browserCodec";
@@ -79,7 +79,7 @@ export function OpenMmoBootstrap({
   const activeRuntime = useRef<OpenMmoRuntime | null>(null);
   const nativeAutostartConsumed = useRef(false);
 
-  const start = async (
+  const start = useCallback(async (
     launchConfig?: Pick<
       OpenMmoNativeLaunchConfig,
       "serverUrl" | "accountName" | "npcToken"
@@ -126,7 +126,7 @@ export function OpenMmoBootstrap({
       setError(cause instanceof Error ? cause.message : String(cause));
       setPhase("error");
     }
-  };
+  }, [accountName, codecUrl, npcToken, serverUrl]);
 
   useEffect(() => {
     return () => {
@@ -149,7 +149,7 @@ export function OpenMmoBootstrap({
     setAccountName(nativeLaunchConfig.accountName);
     setNpcToken(nativeLaunchConfig.npcToken);
     void start(nativeLaunchConfig);
-  }, [nativeLaunchConfig]);
+  }, [nativeLaunchConfig, start]);
 
   const reset = () => {
     activeRuntime.current?.session.stop();
