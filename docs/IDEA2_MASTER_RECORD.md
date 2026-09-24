@@ -10,8 +10,9 @@
 - Repository: `js603/taurin4`
 - Branch: `idea2`
 - Base checkpoint: `370688fc7d712e823206510d9b972af0fab30e88`
-- Last verified implementation HEAD: `e85d4d4c56753b7e2313449b06fd803a95d2ff97`
+- Last verified implementation HEAD: `beea00867a4255daa86869df23790177c667aac1`
 - Latest M2 implementation candidate HEAD: `beea00867a4255daa86869df23790177c667aac1`
+- Latest M3 implementation candidate HEAD: `f0f026a368c5ca975712edf303125b7651598a2c`
 - Verified validation: run `35903549333` — **SUCCESS**
 - Verified Pages: run `35903549203` — **SUCCESS**
 - Verified Windows/Android: run `35903549207` — **SUCCESS**
@@ -1227,6 +1228,18 @@ The optional dungeon item drop remains intentionally probabilistic and is not re
 PASS. When the original server produces one, the integration path observes and acquires it
 through the authoritative GroundItem protocol.
 
+### M2 complete recovery checkpoint
+
+Checkpoint branch:
+
+`checkpoint/idea2-m2-complete-20260924`
+
+Checkpoint commit:
+
+`6e7e963a0fcb1bae3efbcafe45859afce7a5d11d`
+
+Use this branch when a clean recovery point immediately after M2 completion is required.
+
 ### M3 entry decision
 
 M3 may now start.
@@ -1254,6 +1267,38 @@ Purpose:
 
 PASS requires an executable test proving the command reaches the real adapter/server path.
 Do not rewrite movement, auth, persistence, and combat simultaneously.
+
+
+### M3-A Controlled Combat Input Migration candidate — 2026-09-24
+
+Implementation candidate:
+
+`f0f026a368c5ca975712edf303125b7651598a2c`
+
+Status: **IMPLEMENTED-NOT-VERIFIED**
+
+The real `old_crypt` integration Gate no longer calls
+`adapter.sendAttack(targetId)` directly for combat. At the real combat boundary it now:
+
+1. preserves the previously witnessed authoritative encounter monster id
+2. if the session is still in `encounter`, sends
+   `session.command({ type: "INVESTIGATE_ENCOUNTER" })`
+3. requires the resulting/shared combat target to remain the same real kobold
+4. sends each basic attack through
+   `session.command({ type: "ATTACK" })`
+5. continues to require authoritative `PlayerAttacked`, `MonsterDead`, and
+   monster-correlated `XpGained`
+
+This removes the test-only direct adapter combat shortcut while keeping server authority
+and the existing deterministic dungeon approach unchanged.
+
+Verification Gate:
+
+- normal quality Gate must pass
+- real pinned OpenMMO old_crypt workflow must pass
+- direct adapter calls remain allowed for low-level dungeon navigation/door protocol where
+  they are not player-facing combat input
+- do not mark M3-A VERIFIED until the real pinned-server run succeeds
 
 ## 17. New-chat bootstrap
 
