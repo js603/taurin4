@@ -24,7 +24,8 @@
     "ios:init": "tauri ios init",
     "ios:dev": "tauri ios dev",
     "ios:build:unsigned": "tauri ios build --no-sign",
-    "ios:build:release": "tauri ios build --export-method app-store-connect"
+    "ios:build:release": "tauri ios build --export-method app-store-connect",
+    "openmmo:play:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/play-openmmo-windows.ps1"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",
