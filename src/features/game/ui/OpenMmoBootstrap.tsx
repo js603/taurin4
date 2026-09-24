@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { GameScreen } from "./GameScreen";
 import { OpenMmoCharacterLobby } from "./OpenMmoCharacterLobby";
 import { loadOpenMmoBrowserCodec } from "../../../openmmo/browserCodec";
+import type { OpenMmoNativeLaunchConfig } from "../../../openmmo/nativeLaunch";
 import {
   createOpenMmoRuntime,
   type OpenMmoRuntime,
@@ -49,33 +50,45 @@ function waitForConnected(runtime: OpenMmoRuntime, timeoutMs = 8_000) {
   });
 }
 
-export function OpenMmoBootstrap() {
+export function OpenMmoBootstrap({
+  nativeLaunchConfig,
+}: {
+  nativeLaunchConfig?: OpenMmoNativeLaunchConfig | null;
+} = {}) {
   const params = new URLSearchParams(window.location.search);
   const [serverUrl, setServerUrl] = useState(
-    params.get("server") ?? "ws://127.0.0.1:10006",
+    nativeLaunchConfig?.serverUrl ??
+      params.get("server") ??
+      "ws://127.0.0.1:10006",
   );
   const [codecUrl, setCodecUrl] = useState(
     params.get("codec") ??
       import.meta.env.BASE_URL + "openmmo-wasm/onlinerpg_shared.js",
   );
   const [accountName, setAccountName] = useState(
-    params.get("account") ?? "npc_idea2_player",
+    nativeLaunchConfig?.accountName ??
+      params.get("account") ??
+      "npc_idea2_player",
   );
-  const [npcToken, setNpcToken] = useState("");
+  const [npcToken, setNpcToken] = useState(
+    nativeLaunchConfig?.npcToken ?? "",
+  );
   const [phase, setPhase] = useState<BootstrapPhase>("setup");
   const [error, setError] = useState<string | null>(null);
   const [runtime, setRuntime] = useState<OpenMmoRuntime | null>(null);
   const activeRuntime = useRef<OpenMmoRuntime | null>(null);
+  const nativeAutostartConsumed = useRef(false);
 
-  useEffect(() => {
-    return () => {
-      activeRuntime.current?.session.stop();
-      activeRuntime.current?.adapter.disconnect();
-      activeRuntime.current = null;
-    };
-  }, []);
+  const start = async (
+    launchConfig?: Pick<
+      OpenMmoNativeLaunchConfig,
+      "serverUrl" | "accountName" | "npcToken"
+    >,
+  ) => {
+    const nextServerUrl = launchConfig?.serverUrl ?? serverUrl;
+    const nextAccountName = launchConfig?.accountName ?? accountName;
+    const nextNpcToken = launchConfig?.npcToken ?? npcToken;
 
-  const start = async () => {
     setError(null);
 
     let nextRuntime: OpenMmoRuntime | null = null;
@@ -85,20 +98,20 @@ export function OpenMmoBootstrap() {
 
       nextRuntime = createOpenMmoRuntime({
         wasm,
-        clientVersion: "idea2-m2-app/0.1.0",
+        clientVersion: "idea2-m3-playable/0.1.0",
       });
       activeRuntime.current = nextRuntime;
       setRuntime(nextRuntime);
       nextRuntime.session.start();
 
       setPhase("connecting");
-      nextRuntime.adapter.connect(serverUrl);
+      nextRuntime.adapter.connect(nextServerUrl);
       await waitForConnected(nextRuntime);
 
       setPhase("authenticating");
       const auth = await nextRuntime.adapter.authenticateNpc(
-        accountName.trim(),
-        npcToken,
+        nextAccountName.trim(),
+        nextNpcToken,
       );
       if (!auth.ok) {
         throw new Error(auth.message);
@@ -115,12 +128,45 @@ export function OpenMmoBootstrap() {
     }
   };
 
+  useEffect(() => {
+    return () => {
+      activeRuntime.current?.session.stop();
+      activeRuntime.current?.adapter.disconnect();
+      activeRuntime.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (
+      !nativeLaunchConfig?.autostart ||
+      nativeAutostartConsumed.current
+    ) {
+      return;
+    }
+
+    nativeAutostartConsumed.current = true;
+    setServerUrl(nativeLaunchConfig.serverUrl);
+    setAccountName(nativeLaunchConfig.accountName);
+    setNpcToken(nativeLaunchConfig.npcToken);
+    void start(nativeLaunchConfig);
+  }, [nativeLaunchConfig]);
+
   const reset = () => {
     activeRuntime.current?.session.stop();
     activeRuntime.current?.adapter.disconnect();
     activeRuntime.current = null;
     setRuntime(null);
-    setNpcToken("");
+    setServerUrl(
+      nativeLaunchConfig?.serverUrl ??
+        params.get("server") ??
+        "ws://127.0.0.1:10006",
+    );
+    setAccountName(
+      nativeLaunchConfig?.accountName ??
+        params.get("account") ??
+        "npc_idea2_player",
+    );
+    setNpcToken(nativeLaunchConfig?.npcToken ?? "");
     setError(null);
     setPhase("setup");
   };
@@ -159,8 +205,8 @@ export function OpenMmoBootstrap() {
     <main className="runtime-shell">
       <header className="runtime-header">
         <div>
-          <p className="eyebrow">M2 OPENMMO BOOTSTRAP</p>
-          <h1>Real Backend Connection</h1>
+          <p className="eyebrow">REAL OPENMMO</p>
+          <h1>Local Play Connection</h1>
         </div>
         <a className="runtime-link" href={window.location.pathname}>
           LOCAL MODE
@@ -169,10 +215,16 @@ export function OpenMmoBootstrap() {
 
       <section className="runtime-panel">
         <p className="runtime-panel__copy">
-          이 화면은 M2 개발/검증용이다. 실제 pinned OpenMMO WASM codec과
-          OpenMMO 서버에 연결하며, NPC token은 메모리에만 유지하고 저장하지
-          않는다.
+          실제 pinned OpenMMO 서버에 연결한다. Windows 로컬 플레이 런처를
+          사용하면 서버와 인증 정보가 자동으로 연결되며 NPC token은 브라우저
+          저장소나 URL에 저장하지 않는다.
         </p>
+
+        {nativeLaunchConfig ? (
+          <p className="runtime-panel__copy">
+            LOCAL OPENMMO 런처 감지됨 · {nativeLaunchConfig.serverUrl}
+          </p>
+        ) : null}
 
         <div className="runtime-fields">
           <label>
@@ -196,7 +248,7 @@ export function OpenMmoBootstrap() {
           </label>
 
           <label>
-            <span>AUDIT ACCOUNT</span>
+            <span>PLAYER ACCOUNT</span>
             <input
               value={accountName}
               disabled={working}
@@ -206,7 +258,7 @@ export function OpenMmoBootstrap() {
           </label>
 
           <label>
-            <span>NPC TOKEN</span>
+            <span>LOCAL AUTH TOKEN</span>
             <input
               type="password"
               value={npcToken}
@@ -228,7 +280,7 @@ export function OpenMmoBootstrap() {
               !accountName.trim() ||
               !npcToken
             }
-            onClick={start}
+            onClick={() => void start()}
           >
             {phase === "loading_codec"
               ? "CODEC LOADING"
@@ -236,12 +288,12 @@ export function OpenMmoBootstrap() {
                 ? "CONNECTING"
                 : phase === "authenticating"
                   ? "AUTHENTICATING"
-                  : "OPENMMO 연결"}
+                  : "OPENMMO 플레이"}
           </button>
 
           {phase === "error" ? (
             <button type="button" className="text-button" onClick={reset}>
-              다시 입력
+              다시 연결
             </button>
           ) : null}
         </div>
