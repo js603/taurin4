@@ -1460,8 +1460,16 @@ Verification PR:
 
 - PR #5 — `ci/idea2-m3b-human-e2e-20260924`
 - probe head: `2f21fbb10a67ad834cf8d62479bd94283231d4f9`
-- Windows Tauri acceptance run: `35950234236` — latest status **queued**
-- PR Quality run: `35950234238` — latest status **queued**
+- Windows Tauri acceptance run `35950234236` — **FAILURE before app launch**
+- PR Quality run `35950234238` — **SUCCESS**
+- failure step: `Build pinned OpenMMO server`
+- root cause: Windows sparse-checkout reported success but did not materialize
+  `openmmo/Cargo.toml`; OpenMMO build never started
+- fix commit on `idea2`: `eb76c23da63eee3c28cc1197f88870c8a7ac485c`
+- retry PR head: `ca469837cf77058cb7866203b4d1236f6bc75e2b`
+- fix switches Windows checkout to cone sparse mode and explicitly asserts
+  `openmmo/Cargo.toml` and `openmmo/Cargo.lock` before build
+- first retry workflow lookup returned no runs yet; no repeated polling was performed
 
 M3-B must remain **IMPLEMENTED-CI-VERIFIED** until the Windows Tauri acceptance run itself
 finishes SUCCESS. A renderer-only success is not sufficient.
@@ -1489,6 +1497,99 @@ Human acceptance PASS evidence:
 5. at least one authoritative combat result is visible
 6. closing taurin4 stops the managed server process
 7. rerun preserves the local character/world database
+
+### M3-C — Android real OpenMMO play client — NEXT AFTER M3-B
+
+Goal:
+
+Make the Android taurin4 app a real OpenMMO player client using the same semantic
+GameSession / Text/Card UI already verified on desktop.
+
+First acceptance topology:
+
+```text
+Android taurin4
+→ manually or automatically supplied OpenMMO server endpoint
+→ OpenMMO auth
+→ Character Lobby
+→ EnterGame
+→ GameScreen
+→ semantic movement
+→ MONSTER / WORLD ENCOUNTER
+→ touch investigate / attack
+→ authoritative server combat result
+```
+
+M3-C deliberately does **not** require the Android device itself to host OpenMMO.
+Its purpose is to prove the complete Android client path first.
+
+M3-C PASS requires:
+
+1. installable Android APK
+2. real pinned OpenMMO protocol/codec compatibility on Android WebView
+3. server endpoint can target a reachable LAN/remote OpenMMO server
+4. Character Lobby works on Android
+5. character entry reaches the real GameScreen
+6. touch interaction can drive encounter/combat through `GameSession`
+7. authoritative combat result is visible
+8. Android-specific lifecycle/reconnect behavior is verified
+9. no Windows-only native-launch assumptions leak into Android
+
+Preferred automated verification route:
+
+- Android emulator or attached Android runner
+- reachable isolated pinned OpenMMO server
+- actual APK launch
+- UI automation through the Android application surface
+- screenshot/log artifacts for lobby, GameScreen, encounter and combat result
+
+### M3-D — Android standalone singleplayer
+
+Goal:
+
+Allow Android to play without any PC host, LAN host, or internet OpenMMO server.
+
+Target user experience:
+
+```text
+launch taurin4 on Android
+→ choose Singleplayer
+→ embedded/local authoritative OpenMMO runtime starts automatically
+→ localhost/internal transport connection
+→ Character Lobby
+→ gameplay
+→ app closes
+→ local server/runtime shuts down safely
+→ character/world state persists on device
+```
+
+This keeps the original OpenMMO server-authoritative model while hiding server operation
+from the player.
+
+M3-D is separate from M3-C because it requires additional platform validation:
+
+- OpenMMO server/core compilation for Android targets
+- Android process/thread/runtime lifecycle
+- local sockets or equivalent internal transport
+- SQLite/file persistence inside Android app storage
+- packaged world/data assets
+- background/foreground lifecycle and OS process restrictions
+- crash-safe save/recovery
+- resource use on mobile
+
+Do not weaken server authority merely to make standalone Android easier. If running the
+original server executable model is unsuitable on Android, extract/embed the authoritative
+server core behind the same protocol boundary rather than duplicating combat/world rules in
+React.
+
+Roadmap order is therefore:
+
+```text
+M3-B Windows standalone playable
+→ M3-C Android real OpenMMO client
+→ M3-D Android standalone singleplayer
+→ later Android↔PC / Android↔Android multiplayer/host acceptance
+```
 
 ## 17. New-chat bootstrap
 
