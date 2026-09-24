@@ -11,7 +11,7 @@
 - Branch: `idea2`
 - Base checkpoint: `370688fc7d712e823206510d9b972af0fab30e88`
 - Last verified implementation HEAD: `e85d4d4c56753b7e2313449b06fd803a95d2ff97`
-- Latest M2 implementation candidate HEAD: `e85d4d4c56753b7e2313449b06fd803a95d2ff97`
+- Latest M2 implementation candidate HEAD: `beea00867a4255daa86869df23790177c667aac1`
 - Verified validation: run `35903549333` — **SUCCESS**
 - Verified Pages: run `35903549203` — **SUCCESS**
 - Verified Windows/Android: run `35903549207` — **SUCCESS**
@@ -1146,6 +1146,52 @@ Exact next verification action:
    WORLD ENCOUNTER state renders through the actual Text/Card UI surface
 3. run the normal quality Gate for that app-surface proof
 4. only after that proof, assess M2 closure and M3 readiness
+
+### GameScreen Text/Card app-surface Gate — 2026-09-24
+
+Implementation candidate:
+
+`beea00867a4255daa86869df23790177c667aac1`
+
+Status: **IMPLEMENTED-NOT-CI-VERIFIED**
+
+Added `src/features/game/ui/GameScreen.test.tsx` using the actual `GameScreen`
+component and React `renderToStaticMarkup`, with no new dependency.
+
+The test supplies the authoritative OpenMMO encounter state shape already proven by the
+real pinned-server Gate and requires the rendered app surface to contain:
+
+- `OPENMMO · AUTHORITATIVE WORLD`
+- the actual nearby-target surface `aria-label="OpenMMO 주변 대상"`
+- a `semantic-destination-card`
+- `MONSTER`
+- `Kobold`
+- `WORLD ENCOUNTER`
+- the `살펴본다` action
+- the actual attention `role="dialog"`
+
+Verification route:
+
+- temporary PR: #2, `ci/idea2-app-surface-gate-20260924`
+- PR probe head: `5205f6c0fdfb7cf4c8f1acc88a9452a634a2e68c`
+- PR Quality run: `35937617812`
+- latest inspected status: **in_progress**
+
+Anti-delay handling:
+
+- no repeated CI polling after observing `in_progress`
+- direct container checkout was attempted as the fallback execution route, but the
+  execution environment cannot resolve `github.com`; that route was stopped immediately
+- do not mark this UI Gate PASS until the quality run is observed as SUCCESS
+- do not re-run the long real OpenMMO Gate for this UI-only test; the old_crypt real
+  authoritative Gate is already VERIFIED by run `35915829210`
+
+Exact next action:
+
+1. at the next meaningful checkpoint, inspect PR Quality run `35937617812` once
+2. on SUCCESS, mark this app-surface Gate VERIFIED and close PR #2 without merging
+3. on FAILURE, inspect only the failing quality step/log and repair the shortest path
+4. after SUCCESS, assess M2 closure and M3 readiness
 
 ## 17. New-chat bootstrap
 
