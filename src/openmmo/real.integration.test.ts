@@ -1,3 +1,4 @@
+// PR validation probe: verifies M3-A combat input through GameSession.
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { getAttentionCard } from "../game/attention";
