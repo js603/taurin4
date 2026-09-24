@@ -1300,6 +1300,20 @@ Verification Gate:
   they are not player-facing combat input
 - do not mark M3-A VERIFIED until the real pinned-server run succeeds
 
+Verification execution:
+
+- temporary PR: #3, `ci/idea2-m3a-combat-gate-20260924`
+- PR probe head: `ee7fab6ced2894a8873c2cf4d9c2f200ce761419`
+- first workflow lookup after PR creation returned no runs yet
+- anti-delay rule applied: no repeated polling in the same work cycle
+
+Exact next action:
+
+1. at the next meaningful checkpoint, inspect PR #3 head workflow runs once
+2. if quality or real OpenMMO fails, inspect only the failing step/log
+3. if both succeed, mark M3-A VERIFIED and close PR #3 without merging
+4. then select the next single controlled migration slice; do not batch unrelated M3 systems
+
 ## 17. New-chat bootstrap
 
 When starting a new ChatGPT conversation, use this instruction:
