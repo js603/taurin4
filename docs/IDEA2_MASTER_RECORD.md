@@ -1275,7 +1275,7 @@ Implementation candidate:
 
 `f0f026a368c5ca975712edf303125b7651598a2c`
 
-Status: **IMPLEMENTED-NOT-VERIFIED**
+Status: **VERIFIED**
 
 The real `old_crypt` integration Gate no longer calls
 `adapter.sendAttack(targetId)` directly for combat. At the real combat boundary it now:
@@ -1304,15 +1304,19 @@ Verification execution:
 
 - temporary PR: #3, `ci/idea2-m3a-combat-gate-20260924`
 - PR probe head: `ee7fab6ced2894a8873c2cf4d9c2f200ce761419`
-- first workflow lookup after PR creation returned no runs yet
-- anti-delay rule applied: no repeated polling in the same work cycle
+- PR Quality run `35943608796` — **SUCCESS**
+- real pinned OpenMMO run `35943608800` — **SUCCESS**
+- PR #3 closed without merging after verification
+
+M3-A is **VERIFIED**. Real old_crypt combat input now traverses the player-facing
+`GameSession` command path before reaching the authoritative OpenMMO server.
 
 Exact next action:
 
-1. at the next meaningful checkpoint, inspect PR #3 head workflow runs once
-2. if quality or real OpenMMO fails, inspect only the failing step/log
-3. if both succeed, mark M3-A VERIFIED and close PR #3 without merging
-4. then select the next single controlled migration slice; do not batch unrelated M3 systems
+1. begin M3-B Playable Runtime Entry
+2. reduce local OpenMMO launch/auth setup without weakening token handling
+3. keep server authority and the pinned codec intact
+4. finish with a human-playable Windows acceptance path
 
 
 ### M3-B prepared next slice — Playable Runtime Entry
