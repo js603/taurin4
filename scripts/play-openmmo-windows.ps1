@@ -80,10 +80,12 @@ if (-not (Test-Path (Join-Path $OpenMmoDir ".git"))) {
     New-Item -ItemType Directory -Force -Path $OpenMmoDir | Out-Null
     Invoke-Checked "git" "-C" $OpenMmoDir "init"
     Invoke-Checked "git" "-C" $OpenMmoDir "remote" "add" "origin" "https://github.com/Julian-adv/OpenMMO.git"
-    Invoke-Checked "git" "-C" $OpenMmoDir "sparse-checkout" "init" "--no-cone"
-    Invoke-Checked "git" "-C" $OpenMmoDir "sparse-checkout" "set" "/Cargo.toml" "/Cargo.lock" "/.cargo/" "/agent-client/" "/server/" "/shared/" "/terrain/" "/tools/" "/data-src/" "/data/" "/client/public/models/objects/catalog.json"
+} else {
+    Invoke-Checked "git" "-C" $OpenMmoDir "remote" "set-url" "origin" "https://github.com/Julian-adv/OpenMMO.git"
 }
 
+Invoke-Checked "git" "-C" $OpenMmoDir "sparse-checkout" "init" "--no-cone"
+Invoke-Checked "git" "-C" $OpenMmoDir "sparse-checkout" "set" "/Cargo.toml" "/Cargo.lock" "/.cargo/" "/agent-client/" "/server/" "/shared/" "/terrain/" "/tools/" "/data-src/" "/data/" "/client/public/models/objects/catalog.json"
 Invoke-Checked "git" "-C" $OpenMmoDir "fetch" "--depth=1" "--filter=blob:none" "origin" $PinnedOpenMmoCommit
 Invoke-Checked "git" "-C" $OpenMmoDir "checkout" "--detach" "FETCH_HEAD"
 
@@ -183,54 +185,57 @@ $ServerArgs = @(
 )
 
 Write-Host "[M3-B] Starting local OpenMMO server..."
-$ServerProcess = Start-Process -FilePath $ServerExe -ArgumentList $ServerArgs -WorkingDirectory $OpenMmoDir -WindowStyle Hidden -RedirectStandardOutput $ServerStdout -RedirectStandardError $ServerStderr -PassThru
+$ServerProcess = $null
 
-Set-Content -Path $ServerPidFile -Value $ServerProcess.Id -NoNewline
-
-$TokenFile = Join-Path $OpenMmoDir "data\npc_token"
-$Ready = $false
-for ($Attempt = 0; $Attempt -lt 120; $Attempt++) {
-    if ($ServerProcess.HasExited) {
-        throw "OpenMMO server exited during startup. See $ServerStdout and $ServerStderr"
-    }
-
-    if ((Test-LocalPort 10006) -and (Test-Path $TokenFile)) {
-        $Ready = $true
-        break
-    }
-
-    Start-Sleep -Milliseconds 250
-}
-
-if (-not $Ready) {
-    throw "OpenMMO server did not become ready. See $ServerStdout and $ServerStderr"
-}
-
-$NpcToken = (Get-Content $TokenFile -Raw).Trim()
-if (-not $NpcToken) {
-    throw "OpenMMO NPC token was empty: $TokenFile"
-}
-
-$env:TAURIN4_OPENMMO_SERVER_URL = "ws://127.0.0.1:10006"
-$env:TAURIN4_OPENMMO_ACCOUNT = "npc_idea2_player"
-$env:TAURIN4_OPENMMO_NPC_TOKEN = $NpcToken
-$env:TAURIN4_OPENMMO_AUTOSTART = "1"
-
-Write-Host "[M3-B] Server ready. Starting taurin4 in Real OpenMMO mode..."
-Write-Host "[M3-B] Character/world database is preserved under G: runtime data."
-
-Push-Location $RepoRoot
 try {
-    Invoke-Checked "npm" "run" "tauri:dev"
-} finally {
-    Pop-Location
+    $ServerProcess = Start-Process -FilePath $ServerExe -ArgumentList $ServerArgs -WorkingDirectory $OpenMmoDir -WindowStyle Hidden -RedirectStandardOutput $ServerStdout -RedirectStandardError $ServerStderr -PassThru
+    Set-Content -Path $ServerPidFile -Value $ServerProcess.Id -NoNewline
 
+    $TokenFile = Join-Path $OpenMmoDir "data\npc_token"
+    $Ready = $false
+    for ($Attempt = 0; $Attempt -lt 120; $Attempt++) {
+        if ($ServerProcess.HasExited) {
+            throw "OpenMMO server exited during startup. See $ServerStdout and $ServerStderr"
+        }
+
+        if ((Test-LocalPort 10006) -and (Test-Path $TokenFile)) {
+            $Ready = $true
+            break
+        }
+
+        Start-Sleep -Milliseconds 250
+    }
+
+    if (-not $Ready) {
+        throw "OpenMMO server did not become ready. See $ServerStdout and $ServerStderr"
+    }
+
+    $NpcToken = (Get-Content $TokenFile -Raw).Trim()
+    if (-not $NpcToken) {
+        throw "OpenMMO NPC token was empty: $TokenFile"
+    }
+
+    $env:TAURIN4_OPENMMO_SERVER_URL = "ws://127.0.0.1:10006"
+    $env:TAURIN4_OPENMMO_ACCOUNT = "npc_idea2_player"
+    $env:TAURIN4_OPENMMO_NPC_TOKEN = $NpcToken
+    $env:TAURIN4_OPENMMO_AUTOSTART = "1"
+
+    Write-Host "[M3-B] Server ready. Starting taurin4 in Real OpenMMO mode..."
+    Write-Host "[M3-B] Character/world database is preserved under G: runtime data."
+
+    Push-Location $RepoRoot
+    try {
+        Invoke-Checked "npm" "run" "tauri:dev"
+    } finally {
+        Pop-Location
+    }
+} finally {
     Remove-Item Env:TAURIN4_OPENMMO_NPC_TOKEN -ErrorAction SilentlyContinue
     Remove-Item Env:TAURIN4_OPENMMO_AUTOSTART -ErrorAction SilentlyContinue
     Remove-Item Env:TAURIN4_OPENMMO_SERVER_URL -ErrorAction SilentlyContinue
     Remove-Item Env:TAURIN4_OPENMMO_ACCOUNT -ErrorAction SilentlyContinue
 
-    if ($ServerProcess -and -not $ServerProcess.HasExited) {
+    if ($null -ne $ServerProcess -and -not $ServerProcess.HasExited) {
         Write-Host "[M3-B] Stopping managed OpenMMO server..."
         Stop-Process -Id $ServerProcess.Id -Force -ErrorAction SilentlyContinue
         $ServerProcess.WaitForExit()
