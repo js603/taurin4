@@ -1,0 +1,93 @@
+name: idea2 Windows Playable Entry
+
+on:
+  push:
+    branches: ["idea2"]
+    paths:
+      - "src-tauri/**"
+      - "src/App.tsx"
+      - "src/openmmo/nativeLaunch.ts"
+      - "src/features/game/ui/OpenMmoBootstrap.tsx"
+      - "scripts/play-openmmo-windows.ps1"
+      - "package.json"
+      - ".github/workflows/idea2-windows-playable.yml"
+  pull_request:
+    branches: ["idea2"]
+    paths:
+      - "src-tauri/**"
+      - "src/App.tsx"
+      - "src/openmmo/nativeLaunch.ts"
+      - "src/features/game/ui/OpenMmoBootstrap.tsx"
+      - "scripts/play-openmmo-windows.ps1"
+      - "package.json"
+      - ".github/workflows/idea2-windows-playable.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: idea2-windows-playable-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-playable:
+    name: Windows playable entry
+    runs-on: windows-2022
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Frontend quality gate
+        run: npm run check
+
+      - name: Check Tauri Rust bridge
+        run: cargo check --manifest-path src-tauri/Cargo.toml
+
+      - name: Parse Windows OpenMMO launcher
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path "scripts/play-openmmo-windows.ps1"),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object {
+              Write-Error ("PowerShell parse error: " + $_.Message)
+            }
+            exit 1
+          }
+
+      - name: Verify G-drive and in-memory launch policy
+        shell: pwsh
+        run: |
+          $launcher = Get-Content "scripts/play-openmmo-windows.ps1" -Raw
+          $native = Get-Content "src-tauri/src/lib.rs" -Raw
+          $bootstrap = Get-Content "src/features/game/ui/OpenMmoBootstrap.tsx" -Raw
+
+          if (-not $launcher.Contains('G:\taurin4-openmmo-runtime')) {
+            throw "Launcher default runtime root is not fixed to G:."
+          }
+          if (-not $launcher.Contains('TAURIN4_OPENMMO_NPC_TOKEN')) {
+            throw "Launcher does not hand the token to the Tauri process."
+          }
+          if (-not $native.Contains('openmmo_local_launch_config')) {
+            throw "Tauri native launch bridge is missing."
+          }
+          if ($bootstrap.Contains('localStorage') -or $bootstrap.Contains('sessionStorage')) {
+            throw "Playable bootstrap must not persist the NPC token in browser storage."
+          }
