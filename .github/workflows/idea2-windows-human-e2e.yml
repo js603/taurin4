@@ -91,62 +91,6 @@ jobs:
             --release \
             --out-dir ../../.tmp/openmmo-wasm
 
-      - name: Start isolated pinned OpenMMO server
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          Remove-Item "openmmo\data\npc_token" -Force -ErrorAction SilentlyContinue
-          Remove-Item "openmmo\data\game_data.db" -Force -ErrorAction SilentlyContinue
-
-          $terrain = Join-Path $env:RUNNER_TEMP "openmmo-empty-terrain"
-          New-Item -ItemType Directory -Force -Path $terrain | Out-Null
-
-          $stdout = Join-Path $env:RUNNER_TEMP "openmmo-e2e-server.stdout.log"
-          $stderr = Join-Path $env:RUNNER_TEMP "openmmo-e2e-server.stderr.log"
-          $exe = (Resolve-Path "openmmo\target\debug\onlinerpg-server.exe").Path
-          $working = (Resolve-Path "openmmo").Path
-          $serverArgs = @("--port","10006","--terrain-port","10007","--bind","127.0.0.1","--api-bind","127.0.0.1","--terrain-dir",$terrain)
-
-          $process = Start-Process -FilePath $exe -ArgumentList $serverArgs -WorkingDirectory $working -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
-
-          Set-Content -Path (Join-Path $env:RUNNER_TEMP "openmmo-e2e-server.pid") -Value $process.Id -NoNewline
-
-          $ready = $false
-          for ($attempt = 0; $attempt -lt 120; $attempt++) {
-            if ($process.HasExited) {
-              throw "OpenMMO server exited before becoming ready."
-            }
-
-            if ((Test-Path "openmmo\data\npc_token") -and (Select-String -Path $stdout -Pattern "MMORPG Server listening on: 127.0.0.1:10006" -Quiet -ErrorAction SilentlyContinue)) {
-              $ready = $true
-              break
-            }
-            Start-Sleep -Milliseconds 250
-          }
-
-          if (-not $ready) {
-            Get-Content $stdout -ErrorAction SilentlyContinue
-            Get-Content $stderr -ErrorAction SilentlyContinue
-            throw "OpenMMO server did not become ready."
-          }
-
-          $token = (Get-Content "openmmo\data\npc_token" -Raw).Trim()
-          $nodeCodec = (Resolve-Path ".tmp\openmmo-wasm\onlinerpg_shared.js").Path
-
-          "OPENMMO_SERVER_URL=ws://127.0.0.1:10006" >> $env:GITHUB_ENV
-          "OPENMMO_NPC_TOKEN=$token" >> $env:GITHUB_ENV
-          "OPENMMO_WASM_MODULE=$nodeCodec" >> $env:GITHUB_ENV
-
-          "TAURIN4_OPENMMO_SERVER_URL=ws://127.0.0.1:10006" >> $env:GITHUB_ENV
-          "TAURIN4_OPENMMO_ACCOUNT=npc_idea2_dungeon" >> $env:GITHUB_ENV
-          "TAURIN4_OPENMMO_NPC_TOKEN=$token" >> $env:GITHUB_ENV
-          "TAURIN4_OPENMMO_AUTOSTART=1" >> $env:GITHUB_ENV
-
-      - name: Seed a real persisted old_crypt character
-        run: >
-          npx vitest run src/openmmo/real.integration.test.ts
-          -t "enters old_crypt and kills a real server-spawned kobold"
-
       - name: Prepare pinned browser codec
         shell: pwsh
         run: |
@@ -166,9 +110,89 @@ jobs:
           & "$HOME\.cargo\bin\msedgedriver-tool.exe"
           $PWD.Path >> $env:GITHUB_PATH
 
-      - name: Run actual Tauri WebView2 acceptance
-        working-directory: e2e
-        run: npm test
+      - name: Run server seed and actual Tauri WebView2 acceptance
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Remove-Item "openmmo\data\npc_token" -Force -ErrorAction SilentlyContinue
+          Remove-Item "openmmo\data\game_data.db" -Force -ErrorAction SilentlyContinue
+
+          $terrain = Join-Path $env:RUNNER_TEMP "openmmo-empty-terrain"
+          New-Item -ItemType Directory -Force -Path $terrain | Out-Null
+
+          $stdout = Join-Path $env:RUNNER_TEMP "openmmo-e2e-server.stdout.log"
+          $stderr = Join-Path $env:RUNNER_TEMP "openmmo-e2e-server.stderr.log"
+          $exe = (Resolve-Path "openmmo\target\debug\onlinerpg-server.exe").Path
+          $working = (Resolve-Path "openmmo").Path
+          $serverArgs = @("--port","10006","--terrain-port","10007","--bind","127.0.0.1","--api-bind","127.0.0.1","--terrain-dir",$terrain)
+
+          $process = $null
+          try {
+            $process = Start-Process -FilePath $exe -ArgumentList $serverArgs -WorkingDirectory $working -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+
+            $ready = $false
+            for ($attempt = 0; $attempt -lt 120; $attempt++) {
+              if ($process.HasExited) {
+                throw "OpenMMO server exited before becoming ready."
+              }
+
+              if ((Test-Path "openmmo\data\npc_token") -and (Select-String -Path $stdout -Pattern "MMORPG Server listening on: 127.0.0.1:10006" -Quiet -ErrorAction SilentlyContinue)) {
+                $ready = $true
+                break
+              }
+
+              Start-Sleep -Milliseconds 250
+            }
+
+            if (-not $ready) {
+              throw "OpenMMO server did not become ready."
+            }
+
+            $token = (Get-Content "openmmo\data\npc_token" -Raw).Trim()
+            if (-not $token) {
+              throw "OpenMMO NPC token is empty."
+            }
+
+            $env:OPENMMO_SERVER_URL = "ws://127.0.0.1:10006"
+            $env:OPENMMO_NPC_TOKEN = $token
+            $env:OPENMMO_WASM_MODULE = (Resolve-Path ".tmp\openmmo-wasm\onlinerpg_shared.js").Path
+
+            $env:TAURIN4_OPENMMO_SERVER_URL = "ws://127.0.0.1:10006"
+            $env:TAURIN4_OPENMMO_ACCOUNT = "npc_idea2_dungeon"
+            $env:TAURIN4_OPENMMO_NPC_TOKEN = $token
+            $env:TAURIN4_OPENMMO_AUTOSTART = "1"
+
+            Write-Host "===== Seed real old_crypt character ====="
+            npx vitest run src/openmmo/real.integration.test.ts -t "enters old_crypt and kills a real server-spawned kobold"
+            if ($LASTEXITCODE -ne 0) {
+              throw "Real old_crypt seed failed with exit code $LASTEXITCODE"
+            }
+
+            if ($process.HasExited) {
+              throw "OpenMMO server exited after seed."
+            }
+
+            Write-Host "===== Actual Tauri WebView2 acceptance ====="
+            Push-Location "e2e"
+            try {
+              npm test
+              if ($LASTEXITCODE -ne 0) {
+                throw "Tauri WebView2 acceptance failed with exit code $LASTEXITCODE"
+              }
+            } finally {
+              Pop-Location
+            }
+          } finally {
+            if ($null -ne $process -and -not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+              $process.WaitForExit()
+            }
+
+            Write-Host "===== OpenMMO stdout ====="
+            Get-Content $stdout -ErrorAction SilentlyContinue
+            Write-Host "===== OpenMMO stderr ====="
+            Get-Content $stderr -ErrorAction SilentlyContinue
+          }
 
       - name: Upload acceptance evidence
         if: always()
@@ -181,18 +205,3 @@ jobs:
             ${{ runner.temp }}/openmmo-e2e-server.stderr.log
           if-no-files-found: warn
           retention-days: 14
-
-      - name: Stop pinned OpenMMO server
-        if: always()
-        shell: pwsh
-        run: |
-          $pidFile = Join-Path $env:RUNNER_TEMP "openmmo-e2e-server.pid"
-          if (Test-Path $pidFile) {
-            $serverPid = [int](Get-Content $pidFile -Raw)
-            Stop-Process -Id $serverPid -Force -ErrorAction SilentlyContinue
-          }
-
-          Write-Host "===== OpenMMO stdout ====="
-          Get-Content (Join-Path $env:RUNNER_TEMP "openmmo-e2e-server.stdout.log") -ErrorAction SilentlyContinue
-          Write-Host "===== OpenMMO stderr ====="
-          Get-Content (Join-Path $env:RUNNER_TEMP "openmmo-e2e-server.stderr.log") -ErrorAction SilentlyContinue
