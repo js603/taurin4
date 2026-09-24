@@ -1,3 +1,4 @@
+# PR validation probe: M3-B Windows playable entry.
 param(
     [string]$RuntimeRoot = "G:\taurin4-openmmo-runtime",
     [switch]$ForceRebuild
