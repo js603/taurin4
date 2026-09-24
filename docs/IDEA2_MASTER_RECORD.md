@@ -1321,7 +1321,7 @@ Exact next action:
 
 ### M3-B — Playable Runtime Entry — 2026-09-24
 
-Status: **IMPLEMENTED-NOT-VERIFIED**
+Status: **IMPLEMENTED-CI-VERIFIED**
 
 Implementation candidate:
 
@@ -1396,8 +1396,8 @@ Verification PR:
 
 - PR #4 — `ci/idea2-m3b-playable-entry-20260924`
 - probe head: `b3283852e8fb2f713e8a7d6cc821c1d6073f286a`
-- PR Quality run: `35949166290` — latest status **queued**
-- Windows Playable Entry run: `35949166292` — latest status **queued**
+- PR Quality run: `35949166290` — **SUCCESS**
+- Windows Playable Entry run: `35949166292` — **SUCCESS**
 
 Windows Playable Entry Gate checks:
 
@@ -1408,15 +1408,38 @@ Windows Playable Entry Gate checks:
 5. Tauri native launch bridge presence
 6. no browser storage use in playable bootstrap
 
-Anti-delay rule:
+Verification result:
 
-- do not repeatedly poll the queued runs
-- at the next meaningful checkpoint inspect both once
-- on failure, inspect only the failing step and repair that path
-- on success, close PR #4 without merging and promote M3-B to
-  **IMPLEMENTED-CI-VERIFIED**
-- final **M3-B VERIFIED** still requires the human Windows acceptance run:
-  launcher → character lobby → enter character → GameScreen
+- PR Quality run `35949166290` — **SUCCESS**
+- Windows Playable Entry run `35949166292` — **SUCCESS**
+- frontend quality, Tauri Rust bridge, PowerShell parser, G: policy, and in-memory token
+  policy all passed
+- PR #4 closed without merging after verification
+- M3-B is now **IMPLEMENTED-CI-VERIFIED**
+
+Final **M3-B VERIFIED** still requires the human Windows acceptance run:
+
+```text
+npm run openmmo:play:windows
+→ automatic local server start
+→ automatic OpenMMO connect/auth
+→ Character Lobby visible
+→ enter an existing/new character
+→ GameScreen visible
+→ reach a real MONSTER / WORLD ENCOUNTER
+→ use the visible investigate/combat controls
+→ authoritative combat result appears
+```
+
+Human acceptance PASS evidence:
+
+1. launcher reaches Character Lobby without manually typing server/token
+2. character entry reaches actual GameScreen
+3. real OpenMMO monster appears as MONSTER / WORLD ENCOUNTER
+4. player-visible control initiates combat
+5. at least one authoritative combat result is visible
+6. closing taurin4 stops the managed server process
+7. rerun preserves the local character/world database
 
 ## 17. New-chat bootstrap
 
