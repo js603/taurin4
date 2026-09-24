@@ -1417,6 +1417,12 @@ Verification result:
 - PR #4 closed without merging after verification
 - M3-B is now **IMPLEMENTED-CI-VERIFIED**
 
+M3-B CI-verified recovery checkpoint:
+
+- branch: `checkpoint/idea2-m3b-ci-verified-20260924`
+- commit: `3ab64df06648d7e228f9a2c38b65cb6bf74a5ec1`
+- human acceptance guide: `docs/IDEA2_M3B_WINDOWS_ACCEPTANCE.md`
+
 Final **M3-B VERIFIED** still requires the human Windows acceptance run:
 
 ```text
