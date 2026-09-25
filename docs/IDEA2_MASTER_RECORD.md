@@ -2026,9 +2026,58 @@ Verification PR:
     do not fabricate combat state
 - fix commit on `idea2`:
   `5b46a45138a90d2775be5cd9ee9eb5c2a3bb5248`
-- latest PR #7 head:
+- latest PR #7 head before safe-staging correction:
   `c88e33091c5a3ea46c5aeae0115c61e5cf9fad7a`
-- first workflow lookup for that head returned no runs yet; no repeated polling was performed
+- validation checkpoint:
+  - PR Quality `36130925472` — **SUCCESS**
+  - Android OpenMMO Client APK `36130925194` — **SUCCESS**
+  - real pinned OpenMMO adapter `36130925411` — **FAILURE**
+  - Windows Tauri acceptance `36130925296` — **FAILURE**
+  - Android Runtime E2E `36130925305` — still **in_progress** at the checkpoint and was not re-polled
+- real adapter failure:
+  - full old_crypt test again died before killing a kobold
+  - server spawned the real 3-kobold group
+  - CryptMira reached the cluster and died before kill completion
+- Windows failure showed the same fixture weakness:
+  - persisted character rehydrated at approximately `(-1440.7, 4689.5)`
+  - real kobolds respawned at approximately:
+    - m4 `(-1441.5,4689.5)`
+    - m5 `(-1425.5,4691.5)`
+    - m6 `(-1427.5,4685.5)`
+  - CryptMira died at `11:59:31`
+  - subsequent UI attacks were rejected as `AttackerDead`
+- root cause:
+  - seed/full test parked the character almost on top of the nearest spawn
+  - the other two deterministic kobold spawns are also within the 20m chase radius
+  - therefore a nominal 1-kill acceptance depended on surviving a real 3-kobold pack
+- safe-staging correction:
+  - derive staging coordinates from the pinned dungeon's actual deterministic spawn layout
+  - sample 24 directions around the nearest spawn at radius `17.5m`
+  - keep candidates whose distance from every other spawn is `>21m`
+  - rank by maximum separation from the other spawns
+  - use only a candidate for which pinned WASM passability returns a real path
+  - this leaves exactly one nearest kobold inside its authentic 20m chase range while
+    keeping the other spawn points outside that range
+  - for the full integration test, wait up to 8 seconds for that aggressive kobold to
+    chase out of the pack to the player before falling back to player movement
+  - for acceptance seed mode, assert:
+    - floor `-1`
+    - player alive
+    - at least one real semantic monster present
+    - nearest monster `<=20m`
+    - second-nearest monster `>20m` when visible
+  - no monster HP, damage, AI, spawn count, cooldown, or server authority is modified
+- fix commit on `idea2`:
+  `d20f36bbca023b1a8c55d0d7db9767f6ca3a3176`
+- latest PR #7 head:
+  `ef261747ae560eb9a9828176678555bf306b1c0d`
+- new verification runs:
+  - real OpenMMO adapter `36132784634` — **queued**
+  - Android Client APK `36132784671` — **queued**
+  - Windows Acceptance `36132784773` — **queued**
+  - PR Quality `36132784850` — **queued**
+  - Android Runtime E2E `36132784700` — **pending**
+- no repeated polling performed
 - current official Tauri v2 websocket guest binding was rechecked:
   - `WebSocket.connect(url)`
   - `addListener(Message)`
