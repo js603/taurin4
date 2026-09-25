@@ -86,8 +86,17 @@ def read_player_state(timeout: float = 12.0) -> dict[str, float | int]:
     }
 
 
-def state_equal(expected: dict, actual: dict, *, position_tolerance: float = 0.15):
-    for key in ("hp", "max_hp", "mp", "max_mp", "floor"):
+def state_equal(
+    expected: dict,
+    actual: dict,
+    *,
+    position_tolerance: float = 0.15,
+    include_hp: bool = True,
+):
+    scalar_keys = ["max_hp", "mp", "max_mp", "floor"]
+    if include_hp:
+        scalar_keys.insert(0, "hp")
+    for key in scalar_keys:
         if actual[key] != expected[key]:
             raise AssertionError(
                 f"authoritative state changed for {key}: "
@@ -211,7 +220,11 @@ def main():
 
     base.wait_node(text="OpenMMO World", timeout=12)
     resumed = read_player_state(timeout=10)
-    state_equal(initial, resumed)
+    # OpenMMO remains authoritative while Android is backgrounded. HP may
+    # legitimately change because nearby aggressive monsters keep simulating;
+    # lifecycle continuity means the same live session/floor/position survives,
+    # not that world time freezes.
+    state_equal(initial, resumed, include_hp=False)
     resumed_log, _ = read_log_since(server_log, background_log_offset)
     if "Session ended for CryptMira" in resumed_log:
         raise AssertionError("short Android background/resume disconnected CryptMira")
