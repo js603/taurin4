@@ -2529,3 +2529,47 @@ Paste or send this in the new conversation:
 - latest PR #7 head:
   `386bd6244a4ead22bb91858f3cb8e662411836cd`
 - first workflow lookup for that head returned no runs yet; no repeated polling was performed
+
+
+### M3-C Slice 2 — VERIFIED (actual Android APK runtime)
+- verification PR head:
+  `386bd6244a4ead22bb91858f3cb8e662411836cd`
+- all five required gates passed:
+  - PR Quality `36145279929` — **SUCCESS**
+  - real pinned OpenMMO adapter `36145280078` — **SUCCESS**
+  - Android OpenMMO Client APK `36145279831` — **SUCCESS**
+  - Windows Tauri real OpenMMO acceptance `36145279854` — **SUCCESS**
+  - Android Runtime E2E `36145280020` — **SUCCESS**
+- Android Runtime final job:
+  - job `108104771598`
+  - `Install APK and play against real pinned OpenMMO` — **SUCCESS**
+  - `Upload Android runtime evidence` — **SUCCESS**
+- Android runtime artifact:
+  - artifact id `10869402391`
+  - digest `sha256:0e6d859c3077e14a557c94691341a5e247d20d0d2d6942b6493c4913de99655f`
+  - evidence files confirmed:
+    - `01-android-openmmo-entry.png`
+    - `02-android-openmmo-configured.png`
+    - `03-android-character-lobby.png`
+    - `04-android-game-screen.png`
+    - `05-android-monster-encounter.png`
+    - `06-android-combat-result.png`
+    - `server.stdout.log`
+    - `server.stderr.log`
+- authoritative server evidence:
+  - CryptMira rehydrated in `old_crypt`
+  - real deterministic kobolds spawned
+  - `14:27:40.350466Z` — `Player CryptMira killed kobold (lvl 1)`
+- final Android screenshot `06-android-combat-result.png` visibly proves:
+  - `OpenMMO World`
+  - `REWARD`
+  - `Kobold 처치`
+  - `전리품 획득`
+  - `SERVER AUTHORITATIVE`
+  - `SERVER VALIDATED`
+- proven end-to-end Android path:
+  `actual APK → Android Tauri websocket transport → pinned real OpenMMO server → NPC auth → Character Lobby → CryptMira → EnterGame → OpenMMO World → real monster encounter → Attention choice → real server-validated attacks → authoritative kobold kill → REWARD UI`
+- status:
+  - M3-C Slice 1 — **IMPLEMENTED-CI-VERIFIED**
+  - M3-C Slice 2 — **VERIFIED**
+  - M3-C as a whole remains open for planned Slice 3 lifecycle/reconnect proof
