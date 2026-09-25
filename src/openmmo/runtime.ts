@@ -3,8 +3,13 @@ import {
   createOpenMmoWasmCodec,
   type OpenMmoWasmExports,
 } from "./codec";
+import { isAndroidTauriRuntime } from "../app/platformRuntime";
 import { OpenMmoGameSession } from "./session";
-import { WebSocketOpenMmoTransport } from "./transport";
+import { TauriPluginOpenMmoTransport } from "./tauriTransport";
+import {
+  WebSocketOpenMmoTransport,
+  type OpenMmoTransport,
+} from "./transport";
 
 export interface OpenMmoRuntime {
   adapter: OpenMmoAdapter;
@@ -15,6 +20,7 @@ export interface OpenMmoRuntimeOptions {
   wasm: OpenMmoWasmExports;
   clientVersion?: string;
   requestTimeoutMs?: number;
+  transport?: OpenMmoTransport;
 }
 
 /**
@@ -29,7 +35,11 @@ export function createOpenMmoRuntime(
 ): OpenMmoRuntime {
   const adapter = new OpenMmoAdapter({
     codec: createOpenMmoWasmCodec(options.wasm),
-    transport: new WebSocketOpenMmoTransport(),
+    transport:
+      options.transport ??
+      (isAndroidTauriRuntime()
+        ? new TauriPluginOpenMmoTransport()
+        : new WebSocketOpenMmoTransport()),
     clientVersion: options.clientVersion,
     requestTimeoutMs: options.requestTimeoutMs,
   });
