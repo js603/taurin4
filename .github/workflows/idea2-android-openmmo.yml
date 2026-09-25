@@ -1,0 +1,108 @@
+name: idea2 Android OpenMMO Client
+
+on:
+  push:
+    branches: ["idea2"]
+    paths:
+      - "src-tauri/**"
+      - "src/App.tsx"
+      - "src/app/platformRuntime.ts"
+      - "src/openmmo/**"
+      - "src/features/game/ui/OpenMmoBootstrap.tsx"
+      - "package.json"
+      - ".github/workflows/idea2-android-openmmo.yml"
+  pull_request:
+    branches: ["idea2"]
+    paths:
+      - "src-tauri/**"
+      - "src/App.tsx"
+      - "src/app/platformRuntime.ts"
+      - "src/openmmo/**"
+      - "src/features/game/ui/OpenMmoBootstrap.tsx"
+      - "package.json"
+      - ".github/workflows/idea2-android-openmmo.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: idea2-android-openmmo-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-openmmo:
+    name: Android OpenMMO client APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Resolve Android NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          if [ ! -d "$ANDROID_HOME/ndk" ] || [ -z "$(ls -A "$ANDROID_HOME/ndk" 2>/dev/null)" ]; then
+            NDK_PACKAGE="$(sdkmanager --list | awk '/^  ndk;[0-9]/{print $1}' | sort -V | tail -n 1)"
+            test -n "$NDK_PACKAGE"
+            sdkmanager "$NDK_PACKAGE"
+          fi
+          NDK_VERSION="$(ls -1 "$ANDROID_HOME/ndk" | sort -V | tail -n 1)"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          echo "Using NDK $NDK_VERSION"
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Frontend and transport quality
+        run: npm run check
+
+      - name: Verify websocket plugin wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'tauri-plugin-websocket' src-tauri/Cargo.toml
+          grep -q 'tauri_plugin_websocket::init()' src-tauri/src/lib.rs
+          grep -q '"websocket:default"' src-tauri/capabilities/default.json
+          grep -q '@tauri-apps/plugin-websocket' package.json
+          grep -q 'TauriPluginOpenMmoTransport' src/openmmo/runtime.ts
+          grep -q 'isAndroidTauriRuntime' src/App.tsx
+
+      - name: Initialize Android project
+        run: npm run tauri -- android init --ci
+
+      - name: Build installable Android debug APK
+        run: npm run tauri -- android build --debug --apk --ci
+
+      - name: Stage Android OpenMMO APK
+        run: |
+          python3 scripts/ci/stage_artifacts.py \
+            --dest artifacts/android-openmmo-debug \
+            "src-tauri/gen/android/app/build/outputs/apk/**/*.apk"
+
+      - name: Upload Android OpenMMO APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: idea2-android-openmmo-debug-apk
+          path: artifacts/android-openmmo-debug/
+          if-no-files-found: error
+          retention-days: 14
