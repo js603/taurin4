@@ -1523,13 +1523,30 @@ Verification PR:
 - latest PR #5 head: `3fa4d19924285c7a9716afe4e27c4d5768593d63`
 - first workflow lookup for that head returned no runs yet; no repeated polling was performed
 
-M3-B finalization rule:
+M3-B finalization result:
 
-- the actual Windows Tauri/WebView2 acceptance is already proven SUCCESS
-- M3-B remains open only until the existing real OpenMMO regression Gate is green again
-- once the latest head has both real OpenMMO adapter and Windows acceptance SUCCESS,
-  close PR #5 without merge, mark M3-B **VERIFIED**, create a recovery checkpoint, then
-  begin M3-C Android implementation
+- real pinned OpenMMO adapter run `36086163331` — **SUCCESS**
+- PR Quality run `36086163290` — **SUCCESS**
+- actual Windows Tauri/WebView2 acceptance run `36086163424` — **SUCCESS**
+- PR #5 closed without merging after verification
+- M3-B status: **VERIFIED**
+- verified implementation includes:
+  - one-command Windows local OpenMMO launch
+  - pinned server + pinned browser codec
+  - in-memory token handoff
+  - Character Lobby → GameScreen
+  - actual Tauri/WebView2 user-surface automation
+  - real old_crypt MONSTER / WORLD ENCOUNTER
+  - visible attack controls
+  - authoritative combat result
+  - stabilized real-server old_crypt regression with unchanged kill/XP/loot assertions
+
+Next exact action:
+
+1. create an M3-B VERIFIED recovery checkpoint
+2. begin M3-C Android real OpenMMO client
+3. keep OpenMmoAdapter / OpenMmoGameSession / game rules shared
+4. replace only the platform transport/runtime entry where Android requires it
 
 M3-B must remain **IMPLEMENTED-CI-VERIFIED** until the Windows Tauri acceptance run itself
 finishes SUCCESS. A renderer-only success is not sufficient.
