@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isAndroidTauriRuntime } from "../../../app/platformRuntime";
 import { GameScreen } from "./GameScreen";
 import { OpenMmoCharacterLobby } from "./OpenMmoCharacterLobby";
 import { loadOpenMmoBrowserCodec } from "../../../openmmo/browserCodec";
@@ -56,11 +57,12 @@ export function OpenMmoBootstrap({
   nativeLaunchConfig?: OpenMmoNativeLaunchConfig | null;
 } = {}) {
   const params = new URLSearchParams(window.location.search);
-  const [serverUrl, setServerUrl] = useState(
+  const androidTauri = isAndroidTauriRuntime();
+  const defaultServerUrl =
     nativeLaunchConfig?.serverUrl ??
-      params.get("server") ??
-      "ws://127.0.0.1:10006",
-  );
+    params.get("server") ??
+    (androidTauri ? "" : "ws://127.0.0.1:10006");
+  const [serverUrl, setServerUrl] = useState(defaultServerUrl);
   const [codecUrl, setCodecUrl] = useState(
     params.get("codec") ??
       import.meta.env.BASE_URL + "openmmo-wasm/onlinerpg_shared.js",
@@ -156,11 +158,7 @@ export function OpenMmoBootstrap({
     activeRuntime.current?.adapter.disconnect();
     activeRuntime.current = null;
     setRuntime(null);
-    setServerUrl(
-      nativeLaunchConfig?.serverUrl ??
-        params.get("server") ??
-        "ws://127.0.0.1:10006",
-    );
+    setServerUrl(defaultServerUrl);
     setAccountName(
       nativeLaunchConfig?.accountName ??
         params.get("account") ??
@@ -206,18 +204,24 @@ export function OpenMmoBootstrap({
       <header className="runtime-header">
         <div>
           <p className="eyebrow">REAL OPENMMO</p>
-          <h1>Local Play Connection</h1>
+          <h1>
+            {androidTauri
+              ? "Android OpenMMO Connection"
+              : "Local Play Connection"}
+          </h1>
         </div>
-        <a className="runtime-link" href={window.location.pathname}>
-          LOCAL MODE
-        </a>
+        {!androidTauri ? (
+          <a className="runtime-link" href={window.location.pathname}>
+            LOCAL MODE
+          </a>
+        ) : null}
       </header>
 
       <section className="runtime-panel">
         <p className="runtime-panel__copy">
-          실제 pinned OpenMMO 서버에 연결한다. Windows 로컬 플레이 런처를
-          사용하면 서버와 인증 정보가 자동으로 연결되며 NPC token은 브라우저
-          저장소나 URL에 저장하지 않는다.
+          {androidTauri
+            ? "Android에서는 Tauri Rust WebSocket transport로 실제 OpenMMO 서버에 연결한다. 같은 Wi-Fi의 PC 서버 또는 원격 서버 주소를 입력하며 인증 token은 브라우저 저장소나 URL에 저장하지 않는다."
+            : "실제 pinned OpenMMO 서버에 연결한다. Windows 로컬 플레이 런처를 사용하면 서버와 인증 정보가 자동으로 연결되며 NPC token은 브라우저 저장소나 URL에 저장하지 않는다."}
         </p>
 
         {nativeLaunchConfig ? (
@@ -228,11 +232,12 @@ export function OpenMmoBootstrap({
 
         <div className="runtime-fields">
           <label>
-            <span>SERVER WEBSOCKET</span>
+            <span>{androidTauri ? "SERVER WEBSOCKET · LAN / REMOTE" : "SERVER WEBSOCKET"}</span>
             <input
               value={serverUrl}
               disabled={working}
               spellCheck={false}
+              placeholder={androidTauri ? "ws://192.168.0.10:10006" : undefined}
               onChange={(event) => setServerUrl(event.target.value)}
             />
           </label>
