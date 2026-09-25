@@ -1019,6 +1019,7 @@ export class OpenMmoGameSession implements GameSession {
 
           this.recentlyDeadMonsters.delete(monsterId);
           this.removeDestination("monster:" + monsterId);
+          next = this.state;
 
           const alreadyRewardingKill =
             next.phase === "reward" &&
