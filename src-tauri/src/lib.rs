@@ -55,6 +55,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(HostController::new())
         .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_websocket::init())
         .invoke_handler(tauri::generate_handler![
             host_status,
             host_start,
