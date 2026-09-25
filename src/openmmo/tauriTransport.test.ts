@@ -1,3 +1,4 @@
+// PR validation probe: M3-C Android OpenMMO client transport and APK.
 import { describe, expect, it, vi } from "vitest";
 import { TauriPluginOpenMmoTransport } from "./tauriTransport";
 
