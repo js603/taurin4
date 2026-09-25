@@ -10,7 +10,7 @@ TERRAIN_DIR="$RUNNER_TEMP/openmmo-android-empty-terrain"
 mkdir -p "$TERRAIN_DIR" artifacts/android-openmmo-runtime
 rm -f "$OPENMMO_DIR/data/npc_token" "$OPENMMO_DIR/data/game_data.db"
 
-"$OPENMMO_DIR/target/debug/onlinerpg-server"   --port 10006   --terrain-port 10007   --bind 0.0.0.0   --api-bind 127.0.0.1   --terrain-dir "$TERRAIN_DIR"   >"$SERVER_LOG" 2>"$SERVER_ERR" &
+(cd "$OPENMMO_DIR" && exec ./target/debug/onlinerpg-server --port 10006 --terrain-port 10007 --bind 0.0.0.0 --api-bind 127.0.0.1 --terrain-dir "$TERRAIN_DIR") >"$SERVER_LOG" 2>"$SERVER_ERR" &
 SERVER_PID=$!
 
 cleanup() {
