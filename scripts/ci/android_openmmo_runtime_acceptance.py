@@ -228,7 +228,7 @@ def screenshot(name: str):
     adb("pull", remote, str(ARTIFACT_DIR / f"{name}.png"))
 
 
-def tap_primary_action_fast():
+def tap_primary_action_fast(server_log: Path | None = None):
     # The Android GameScreen uses a stable two-column Attention Card. The
     # primary action occupies ~30% width / 62.5% height on the Pixel 6 profile.
     # This slot is "살펴본다" during WORLD ENCOUNTER, "빠른 공격" in combat,
@@ -251,10 +251,28 @@ def tap_primary_action_fast():
     # "빠른 공격". Repeated taps are intentionally faster than the authoritative
     # 1.38 s attack cooldown so the first legal attack is never delayed by UI
     # inspection or polling. The server still accepts/rejects every command.
+    log_offset = 0
+    if server_log is not None and server_log.exists():
+        log_offset = server_log.stat().st_size
+
     deadline = time.monotonic() + 22
     while time.monotonic() < deadline:
         adb("shell", "input", "tap", str(x), str(y))
+
+        if server_log is not None and server_log.exists():
+            try:
+                with server_log.open("r", encoding="utf-8", errors="replace") as handle:
+                    handle.seek(log_offset)
+                    recent = handle.read()
+                    log_offset = handle.tell()
+                if "Player CryptMira killed kobold" in recent:
+                    return True
+            except OSError:
+                pass
+
         time.sleep(0.4)
+
+    return False
 
 
 def ui_contains(value: str) -> bool:
@@ -272,7 +290,9 @@ def main():
         "--server",
         default="ws://10.0.2.2:10006",
     )
+    parser.add_argument("--server-log")
     args = parser.parse_args()
+    server_log = Path(args.server_log) if args.server_log else None
 
     apks = sorted(
         glob.glob(
@@ -313,7 +333,13 @@ def main():
     # several seconds taking screenshots or dumping the accessibility tree:
     # the seeded character reconnects inside an aggressive old_crypt pack.
     time.sleep(0.25)
-    tap_primary_action_fast()
+    server_kill_seen = tap_primary_action_fast(server_log)
+
+    # Stop generating input immediately after the authoritative kill. This
+    # preserves the REWARD/처치 event in the visible event log even if another
+    # kobold kills CryptMira a moment later.
+    if server_kill_seen:
+        time.sleep(1.5)
 
     resolved = False
     combat_root = None
