@@ -1755,9 +1755,32 @@ Verification PR:
 - fix commits:
   - `eb1ffd88793b5a93e30ef8891b4852e1fb9f7e8f`
   - `9de7854a711356585f10372c010c7f043e207d97`
-- latest PR #7 head:
+- latest PR #7 head before APK packaging correction:
   `fb08d89b5bc6dcfd925ad41de933f275d6e3f2a4`
-- first workflow lookup for that head returned no runs yet; no repeated polling was performed
+- runtime run `36094550045` progressed through:
+  - taurin4 quality — PASS
+  - exact pinned OpenMMO checkout — PASS
+  - pinned server build — PASS
+  - Node codec build — PASS
+  - browser codec build — PASS
+  - Android init — PASS
+  - actual debug APK build — PASS
+- failure step: `Verify APK contains pinned browser codec`
+- the produced APK artifact was downloaded and inspected directly
+- Tauri Android does not expose frontend files as ordinary APK `assets/openmmo-wasm/*`
+- the frontend resource paths are embedded in the native Rust library instead
+- the actual x86_64 `libtaurin4_lib.so` contains:
+  - `/openmmo-wasm/onlinerpg_shared.js`
+  - `/openmmo-wasm/onlinerpg_shared_bg.wasm`
+- codec verification was corrected to:
+  1. require both files in Vite `dist/openmmo-wasm`
+  2. extract `lib/x86_64/libtaurin4_lib.so` from the real APK
+  3. require both OpenMMO resource paths inside the native library
+- fix commit on `idea2`: `26003f8d34cbd1e41ea7cd32f96bd841090289a9`
+- latest PR #7 head: `f3335c3f576cfdebd054d2f162395cb6530e1161`
+- Android Runtime E2E run `36095925953` — latest status **queued**
+- PR Quality run `36095925966` — latest status **queued**
+- no repeated polling performed
 - current official Tauri v2 websocket guest binding was rechecked:
   - `WebSocket.connect(url)`
   - `addListener(Message)`
