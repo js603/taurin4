@@ -2573,3 +2573,48 @@ Paste or send this in the new conversation:
   - M3-C Slice 1 — **IMPLEMENTED-CI-VERIFIED**
   - M3-C Slice 2 — **VERIFIED**
   - M3-C as a whole remains open for planned Slice 3 lifecycle/reconnect proof
+
+
+### M3-C Slice 3 — Android lifecycle / reconnect — IMPLEMENTED-NOT-VERIFIED
+- temporary verification branch:
+  `ci/idea2-m3c-android-lifecycle-20260925`
+- temporary draft PR:
+  `#8` — **open / do not merge**
+- verification branch head:
+  `68507b70b7bd09230650e5cff3040f6747fe6dd8`
+- implementation scope:
+  - expose an accessibility-only authoritative player-state label on GameScreen:
+    `HP / MP / FLOOR / X / Z`
+  - add a regression test for that state label
+  - add `scripts/ci/android_openmmo_lifecycle_acceptance.py`
+  - parameterize the existing Android OpenMMO server/seed runner so runtime and lifecycle
+    drivers share the same pinned server bootstrap
+  - add `.github/workflows/idea2-android-openmmo-lifecycle.yml`
+- Slice 3 acceptance sequence:
+  1. install the actual Android debug APK
+  2. connect to the pinned real OpenMMO server
+  3. authenticate using the memory-only NPC token
+  4. enter the persisted `CryptMira` character
+  5. capture authoritative `HP / MP / FLOOR / X / Z`
+  6. send Android HOME and keep the app backgrounded briefly
+  7. bring the existing task back to foreground
+  8. require the same authoritative state and no server-side `Session ended`
+  9. force-stop the Android package
+  10. require the server to observe `Session ended for CryptMira`
+  11. relaunch the APK
+  12. require Android setup to return with server URL/token not persisted
+  13. deliberately re-enter server URL/token
+  14. require Character Lobby to contain the same `CryptMira`
+  15. EnterGame again
+  16. require the same authoritative `HP / MP / FLOOR / X / Z` within position tolerance
+  17. require the server to confirm EnterGame for `CryptMira`
+- security boundary:
+  - auth token remains memory-only
+  - Slice 3 does **not** add token persistence to localStorage/sessionStorage/URL/device storage
+- initial PR #8 verification runs:
+  - PR Quality `36150478144` — **IN PROGRESS**
+  - Windows Acceptance `36150477966` — **IN PROGRESS**
+  - real OpenMMO adapter `36150478234` — **IN PROGRESS**
+  - Android OpenMMO Lifecycle E2E `36150478248` — **IN PROGRESS**
+  - Android Runtime regression `36150478052` — **IN PROGRESS**
+- strict no-polling rule applied after this checkpoint
