@@ -1866,8 +1866,25 @@ Verification PR:
 - fix commits on `idea2`:
   - transport: `ff7b92bb9245fba72a414dd164077cd4f7f9ebd7`
   - test: `8ad277aa58da4b46c4e600e196294abd5fd35aa7`
-- latest PR #7 head:
+- latest PR #7 head before typing correction:
   `a6b4bba7dfebd83058eb1f07afb2a09b76cc5002`
+- workflows triggered from that head all failed at the shared taurin4 quality/build layer
+- PR Quality run `36105359312` showed the common cause:
+  - Vitest: `src/openmmo/tauriTransport.test.ts` — **PASS**
+  - TypeScript build: **FAIL**
+  - error: `tauriTransport.test.ts(113,5) TS2349: expression is not callable`
+- root cause:
+  - the test stored a Promise resolver in a closure variable initialized to `null`
+  - TypeScript control-flow did not model the async mutation and narrowed the optional call incorrectly
+- product transport FIFO implementation was not the failing code
+- fix:
+  - replace nullable closure resolver with a typed mutable gate object
+    `{ resolve?: () => void }`
+  - assert resolver exists before releasing the first queued send
+- fix commit on `idea2`:
+  `916f1fe3cee8758a4b41444b761db249f1e4d0b9`
+- latest PR #7 head:
+  `2ea870ca003938ecb7fd0dc28b96fdab9437cb96`
 - first workflow lookup for that head returned no runs yet; no repeated polling was performed
 - current official Tauri v2 websocket guest binding was rechecked:
   - `WebSocket.connect(url)`
