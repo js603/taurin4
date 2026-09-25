@@ -350,6 +350,63 @@ describe("OpenMmoGameSession", () => {
     expect(session.getSnapshot().logs.at(-1)?.text).toContain("대상이 사라졌다");
   });
 
+  it("promotes server-attributed kill XP even after combat target drift", () => {
+    const adapter = new FakeAdapter();
+    const session = new OpenMmoGameSession(adapter);
+    session.start();
+
+    adapter.emit({
+      MonsterSpawned: {
+        monster: {
+          id: "kobold-a",
+          monster_type: "kobold",
+          position: { x: 1, y: 0, z: 0 },
+          floor_level: -1,
+          health: 5,
+          max_health: 5,
+          aggressive: true,
+        },
+      },
+    });
+    session.command({ type: "IGNORE_ENCOUNTER" });
+
+    adapter.emit({
+      MonsterSpawned: {
+        monster: {
+          id: "kobold-b",
+          monster_type: "kobold",
+          position: { x: 2, y: 0, z: 0 },
+          floor_level: -1,
+          health: 5,
+          max_health: 5,
+          aggressive: true,
+        },
+      },
+    });
+    session.command({ type: "INVESTIGATE_ENCOUNTER" });
+    expect(session.getSnapshot().combat?.enemy.id).toBe("kobold-b");
+
+    adapter.emit({ MonsterDead: { monster_id: "kobold-a" } });
+    expect(session.getSnapshot().phase).toBe("combat");
+    expect(session.getSnapshot().logs.at(-1)?.text).toContain(
+      "주변 몬스터가 쓰러졌다",
+    );
+
+    adapter.emit({
+      XpGained: {
+        xp_amount: 2,
+        new_level: 1,
+        leveled_up: false,
+        monster_id: "kobold-a",
+      },
+    } as OpenMmoServerMessage);
+
+    expect(session.getSnapshot().phase).toBe("reward");
+    expect(session.getSnapshot().combat).toBeNull();
+    expect(session.getSnapshot().reward?.title).toBe("Kobold 처치");
+    expect(session.getSnapshot().logs.at(-1)?.text).toBe("XP +2");
+  });
+
   it("maps authoritative combat, loot, death and respawn events", () => {
     const adapter = new FakeAdapter();
     const session = new OpenMmoGameSession(adapter);
