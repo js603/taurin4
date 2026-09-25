@@ -54,12 +54,6 @@ jobs:
         with:
           tool: wasm-pack
 
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            openmmo
-            src-tauri
-
       - name: Resolve Android NDK
         shell: bash
         run: |
@@ -102,6 +96,12 @@ jobs:
           test "$(git -C openmmo rev-parse HEAD)" = "950e081c178d920c10c51f2d31f60c1b3383c925"
           test -f openmmo/Cargo.toml
           test -f openmmo/Cargo.lock
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            openmmo
+            src-tauri
 
       - name: Build pinned OpenMMO server
         working-directory: openmmo
