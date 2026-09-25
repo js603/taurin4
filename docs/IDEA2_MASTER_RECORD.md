@@ -2440,3 +2440,46 @@ Paste or send this in the new conversation:
   - Windows Acceptance `36139665365` — **queued**
   - Android Runtime E2E `36139665359` — **queued**
 - no repeated polling performed
+
+
+### M3-C Slice 2 Android authoritative-kill evidence preservation
+- verification head before correction:
+  `e1d1047390a065cb70cf603dbd6aa01f259c27ef`
+- results:
+  - Windows Tauri Acceptance `36139665365` — **SUCCESS**
+  - real pinned OpenMMO adapter `36139665374` — **SUCCESS**
+  - Android OpenMMO Client APK `36139665366` — **SUCCESS**
+  - PR Quality `36139665411` — **SUCCESS**
+  - Android Runtime E2E `36139665359` — **FAILURE only in final UI reward observation**
+- Android artifact/server evidence proves actual gameplay success through authoritative kill:
+  - `13:33:47.600` — CryptMira rehydrated in old_crypt
+  - `13:34:03.295` — first Android attack reached server; rejected only because target was still 3.8m away
+  - additional real attacks followed as the kobold closed range
+  - `13:34:05.794` — **Player CryptMira killed kobold (lvl 1)**
+  - `13:34:06.931` — another kobold killed CryptMira ~1.1s later
+- final Android UI still showed:
+  - `OpenMMO World`
+  - `SERVER AUTHORITATIVE`
+  - real `MONSTER` entries
+  - `Attention action 빠른 공격`
+  - `HP 0/14`
+- root cause:
+  - the 22-second fast-path kept sending primary-action taps even after the authoritative kill
+  - post-kill taps produced repeated `InvalidTarget` / `AttackerDead` log entries
+  - the transient REWARD/처치 evidence was therefore overwritten/evicted before the final
+    UI hierarchy assertion
+- correction:
+  - Android acceptance now receives the live OpenMMO server stdout path
+  - the fast-path records the server-log offset at combat-input start
+  - after every tap it scans only newly appended server output
+  - on `Player CryptMira killed kobold`, input stops immediately
+  - wait briefly for React/WebView to project the authoritative result
+  - then perform UI hierarchy/screenshots so REWARD/처치 evidence remains visible
+  - server evidence is used only to stop automation at the correct moment; it does not fabricate
+    or replace the required UI verification
+- fix commits on `idea2`:
+  - Python acceptance: `d20a9304ee33085389274cd4eebeeeca0fe3b06e`
+  - shell server-log wiring: `a30425c037d69387852beb5b800e78e694a0240a`
+- latest PR #7 head:
+  `3fa4f67da4286703d7aac5a64f5779ca88b2dea8`
+- first workflow lookup for that head returned no runs yet; no repeated polling was performed
