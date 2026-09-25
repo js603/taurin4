@@ -57,4 +57,4 @@ npx vitest run src/openmmo/real.integration.test.ts   -t "enters old_crypt and k
 unset OPENMMO_ACCEPTANCE_SEED_ONLY
 unset OPENMMO_DUNGEON_ACCOUNT
 
-python3 scripts/ci/android_openmmo_runtime_acceptance.py   --token "$TOKEN"   --server "ws://10.0.2.2:10006"
+python3 scripts/ci/android_openmmo_runtime_acceptance.py   --token "$TOKEN"   --server "ws://10.0.2.2:10006"   --server-log "$SERVER_LOG"
