@@ -1,0 +1,187 @@
+name: idea2 Android OpenMMO Lifecycle E2E
+
+on:
+  pull_request:
+    branches: ["idea2"]
+    paths:
+      - "src-tauri/**"
+      - "src/App.tsx"
+      - "src/app/platformRuntime.ts"
+      - "src/openmmo/**"
+      - "src/features/game/ui/OpenMmo*.tsx"
+      - "src/features/game/ui/GameScreen.tsx"
+      - "scripts/ci/android_openmmo_runtime_acceptance.py"
+      - "scripts/ci/android_openmmo_lifecycle_acceptance.py"
+      - "scripts/ci/run_android_openmmo_acceptance.sh"
+      - ".github/workflows/idea2-android-openmmo-lifecycle.yml"
+      - "package.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: idea2-android-openmmo-lifecycle-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-runtime-e2e:
+    name: Android OpenMMO lifecycle reconnect acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+
+    steps:
+      - name: Checkout taurin4
+        uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown,aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+
+      - name: Resolve Android NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          if [ ! -d "$ANDROID_HOME/ndk" ] || [ -z "$(ls -A "$ANDROID_HOME/ndk" 2>/dev/null)" ]; then
+            NDK_PACKAGE="$(sdkmanager --list | awk '/^  ndk;[0-9]/{print $1}' | sort -V | tail -n 1)"
+            test -n "$NDK_PACKAGE"
+            sdkmanager "$NDK_PACKAGE"
+          fi
+          NDK_VERSION="$(ls -1 "$ANDROID_HOME/ndk" | sort -V | tail -n 1)"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          echo "Using NDK $NDK_VERSION"
+
+      - name: Install taurin4 dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Quality gate
+        run: npm run check
+
+      - name: Checkout exact pinned OpenMMO
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init openmmo
+          git -C openmmo remote add origin https://github.com/Julian-adv/OpenMMO.git
+          git -C openmmo sparse-checkout init --cone
+          git -C openmmo sparse-checkout set \
+            .cargo \
+            agent-client \
+            server \
+            shared \
+            terrain \
+            tools \
+            data-src \
+            data \
+            client/public/models/objects
+          git -C openmmo fetch --depth=1 --filter=blob:none origin 950e081c178d920c10c51f2d31f60c1b3383c925
+          git -C openmmo checkout --detach FETCH_HEAD
+          test "$(git -C openmmo rev-parse HEAD)" = "950e081c178d920c10c51f2d31f60c1b3383c925"
+          test -f openmmo/Cargo.toml
+          test -f openmmo/Cargo.lock
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            openmmo
+            src-tauri
+
+      - name: Build pinned OpenMMO server
+        working-directory: openmmo
+        run: cargo build -p onlinerpg-server --locked
+
+      - name: Build pinned shared codec for Node seed
+        working-directory: openmmo/shared
+        shell: bash
+        run: |
+          wasm-pack build \
+            --target nodejs \
+            --release \
+            --out-dir ../../.tmp/openmmo-wasm
+
+      - name: Prepare pinned browser codec for APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          export OPENMMO_SOURCE_DIR="$PWD/openmmo"
+          npm run openmmo:codec
+          test -f public/openmmo-wasm/onlinerpg_shared.js
+          test -f public/openmmo-wasm/onlinerpg_shared_bg.wasm
+          grep -q "source_commit=950e081c178d920c10c51f2d31f60c1b3383c925" public/openmmo-wasm/PINNED_OPENMMO.txt
+
+      - name: Initialize Android project
+        run: npm run tauri -- android init --ci
+
+      - name: Build functional Android debug APK
+        run: npm run tauri -- android build --debug --apk --ci
+
+      - name: Verify APK embeds pinned browser codec
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
+          test -n "$APK"
+          test -f dist/openmmo-wasm/onlinerpg_shared.js
+          test -f dist/openmmo-wasm/onlinerpg_shared_bg.wasm
+
+          TMP_APK_CHECK="$RUNNER_TEMP/taurin4-apk-check"
+          mkdir -p "$TMP_APK_CHECK"
+          unzip -o "$APK" lib/x86_64/libtaurin4_lib.so -d "$TMP_APK_CHECK" >/dev/null
+
+          strings "$TMP_APK_CHECK/lib/x86_64/libtaurin4_lib.so" |
+            grep -Fq "/openmmo-wasm/onlinerpg_shared.js"
+          strings "$TMP_APK_CHECK/lib/x86_64/libtaurin4_lib.so" |
+            grep -Fq "/openmmo-wasm/onlinerpg_shared_bg.wasm"
+
+      - name: Enable KVM for Android Emulator
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm || true
+          sudo chmod 666 /dev/kvm || true
+
+      - name: Install APK and play against real pinned OpenMMO
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          cores: 2
+          ram-size: 4096M
+          heap-size: 512
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          enable-hw-keyboard: true
+          script: ANDROID_OPENMMO_ACCEPTANCE_DRIVER=scripts/ci/android_openmmo_lifecycle_acceptance.py ANDROID_OPENMMO_ARTIFACT_DIR=artifacts/android-openmmo-lifecycle bash scripts/ci/run_android_openmmo_acceptance.sh
+
+      - name: Upload Android runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: idea2-m3c-android-lifecycle-e2e
+          path: |
+            artifacts/android-openmmo-lifecycle/**
+            src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: warn
+          retention-days: 14
