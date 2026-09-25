@@ -2397,3 +2397,46 @@ Paste or send this in the new conversation:
 - latest PR #7 head:
   `57d310bd4a44231e84ea380ae65655bc088e4e61`
 - first workflow lookup for that head returned no runs yet; no repeated polling was performed
+
+
+### M3-C Slice 2 Android chase-window correction
+- verification head before correction:
+  `57d310bd4a44231e84ea380ae65655bc088e4e61`
+- results:
+  - Windows Tauri Acceptance `36136773659` — **SUCCESS**
+  - Android OpenMMO Client APK `36136773618` — **SUCCESS**
+  - real pinned OpenMMO adapter `36136773730` — **SUCCESS**
+  - PR Quality `36136773651` — **SUCCESS**
+  - Android Runtime E2E `36136773718` — **FAILURE only in final real combat**
+- Android seed/safe-staging passed
+- Android artifact/server evidence:
+  - `13:06:20.834` — CryptMira rehydrated in old_crypt
+  - `13:06:20.836` — three deterministic kobolds spawned
+  - safe staging kept CryptMira alive for roughly 15 seconds while the nearest kobold chased in
+  - `13:06:35.365` — CryptMira died when the kobold finally reached melee
+  - first server-visible Android attack arrived at `13:06:36.234`, already after death
+- root cause:
+  - the Android fast-path previously emitted action taps for only about 8.7 seconds
+  - safe staging intentionally starts the nearest kobold about 17.5m away
+  - the tap window ended before the real server-driven chase completed, so the encounter/combat
+    transition happened after automation had stopped sending primary-action input
+- correction:
+  - keep tapping the stable Attention Card primary-action slot for up to 22 seconds
+  - tap every ~400 ms
+  - before encounter: taps are harmless
+  - WORLD ENCOUNTER: the same slot becomes `살펴본다`
+  - combat: the same slot becomes `빠른 공격`
+  - repeated attack commands remain server-authoritative; OpenMMO cooldown/validation decides
+    which taps become legal attacks
+  - UI hierarchy inspection still occurs only after the real input window
+- fix commit on `idea2`:
+  `84999d4e2faa37387e32ecd2e40978ca2fc2d1ba`
+- latest PR #7 head:
+  `e1d1047390a065cb70cf603dbd6aa01f259c27ef`
+- new verification runs:
+  - Android Client APK `36139665366` — **queued**
+  - PR Quality `36139665411` — **queued**
+  - real OpenMMO adapter `36139665374` — **queued**
+  - Windows Acceptance `36139665365` — **queued**
+  - Android Runtime E2E `36139665359` — **queued**
+- no repeated polling performed
