@@ -72,7 +72,7 @@ describe("TauriPluginOpenMmoTransport", () => {
 
   it("serializes async plugin sends so ClientInfo cannot be overtaken", async () => {
     const sent: unknown[] = [];
-    let releaseFirst: (() => void) | null = null;
+    const firstSendGate: { resolve?: () => void } = {};
     let active = 0;
     let maxActive = 0;
 
@@ -85,7 +85,7 @@ describe("TauriPluginOpenMmoTransport", () => {
 
         if (sent.length === 1) {
           await new Promise<void>((resolve) => {
-            releaseFirst = resolve;
+            firstSendGate.resolve = resolve;
           });
         }
 
@@ -110,7 +110,8 @@ describe("TauriPluginOpenMmoTransport", () => {
     await vi.waitFor(() => expect(sent).toEqual([[1]]));
     expect(maxActive).toBe(1);
 
-    releaseFirst?.();
+    expect(firstSendGate.resolve).toBeTypeOf("function");
+    firstSendGate.resolve?.();
 
     await vi.waitFor(() => expect(sent).toEqual([[1], [2]]));
     expect(maxActive).toBe(1);
