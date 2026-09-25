@@ -1,3 +1,4 @@
+# PR validation probe: actual Android OpenMMO runtime acceptance.
 #!/usr/bin/env python3
 import argparse
 import glob
