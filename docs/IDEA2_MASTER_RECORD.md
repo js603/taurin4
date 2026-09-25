@@ -1984,8 +1984,50 @@ Verification PR:
     `COLLECT_REWARD`, which is intentionally a no-op
 - fix commit on `idea2`:
   `cb15179b7c36d8b8b8654a029b532e603d3ea966`
-- latest PR #7 head:
+- latest PR #7 head before Android first-input fast path:
   `cdf085e104439011cf64579e2455b5b1d70139d3`
+- validation results:
+  - PR Quality `36129070738` — **SUCCESS**
+  - real pinned OpenMMO adapter `36129070827` — **SUCCESS**
+  - Android OpenMMO Client APK `36129070829` — **SUCCESS**
+  - Windows Tauri acceptance `36129070796` — was still running at the checkpoint and was not re-polled
+  - Android Runtime E2E `36129070746` — **FAILURE in actual combat**
+- Android run artifact was downloaded and inspected directly
+- exact server timeline:
+  - `11:37:38.296` — CryptMira rehydrated and entered old_crypt
+  - `11:37:42.431` — CryptMira died to kobold
+  - `11:37:48.447` — first Android attack reached server and was rejected because attacker was already dead
+- final Android UI confirmed:
+  - `HP 0/14`
+  - `SERVER AUTHORITATIVE`
+  - `Attention action 빠른 공격`
+  - repeated `공격 거부: 쓰러진 상태에서는 공격할 수 없다`
+- root cause:
+  - even after per-attack hierarchy dumps were removed, the acceptance still performed
+    GameScreen hierarchy verification/screenshots before the first combat input
+  - that startup inspection cost more time than the ~4 second survival window inside the
+    real aggressive old_crypt pack
+- artifact-confirmed Android geometry:
+  - emulator resolution: `1080x2400`
+  - visible primary action bounds: `[112,1441][530,1561]`
+  - primary action center: approximately `(321,1501)`
+  - this same Attention Card primary slot is used for `살펴본다`, `빠른 공격`,
+    and the current no-op `전리품 획득`
+- fast-path stabilization:
+  - after tapping `Enter character CryptMira`, wait only 250 ms
+  - resolve screen size using `wm size`
+  - target the primary action at ~29.7% width / 62.5% height
+  - send five 320 ms transition/burst taps so encounter→combat and first attack happen
+    before expensive UI inspection
+  - follow with five taps near the real 1.38 s player attack cadence
+  - only after actual combat inputs are sent, inspect hierarchy/screenshots and require
+    `OpenMMO World + SERVER AUTHORITATIVE + REWARD/처치`
+  - server authority still decides which input becomes a valid attack; cooldown rejections
+    do not fabricate combat state
+- fix commit on `idea2`:
+  `5b46a45138a90d2775be5cd9ee9eb5c2a3bb5248`
+- latest PR #7 head:
+  `c88e33091c5a3ea46c5aeae0115c61e5cf9fad7a`
 - first workflow lookup for that head returned no runs yet; no repeated polling was performed
 - current official Tauri v2 websocket guest binding was rechecked:
   - `WebSocket.connect(url)`
