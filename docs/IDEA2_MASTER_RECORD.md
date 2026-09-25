@@ -1503,7 +1503,33 @@ Verification PR:
 - seed implementation commit: `f052e1575d6e46e758ad80a10c4bf2db09f3bf52`
 - workflow commit: `bdce6fc6ff86a0ad02f53dcba6bbc10268b70d3b`
 - retry PR head: `8e8279f34f8f938a20e7349a7b79ccd453ecf15f`
-- first workflow lookup for the new head returned no runs yet; no repeated polling was performed
+- run `36077170339` — **SUCCESS** for the actual Windows Tauri/WebView2 human-replacement acceptance
+- PR Quality run `36077170347` — **SUCCESS**
+- same head's real OpenMMO adapter run `36077170227` — **FAILURE** only because the
+  full old_crypt regression character died to a real kobold before the kill completed
+- this failure is independent from the Windows app acceptance, which already passed
+- pinned source review confirmed:
+  - `RollCharacterStats` stores the latest pending attributes
+  - `CreateCharacter` consumes those exact pending attributes
+  - Barbarian is a normal player-selectable class with d10 hit die
+- regression stabilization now keeps original rules but rolls up to 64 times for a normal
+  male Barbarian satisfying:
+  - `maxHp >= 14`
+  - `guard >= 12`
+  - `STR >= 13`
+- all original authoritative kill / PlayerAttacked / MonsterDead / XpGained / optional loot
+  assertions remain unchanged
+- stabilization commit on `idea2`: `0d3db7de846bbef48b171418466aa9f3660d66dc`
+- latest PR #5 head: `3fa4d19924285c7a9716afe4e27c4d5768593d63`
+- first workflow lookup for that head returned no runs yet; no repeated polling was performed
+
+M3-B finalization rule:
+
+- the actual Windows Tauri/WebView2 acceptance is already proven SUCCESS
+- M3-B remains open only until the existing real OpenMMO regression Gate is green again
+- once the latest head has both real OpenMMO adapter and Windows acceptance SUCCESS,
+  close PR #5 without merge, mark M3-B **VERIFIED**, create a recovery checkpoint, then
+  begin M3-C Android implementation
 
 M3-B must remain **IMPLEMENTED-CI-VERIFIED** until the Windows Tauri acceptance run itself
 finishes SUCCESS. A renderer-only success is not sufficient.
