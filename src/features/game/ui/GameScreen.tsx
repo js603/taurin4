@@ -105,6 +105,7 @@ function FloatingAttention({
           {card.choices.map((choice, index) => (
             <button
               key={choice.label}
+              aria-label={"Attention action " + choice.label}
               type="button"
               className={
                 "game-button " +
@@ -170,7 +171,12 @@ export function GameScreen({
     : 0;
 
   return (
-    <main className="game-shell" tabIndex={0} onKeyDown={onKeyDown}>
+    <main
+      className="game-shell"
+      aria-label={openMmo ? "OpenMMO game screen" : "Local game screen"}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+    >
       <section
         className={
           "world-stage " +
