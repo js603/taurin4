@@ -14,6 +14,7 @@ rm -f "$OPENMMO_DIR/data/npc_token" "$OPENMMO_DIR/data/game_data.db"
 SERVER_PID=$!
 
 cleanup() {
+  kill -CONT "$SERVER_PID" >/dev/null 2>&1 || true
   kill "$SERVER_PID" >/dev/null 2>&1 || true
   wait "$SERVER_PID" >/dev/null 2>&1 || true
   cp "$SERVER_LOG" artifacts/android-openmmo-runtime/server.stdout.log 2>/dev/null || true
@@ -57,4 +58,4 @@ npx vitest run src/openmmo/real.integration.test.ts   -t "enters old_crypt and k
 unset OPENMMO_ACCEPTANCE_SEED_ONLY
 unset OPENMMO_DUNGEON_ACCOUNT
 
-python3 scripts/ci/android_openmmo_runtime_acceptance.py   --token "$TOKEN"   --server "ws://10.0.2.2:10006"   --server-log "$SERVER_LOG"
+python3 scripts/ci/android_openmmo_runtime_acceptance.py   --token "$TOKEN"   --server "ws://10.0.2.2:10006"   --server-log "$SERVER_LOG"   --server-pid "$SERVER_PID"
