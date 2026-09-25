@@ -47,6 +47,7 @@ export class TauriPluginOpenMmoTransport implements OpenMmoTransport {
   private removeListener: (() => void) | null = null;
   private open = false;
   private generation = 0;
+  private sendQueue: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly connectPluginSocket: ConnectPluginSocket =
@@ -68,6 +69,7 @@ export class TauriPluginOpenMmoTransport implements OpenMmoTransport {
 
         this.socket = socket;
         this.open = true;
+        this.sendQueue = Promise.resolve();
         this.removeListener = socket.addListener((message) => {
           if (generation !== this.generation) return;
 
@@ -115,12 +117,36 @@ export class TauriPluginOpenMmoTransport implements OpenMmoTransport {
     const socket = this.socket;
     if (!this.open || !socket) return false;
 
-    void socket.send(Array.from(bytes)).catch((error) => {
-      if (socket !== this.socket) return;
-      this.handlers?.onError(
-        "OpenMMO Tauri WebSocket send error: " + errorMessage(error),
-      );
-    });
+    const generation = this.generation;
+    const payload = Array.from(bytes);
+
+    // Browser WebSocket.send() synchronously queues frames in call order.
+    // Tauri's Rust websocket plugin exposes an async Promise-based send().
+    // Serialize plugin sends so OpenMMO's mandatory ClientInfo handshake
+    // cannot be overtaken by AuthenticateNpc or later gameplay commands.
+    this.sendQueue = this.sendQueue
+      .then(async () => {
+        if (
+          generation !== this.generation ||
+          socket !== this.socket ||
+          !this.open
+        ) {
+          return;
+        }
+        await socket.send(payload);
+      })
+      .catch((error) => {
+        if (
+          generation !== this.generation ||
+          socket !== this.socket
+        ) {
+          return;
+        }
+        this.handlers?.onError(
+          "OpenMMO Tauri WebSocket send error: " + errorMessage(error),
+        );
+      });
+
     return true;
   }
 
@@ -130,6 +156,7 @@ export class TauriPluginOpenMmoTransport implements OpenMmoTransport {
     this.open = false;
     this.socket = null;
     this.handlers = null;
+    this.sendQueue = Promise.resolve();
     this.removeListener?.();
     this.removeListener = null;
 
