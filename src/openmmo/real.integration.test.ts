@@ -779,12 +779,40 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
         );
 
         if (!character) {
-          const roll = await adapter.rollCharacterStats(
-            "barbarian",
-            "male",
-          );
-          expect(roll.ok).toBe(true);
-          if (!roll.ok) throw new Error(roll.message);
+          let durableRoll:
+            | Awaited<ReturnType<typeof adapter.rollCharacterStats>>
+            | null = null;
+
+          // The pinned server stores the latest successful RollCharacterStats
+          // result as the pending attributes consumed by CreateCharacter.
+          // Keep the character fully within original player-selectable rules,
+          // but avoid making this real-server regression depend on a fragile
+          // low-HP / low-guard roll while several aggressive kobolds can be
+          // encountered during authentic dungeon traversal.
+          for (let attempt = 0; attempt < 64; attempt += 1) {
+            const roll = await adapter.rollCharacterStats(
+              "barbarian",
+              "male",
+            );
+            expect(roll.ok).toBe(true);
+            if (!roll.ok) throw new Error(roll.message);
+
+            if (
+              roll.maxHp >= 14 &&
+              roll.attributes.guard >= 12 &&
+              roll.attributes.str >= 13
+            ) {
+              durableRoll = roll;
+              break;
+            }
+          }
+
+          expect(durableRoll).not.toBeNull();
+          if (!durableRoll) {
+            throw new Error(
+              "Could not obtain a durable normal Barbarian roll for the dungeon regression",
+            );
+          }
 
           const created = await adapter.createCharacter(
             "CryptMira",
