@@ -59,6 +59,7 @@ function CharacterCard({
       </div>
       <div className="character-card__actions">
         <button
+          aria-label={"Enter character " + character.name}
           type="button"
           className="game-button game-button--primary"
           disabled={busy}
