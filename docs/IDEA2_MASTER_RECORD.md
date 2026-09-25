@@ -2643,3 +2643,48 @@ Paste or send this in the new conversation:
 - correction commit on verification branch:
   `b4df03771825c488dbfd17b7e10c0fd37d9421eb`
 - first workflow lookup for the corrected head returned no runs yet; no repeated polling performed
+
+
+### M3-C Slice 3 second verification — live HP semantics + adapter cadence
+- corrected verification head before this fix:
+  `b4df03771825c488dbfd17b7e10c0fd37d9421eb`
+- results:
+  - PR Quality `36161621046` — **SUCCESS**
+  - Windows Acceptance `36161621128` — **SUCCESS**
+  - Android Runtime regression `36161621186` — **SUCCESS**
+  - Android Lifecycle E2E `36161621216` — **FAILURE**
+  - real OpenMMO adapter `36161621110` — **FAILURE**
+- Android Lifecycle failure:
+  - actual Android GameScreen and `SERVER AUTHORITATIVE` were restored correctly
+  - authoritative state before HOME had HP `9`
+  - after ~2 seconds background, HP was `0`
+  - failure was caused by asserting HP equality across a live authoritative world
+  - nearby aggressive kobolds continue simulating while Android is backgrounded, so HP is allowed
+    to change without any disconnect or lifecycle failure
+- Lifecycle correction:
+  - background/resume continuity now compares:
+    - same max HP
+    - same MP/max MP
+    - same floor
+    - same X/Z within tolerance
+    - no server-side `Session ended for CryptMira`
+  - current HP is intentionally excluded only from the HOME/background comparison
+  - after force-stop, the exact last observed resumed state is still compared against the
+    reconnected state **including HP**, proving persistence/rehydration rather than frozen simulation
+- real adapter failure:
+  - isolated real kobold combat still hit an unlucky CI run where CryptMira died before kill
+  - the test driver was sending one ATTACK command every 1.5s while the real player attack cadence
+    is ~1.38s
+- adapter stabilization:
+  - send ATTACK input every 350ms for up to 40 inputs
+  - OpenMMO server remains authoritative and rejects commands during cooldown
+  - no HP/damage/guard/monster AI/server-rule changes
+  - this only prevents CI scheduling jitter from missing a legal attack window
+- correction commits on PR #8:
+  - lifecycle live-HP semantics:
+    `b17f54e49aec1d5e4f5683a156e03faff85dc87c`
+  - real combat input saturation:
+    `14354bf75ab662bf458a881f35eb72da363447e3`
+- latest PR #8 head:
+  `14354bf75ab662bf458a881f35eb72da363447e3`
+- first workflow lookup for latest head returned no runs yet; no repeated polling performed
