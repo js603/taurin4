@@ -70,6 +70,52 @@ describe("TauriPluginOpenMmoTransport", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it("serializes async plugin sends so ClientInfo cannot be overtaken", async () => {
+    const sent: unknown[] = [];
+    let releaseFirst: (() => void) | null = null;
+    let active = 0;
+    let maxActive = 0;
+
+    const socket = {
+      addListener: () => () => undefined,
+      async send(message: unknown) {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        sent.push(message);
+
+        if (sent.length === 1) {
+          await new Promise<void>((resolve) => {
+            releaseFirst = resolve;
+          });
+        }
+
+        active -= 1;
+      },
+      async disconnect() {},
+    };
+
+    const transport = new TauriPluginOpenMmoTransport(async () => socket);
+    transport.connect("ws://10.0.2.2:10006", {
+      onOpen: vi.fn(),
+      onBinary: vi.fn(),
+      onClose: vi.fn(),
+      onError: vi.fn(),
+    });
+
+    await vi.waitFor(() => expect(transport.isOpen()).toBe(true));
+
+    expect(transport.send(new Uint8Array([1]))).toBe(true);
+    expect(transport.send(new Uint8Array([2]))).toBe(true);
+
+    await vi.waitFor(() => expect(sent).toEqual([[1]]));
+    expect(maxActive).toBe(1);
+
+    releaseFirst?.();
+
+    await vi.waitFor(() => expect(sent).toEqual([[1], [2]]));
+    expect(maxActive).toBe(1);
+  });
+
   it("reports plugin connection failures without pretending to be open", async () => {
     const onError = vi.fn();
     const transport = new TauriPluginOpenMmoTransport(async () => {
