@@ -1803,8 +1803,34 @@ Verification PR:
   `1eb9c5e81af3728a5007b6be3dce532a39c6bf2f`
 - latest PR #7 head:
   `999871a1167571e5c66c6b18730323703637a6f3`
-- Android Runtime E2E run `36097102662` — latest status **in_progress**
-- PR Quality run `36097102634` — latest status **in_progress**
+- Android Runtime E2E run `36097102662` — **FAILURE in actual Android UI automation**
+- PR Quality run `36097102634` — **SUCCESS**
+- runtime run passed:
+  - taurin4 quality
+  - pinned OpenMMO checkout/server build
+  - Node/browser codec build
+  - Android init/debug APK build
+  - embedded codec verification
+  - KVM and Android Emulator boot
+  - real old_crypt seed under `npc_idea2_player`
+- seed test itself passed against the real server
+- actual APK launched and visibly rendered `Android OpenMMO Connection`
+- failure: UIAutomator timed out looking for input `content-desc`
+- failure artifact was downloaded and its real Android WebView accessibility XML inspected
+- observed Android mapping:
+  - HTML button `aria-label` appears as Android node `text`
+  - HTML input `aria-label` does **not** appear as `content-desc`
+  - each input is exposed as `android.widget.EditText` beside its visible label TextView
+- Android acceptance driver was corrected to locate inputs by:
+  `visible label TextView → sibling android.widget.EditText`
+- buttons now use the WebView-exposed text value
+- GameScreen readiness uses visible `OpenMMO World` + `SERVER AUTHORITATIVE`
+- fix commit on `idea2`:
+  `920f2ce6c215d22a2d6c7cc59dabd4de16d27783`
+- latest PR #7 head:
+  `362f573a271755bf27ee58563c88e233c7b55c52`
+- Android Runtime E2E run `36098989431` — latest status **in_progress**
+- PR Quality run `36098989337` — latest status **in_progress**
 - no repeated polling performed
 - current official Tauri v2 websocket guest binding was rechecked:
   - `WebSocket.connect(url)`
