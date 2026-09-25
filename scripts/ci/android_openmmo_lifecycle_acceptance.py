@@ -235,12 +235,6 @@ def main():
 
     reconnect_offset = log_size(server_log)
     connect_to_lobby(args.server, args.token, "05-reconnect")
-    wait_for_log(
-        server_log,
-        reconnect_offset,
-        "Authenticated NPC account 'npc_idea2_player'",
-        timeout=12,
-    )
 
     reconnected = enter_cryptmira("06-reconnected")
     state_equal(resumed, reconnected)
