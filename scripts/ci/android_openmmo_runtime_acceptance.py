@@ -106,6 +106,8 @@ def wait_node(
     while time.monotonic() < deadline:
         try:
             root, last_xml = dump_ui()
+            if dismiss_blocking_system_dialog(root):
+                continue
             node = find_node(
                 root,
                 desc=desc,
@@ -128,6 +130,66 @@ def wait_node(
 def tap_node(node: ET.Element):
     x, y = parse_bounds(node.attrib["bounds"])
     adb("shell", "input", "tap", str(x), str(y))
+
+
+def dismiss_blocking_system_dialog(root: ET.Element) -> bool:
+    # Android emulator system UI can surface launcher/ANR dialogs over the
+    # already-running Tauri WebView. They are unrelated to taurin4 but block
+    # UIAutomator from seeing the app hierarchy.
+    alert = find_node(root, contains_text="isn't responding")
+    if alert is None:
+        return False
+
+    for label in ("Close app", "Wait"):
+        button = find_node(root, text=label)
+        if button is not None:
+            tap_node(button)
+            time.sleep(0.8)
+            return True
+
+    adb("shell", "input", "keyevent", "KEYCODE_BACK", check=False)
+    time.sleep(0.8)
+    return True
+
+
+def launch_installed_app():
+    resolved = adb(
+        "shell",
+        "cmd",
+        "package",
+        "resolve-activity",
+        "--brief",
+        "-a",
+        "android.intent.action.MAIN",
+        "-c",
+        "android.intent.category.LAUNCHER",
+        PACKAGE,
+        check=False,
+    )
+    component = next(
+        (
+            line.strip()
+            for line in reversed(resolved.splitlines())
+            if "/" in line and PACKAGE in line
+        ),
+        "",
+    )
+
+    if component:
+        adb("shell", "am", "force-stop", PACKAGE, check=False)
+        adb("shell", "am", "start", "-W", "-n", component)
+        return
+
+    # Fallback for unusual generated manifests.
+    adb(
+        "shell",
+        "monkey",
+        "-p",
+        PACKAGE,
+        "-c",
+        "android.intent.category.LAUNCHER",
+        "1",
+    )
 
 
 def set_field(label: str, value: str):
@@ -197,16 +259,9 @@ def main():
     adb("wait-for-device")
     adb("install", "-r", apk)
 
-    # Start the launcher activity without coupling the test to generated activity names.
-    adb(
-        "shell",
-        "monkey",
-        "-p",
-        PACKAGE,
-        "-c",
-        "android.intent.category.LAUNCHER",
-        "1",
-    )
+    # Launch the generated activity directly so Pixel Launcher health is not
+    # part of the taurin4 acceptance boundary.
+    launch_installed_app()
 
     wait_node(contains_text="Android OpenMMO Connection", timeout=30)
     screenshot("01-android-openmmo-entry")
