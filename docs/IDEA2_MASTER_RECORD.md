@@ -2483,3 +2483,49 @@ Paste or send this in the new conversation:
 - latest PR #7 head:
   `3fa4f67da4286703d7aac5a64f5779ca88b2dea8`
 - first workflow lookup for that head returned no runs yet; no repeated polling was performed
+
+
+### M3-C Slice 2 Android attention-hotkey correction
+- verification head before correction:
+  `3fa4f67da4286703d7aac5a64f5779ca88b2dea8`
+- results:
+  - PR Quality `36142310816` — **SUCCESS**
+  - real pinned OpenMMO adapter `36142310866` — **SUCCESS**
+  - Android OpenMMO Client APK `36142310839` — **SUCCESS**
+  - Windows Tauri Acceptance `36142310835` — **SUCCESS**
+  - Android Runtime E2E `36142310822` — **FAILURE only in final combat**
+- Android artifact evidence for this run:
+  - actual APK entered `OpenMMO World`
+  - `SERVER AUTHORITATIVE` visible
+  - three real `MONSTER` entries visible
+  - final card exposed `Attention action 빠른 공격`
+  - final HP `0/14`
+  - server recorded no successful attack before death; attacks arrived only after death as
+    `AttackerDead`
+- root cause:
+  - the previous fast path reused the combat-card button coordinate for the pre-combat
+    WORLD ENCOUNTER card
+  - Attention Cards are center-aligned and have different heights by state, so
+    `살펴본다` and `빠른 공격` do not share a reliable Y coordinate
+  - the encounter was therefore never investigated before the kobold reached the player
+- correction:
+  - use GameScreen's existing supported numeric-choice hotkey instead of card coordinates
+  - `<main tabIndex=0 onKeyDown>` maps key `1` to the first visible Attention Card choice
+  - focus a non-interactive area of the actual GameScreen
+  - repeatedly send Android `KEYCODE_1`
+  - WORLD ENCOUNTER: key 1 executes `살펴본다`
+  - COMBAT: the same key 1 executes `빠른 공격`
+  - OpenMMO server still validates target, range, cooldown, HP and kill
+- authoritative-kill evidence preservation:
+  - after the server log confirms `Player CryptMira killed kobold`, stop sending input
+  - wait ~200 ms for already-sent authoritative events
+  - SIGSTOP only the external OpenMMO server process after the kill has happened
+  - capture Android UI hierarchy/screenshots while no second kobold can overwrite REWARD
+  - cleanup resumes the server with SIGCONT before termination
+  - this freeze happens only after the authoritative kill and does not alter pre-kill combat
+- fix commits on `idea2`:
+  - Android hotkey driver: `0c7ec88066e3e60f4ebd2c4d0a3e8d75c7881a91`
+  - post-kill server freeze wiring: `e9b688c1416426d0c39041d80080ba493f846c91`
+- latest PR #7 head:
+  `386bd6244a4ead22bb91858f3cb8e662411836cd`
+- first workflow lookup for that head returned no runs yet; no repeated polling was performed
