@@ -132,14 +132,23 @@ jobs:
       - name: Build functional Android debug APK
         run: npm run tauri -- android build --debug --apk --ci
 
-      - name: Verify APK contains pinned browser codec
+      - name: Verify APK embeds pinned browser codec
         shell: bash
         run: |
           set -euo pipefail
           APK="$(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
           test -n "$APK"
-          unzip -l "$APK" | grep -q "openmmo-wasm/onlinerpg_shared.js"
-          unzip -l "$APK" | grep -q "openmmo-wasm/onlinerpg_shared_bg.wasm"
+          test -f dist/openmmo-wasm/onlinerpg_shared.js
+          test -f dist/openmmo-wasm/onlinerpg_shared_bg.wasm
+
+          TMP_APK_CHECK="$RUNNER_TEMP/taurin4-apk-check"
+          mkdir -p "$TMP_APK_CHECK"
+          unzip -o "$APK" lib/x86_64/libtaurin4_lib.so -d "$TMP_APK_CHECK" >/dev/null
+
+          strings "$TMP_APK_CHECK/lib/x86_64/libtaurin4_lib.so" |
+            grep -Fq "/openmmo-wasm/onlinerpg_shared.js"
+          strings "$TMP_APK_CHECK/lib/x86_64/libtaurin4_lib.so" |
+            grep -Fq "/openmmo-wasm/onlinerpg_shared_bg.wasm"
 
       - name: Enable KVM for Android Emulator
         shell: bash
