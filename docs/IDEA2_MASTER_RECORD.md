@@ -1829,9 +1829,46 @@ Verification PR:
   `920f2ce6c215d22a2d6c7cc59dabd4de16d27783`
 - latest PR #7 head:
   `362f573a271755bf27ee58563c88e233c7b55c52`
-- Android Runtime E2E run `36098989431` — latest status **in_progress**
-- PR Quality run `36098989337` — latest status **in_progress**
-- no repeated polling performed
+- Android Runtime E2E run `36098989431` — **FAILURE after actual app input and connect attempt**
+- PR Quality run `36098989337` — **SUCCESS**
+- runtime run passed:
+  - taurin4 quality
+  - pinned OpenMMO server/codec builds
+  - Android APK build
+  - embedded codec verification
+  - KVM + Emulator
+  - real old_crypt seed
+  - actual APK launch
+  - Android connection form input
+  - OpenMMO play button interaction
+- failure artifact showed the actual server error rendered in the Android UI:
+  `Send ClientInfo first — reload the page, or update agent-client`
+- adapter review confirmed expected ordering:
+  1. transport onOpen
+  2. send `ClientInfo`
+  3. mark adapter connected
+  4. `AuthenticateNpc`
+- root cause:
+  - browser `WebSocket.send()` synchronously queues frames in call order
+  - Tauri websocket plugin `send()` returns a Promise
+  - Android transport returned `true` immediately and fired plugin sends without serialization
+  - `AuthenticateNpc` could overtake mandatory `ClientInfo`
+- fix:
+  - add a FIFO Promise send queue inside `TauriPluginOpenMmoTransport`
+  - preserve the existing synchronous boolean `OpenMmoTransport.send()` contract
+  - serialize every plugin send in original call order
+  - reset/invalidate queue across reconnect/close generations
+  - keep adapter/GameSession/gameplay code unchanged
+- unit regression:
+  - first async send is intentionally blocked
+  - second send must not start until first is released
+  - observed max concurrent plugin sends must remain 1
+- fix commits on `idea2`:
+  - transport: `ff7b92bb9245fba72a414dd164077cd4f7f9ebd7`
+  - test: `8ad277aa58da4b46c4e600e196294abd5fd35aa7`
+- latest PR #7 head:
+  `a6b4bba7dfebd83058eb1f07afb2a09b76cc5002`
+- first workflow lookup for that head returned no runs yet; no repeated polling was performed
 - current official Tauri v2 websocket guest binding was rechecked:
   - `WebSocket.connect(url)`
   - `addListener(Message)`
