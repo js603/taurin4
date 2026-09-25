@@ -1530,6 +1530,9 @@ M3-B finalization result:
 - actual Windows Tauri/WebView2 acceptance run `36086163424` — **SUCCESS**
 - PR #5 closed without merging after verification
 - M3-B status: **VERIFIED**
+- recovery checkpoint:
+  - branch: `checkpoint/idea2-m3b-verified-20260925`
+  - commit: `92dc6d56187343d57bba1ddb2e471b33f778d6c9`
 - verified implementation includes:
   - one-command Windows local OpenMMO launch
   - pinned server + pinned browser codec
@@ -1602,6 +1605,78 @@ First M3-C implementation after M3-B closes:
 4. add Android server-endpoint entry/preset suitable for LAN/remote testing
 5. build/install debug APK
 6. run real Android app acceptance against an isolated pinned OpenMMO server
+
+### M3-C slice 1 — Android OpenMMO runtime transport + APK
+
+Status: **IMPLEMENTED-NOT-VERIFIED**
+
+Implementation candidate:
+
+`22fea30a322448f6aa1192b07d8a1b5f0938f74e`
+
+Implemented:
+
+- pinned current official Tauri WebSocket plugin JS binding:
+  `@tauri-apps/plugin-websocket 2.4.3`
+- Rust dependency:
+  `tauri-plugin-websocket 2.4.3`
+- plugin initialization in `src-tauri/src/lib.rs`
+- capability permission `websocket:default`
+- `TauriPluginOpenMmoTransport`
+  - adapts plugin Binary messages to `Uint8Array`
+  - keeps existing `OpenMmoTransport` contract
+  - maps plugin close/error state into adapter handlers
+- Android Tauri runtime detection
+- `createOpenMmoRuntime` chooses:
+  - Android Tauri → Rust-backed plugin transport
+  - Windows/browser/Node fallback → existing WebSocket transport
+- Windows M3-B transport behavior is therefore unchanged
+- Android Tauri launches into the real OpenMMO connection entry by default
+- Android OpenMMO setup requires an explicit reachable LAN/remote server endpoint rather
+  than silently using Android-local `127.0.0.1`
+- Android copy makes the current topology explicit: Android client → LAN/remote OpenMMO
+- unit coverage added for plugin binary/send/close/error adaptation
+
+Dedicated CI:
+
+- workflow: `.github/workflows/idea2-android-openmmo.yml`
+- checks:
+  1. npm install
+  2. full `npm run check`
+  3. websocket plugin Rust/JS/capability wiring
+  4. Tauri Android init
+  5. installable debug APK build
+  6. APK artifact upload
+- temporary PR: #6 `ci/idea2-m3c-android-openmmo-20260925`
+- probe head: `df37c8b4e6e30f4ce827d17220dcbd04bbba2cf1`
+- first workflow lookup returned no runs yet; no repeated polling was performed
+
+M3-C slice 1 PASS boundary:
+
+```text
+frontend quality
++ existing real OpenMMO regression
++ Android Tauri compilation
++ Rust websocket plugin linked
++ installable debug APK
+```
+
+This slice does not yet claim real Android runtime connectivity. The next M3-C Gate after
+CI success is:
+
+```text
+Android emulator / device
+→ actual APK
+→ Rust websocket plugin
+→ isolated pinned OpenMMO server
+→ auth
+→ Character Lobby
+→ EnterGame
+→ GameScreen
+→ MONSTER / WORLD ENCOUNTER
+→ touch combat
+→ authoritative result
+```
 
 ### M3-C — Android real OpenMMO play client — NEXT AFTER M3-B
 
