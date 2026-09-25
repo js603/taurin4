@@ -13,6 +13,8 @@ const wasmModulePath = process.env.OPENMMO_WASM_MODULE;
 const serverUrl = process.env.OPENMMO_SERVER_URL;
 const npcToken = process.env.OPENMMO_NPC_TOKEN;
 const acceptanceSeedOnly = process.env.OPENMMO_ACCEPTANCE_SEED_ONLY === "1";
+const dungeonAccount =
+  process.env.OPENMMO_DUNGEON_ACCOUNT ?? "npc_idea2_dungeon";
 const enabled = Boolean(wasmModulePath && serverUrl && npcToken);
 
 function waitForConnected(adapter: OpenMmoAdapter, timeoutMs = 5_000) {
@@ -716,7 +718,7 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
 
       const { adapter, session, auth } = await connectAndAuthenticate(
         codec,
-        "npc_idea2_dungeon",
+        dungeonAccount,
       );
       const observed: unknown[] = [];
       const unsubscribeProbe = adapter.subscribeMessages((message) => {
