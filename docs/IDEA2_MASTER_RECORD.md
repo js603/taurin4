@@ -1740,9 +1740,31 @@ Verification PR:
 
 - PR #7 — `ci/idea2-m3c-android-runtime-20260925`
 - probe head: `562cc6242cba33b343a134876fade4b91258f20c`
-- Android Runtime E2E run `36092671807` — latest status **queued**
-- PR Quality run `36092671756` — latest status **in_progress**
-- no repeated polling performed
+- Android Runtime E2E run `36092671807` — **FAILURE before Android build/runtime**
+- PR Quality run `36092671756` — **SUCCESS**
+- failure step: runtime workflow's internal `Quality gate`
+- root cause: the workflow cloned pinned OpenMMO into repository root **before**
+  `npm run check`; taurin4's `eslint .` then inspected OpenMMO's own
+  `tools/glb-editor/src/lib/merge.ts` and failed on an unrelated upstream
+  unused-variable rule
+- no Android APK/runtime step ran in that failed attempt
+- workflow fix:
+  - run taurin4 dependency install + quality first
+  - checkout pinned OpenMMO only after taurin4 quality passes
+  - move `Swatinem/rust-cache` after pinned checkout so its OpenMMO workspace exists
+- fix commits:
+  - `eb1ffd88793b5a93e30ef8891b4852e1fb9f7e8f`
+  - `9de7854a711356585f10372c010c7f043e207d97`
+- latest PR #7 head:
+  `fb08d89b5bc6dcfd925ad41de933f275d6e3f2a4`
+- first workflow lookup for that head returned no runs yet; no repeated polling was performed
+- current official Tauri v2 websocket guest binding was rechecked:
+  - `WebSocket.connect(url)`
+  - `addListener(Message)`
+  - binary payload is `number[]`
+  - `send(number[])` emits Binary
+  - Close payload is `{ code, reason }`
+  - current `TauriPluginOpenMmoTransport` matches this contract
 
 M3-C slice 2 PASS boundary:
 
