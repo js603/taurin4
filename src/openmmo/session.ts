@@ -182,6 +182,7 @@ export class OpenMmoGameSession implements GameSession {
   private readonly listeners = new Set<() => void>();
   private unsubscribeMessages: (() => void) | null = null;
   private currentPlayerId: number | null = null;
+  private readonly recentlyDeadMonsters = new Map<string, string>();
   private worldEpoch = "";
   private worldGeneration = 0;
   private worldSequence = 0;
@@ -842,15 +843,26 @@ export class OpenMmoGameSession implements GameSession {
 
       case "MonsterDead": {
         const payload = payloadOf<{ monster_id: string }>(message, variant);
+        const semanticMonster = this.state.semanticDestinations?.find(
+          (destination) => destination.id === "monster:" + payload.monster_id,
+        );
+        const currentEnemy =
+          this.state.combat?.enemy.id === payload.monster_id
+            ? this.state.combat.enemy
+            : null;
+        const enemyName =
+          currentEnemy?.name ?? semanticMonster?.label ?? payload.monster_id;
+
+        this.recentlyDeadMonsters.set(payload.monster_id, enemyName);
         this.removeDestination("monster:" + payload.monster_id);
-        if (this.state.combat?.enemy.id !== payload.monster_id) {
+
+        if (!currentEnemy) {
           this.setState(
             addLog(this.state, "주변 몬스터가 쓰러졌다.", "floating"),
           );
           return;
         }
 
-        const enemyName = this.state.combat.enemy.name;
         this.setState(
           addLog(
             {
@@ -988,10 +1000,51 @@ export class OpenMmoGameSession implements GameSession {
           xp_amount: number;
           new_level: number;
           leveled_up: boolean;
+          monster_id?: string | null;
         }>(message, variant);
+
+        let next = this.state;
+        const monsterId = payload.monster_id ?? null;
+        if (monsterId) {
+          const semanticMonster = next.semanticDestinations?.find(
+            (destination) => destination.id === "monster:" + monsterId,
+          );
+          const currentEnemy =
+            next.combat?.enemy.id === monsterId ? next.combat.enemy : null;
+          const enemyName =
+            this.recentlyDeadMonsters.get(monsterId) ??
+            currentEnemy?.name ??
+            semanticMonster?.label ??
+            monsterId;
+
+          this.recentlyDeadMonsters.delete(monsterId);
+          this.removeDestination("monster:" + monsterId);
+
+          const alreadyRewardingKill =
+            next.phase === "reward" &&
+            next.reward?.title === enemyName + " 처치";
+
+          if (!alreadyRewardingKill) {
+            next = addLog(
+              {
+                ...next,
+                phase: "reward",
+                encounter: null,
+                combat: null,
+                reward: {
+                  title: enemyName + " 처치",
+                  items: ["서버 전리품 이벤트 대기 중"],
+                },
+              },
+              enemyName + " 처치가 서버 XP로 확정됐다.",
+              "focus",
+            );
+          }
+        }
+
         this.setState(
           addLog(
-            this.state,
+            next,
             payload.leveled_up
               ? "LEVEL UP → " + payload.new_level
               : "XP +" + payload.xp_amount,
