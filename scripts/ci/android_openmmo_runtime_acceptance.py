@@ -244,17 +244,17 @@ def tap_primary_action_fast():
     x = round(width * 0.297)
     y = round(height * 0.625)
 
-    # Burst through initial WebView/encounter transition so the first accepted
-    # attack is not delayed. Cooldown rejections are harmless and server
-    # authority still decides which taps become attacks.
-    for _ in range(5):
+    # Keep pressing the stable primary-action slot long enough for the
+    # safe-staged kobold to chase ~17.5m from its deterministic spawn. Before
+    # the encounter appears these taps are harmless. Once WORLD ENCOUNTER is
+    # shown, a tap becomes "살펴본다"; once combat starts, the same slot becomes
+    # "빠른 공격". Repeated taps are intentionally faster than the authoritative
+    # 1.38 s attack cooldown so the first legal attack is never delayed by UI
+    # inspection or polling. The server still accepts/rejects every command.
+    deadline = time.monotonic() + 22
+    while time.monotonic() < deadline:
         adb("shell", "input", "tap", str(x), str(y))
-        time.sleep(0.32)
-
-    # Continue near the real 1.38 s player attack cadence.
-    for _ in range(5):
-        adb("shell", "input", "tap", str(x), str(y))
-        time.sleep(1.42)
+        time.sleep(0.4)
 
 
 def ui_contains(value: str) -> bool:
