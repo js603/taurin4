@@ -67,6 +67,9 @@ describe("GameScreen OpenMMO app surface", () => {
     );
 
     expect(html).toContain("OPENMMO · AUTHORITATIVE WORLD");
+    expect(html).toContain(
+      'aria-label="OpenMMO player state · HP 20/20 · MP 10/10 · FLOOR -1 · X -1450.00 · Z 4720.00"',
+    );
     expect(html).toContain('aria-label="OpenMMO 주변 대상"');
     expect(html).toContain("semantic-destination-card");
     expect(html).toContain("MONSTER");
