@@ -163,9 +163,14 @@ jobs:
             $env:TAURIN4_OPENMMO_AUTOSTART = "1"
 
             Write-Host "===== Seed real old_crypt character ====="
-            npx vitest run src/openmmo/real.integration.test.ts -t "enters old_crypt and kills a real server-spawned kobold"
-            if ($LASTEXITCODE -ne 0) {
-              throw "Real old_crypt seed failed with exit code $LASTEXITCODE"
+            $env:OPENMMO_ACCEPTANCE_SEED_ONLY = "1"
+            try {
+              npx vitest run src/openmmo/real.integration.test.ts -t "enters old_crypt and kills a real server-spawned kobold"
+              if ($LASTEXITCODE -ne 0) {
+                throw "Real old_crypt seed failed with exit code $LASTEXITCODE"
+              }
+            } finally {
+              Remove-Item Env:OPENMMO_ACCEPTANCE_SEED_ONLY -ErrorAction SilentlyContinue
             }
 
             if ($process.HasExited) {
