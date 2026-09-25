@@ -234,6 +234,7 @@ export function OpenMmoBootstrap({
           <label>
             <span>{androidTauri ? "SERVER WEBSOCKET · LAN / REMOTE" : "SERVER WEBSOCKET"}</span>
             <input
+              aria-label="OpenMMO server websocket"
               value={serverUrl}
               disabled={working}
               spellCheck={false}
@@ -245,6 +246,7 @@ export function OpenMmoBootstrap({
           <label>
             <span>PINNED WASM MODULE</span>
             <input
+              aria-label="OpenMMO codec"
               value={codecUrl}
               disabled={working}
               spellCheck={false}
@@ -255,6 +257,7 @@ export function OpenMmoBootstrap({
           <label>
             <span>PLAYER ACCOUNT</span>
             <input
+              aria-label="OpenMMO account"
               value={accountName}
               disabled={working}
               spellCheck={false}
@@ -265,6 +268,7 @@ export function OpenMmoBootstrap({
           <label>
             <span>LOCAL AUTH TOKEN</span>
             <input
+              aria-label="OpenMMO token"
               type="password"
               value={npcToken}
               disabled={working}
@@ -276,6 +280,7 @@ export function OpenMmoBootstrap({
 
         <div className="runtime-actions">
           <button
+            aria-label="OpenMMO play"
             type="button"
             className="game-button game-button--primary"
             disabled={
