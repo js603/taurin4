@@ -3,6 +3,7 @@ import argparse
 import glob
 import os
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -228,21 +229,25 @@ def screenshot(name: str):
     adb("pull", remote, str(ARTIFACT_DIR / f"{name}.png"))
 
 
-def tap_primary_action_fast(server_log: Path | None = None):
-    # The Android GameScreen uses a stable two-column Attention Card. The
-    # primary action occupies ~30% width / 62.5% height on the Pixel 6 profile.
-    # This slot is "살펴본다" during WORLD ENCOUNTER, "빠른 공격" in combat,
-    # and "전리품 획득" in reward. Using screen-relative coordinates lets the
-    # acceptance send the first real combat input before an expensive
-    # UIAutomator hierarchy dump can cost the player several seconds.
+def drive_primary_action_fast(server_log: Path | None = None):
+    # GameScreen exposes the first Attention Card choice through the numeric
+    # "1" hotkey. This is more robust than a fixed tap coordinate because the
+    # centered WORLD ENCOUNTER and COMBAT cards have different heights.
+    #
+    # Focus a non-interactive part of the actual GameScreen, then repeatedly
+    # send KEYCODE_1. When WORLD ENCOUNTER exists it executes "살펴본다"; after
+    # that same user input executes "빠른 공격". OpenMMO remains authoritative
+    # for target/range/cooldown validation.
     size = adb("shell", "wm", "size")
     match = re.search(r"(\d+)x(\d+)", size)
     if not match:
         raise RuntimeError(f"could not resolve Android display size: {size}")
 
     width, height = map(int, match.groups())
-    x = round(width * 0.297)
-    y = round(height * 0.625)
+    focus_x = round(width * 0.5)
+    focus_y = round(height * 0.09)
+    adb("shell", "input", "tap", str(focus_x), str(focus_y))
+    time.sleep(0.15)
 
     # Keep pressing the stable primary-action slot long enough for the
     # safe-staged kobold to chase ~17.5m from its deterministic spawn. Before
@@ -255,9 +260,9 @@ def tap_primary_action_fast(server_log: Path | None = None):
     if server_log is not None and server_log.exists():
         log_offset = server_log.stat().st_size
 
-    deadline = time.monotonic() + 22
+    deadline = time.monotonic() + 24
     while time.monotonic() < deadline:
-        adb("shell", "input", "tap", str(x), str(y))
+        adb("shell", "input", "keyevent", "KEYCODE_1")
 
         if server_log is not None and server_log.exists():
             try:
@@ -270,7 +275,7 @@ def tap_primary_action_fast(server_log: Path | None = None):
             except OSError:
                 pass
 
-        time.sleep(0.4)
+        time.sleep(0.35)
 
     return False
 
@@ -291,6 +296,7 @@ def main():
         default="ws://10.0.2.2:10006",
     )
     parser.add_argument("--server-log")
+    parser.add_argument("--server-pid", type=int)
     args = parser.parse_args()
     server_log = Path(args.server_log) if args.server_log else None
 
@@ -333,13 +339,15 @@ def main():
     # several seconds taking screenshots or dumping the accessibility tree:
     # the seeded character reconnects inside an aggressive old_crypt pack.
     time.sleep(0.25)
-    server_kill_seen = tap_primary_action_fast(server_log)
+    server_kill_seen = drive_primary_action_fast(server_log)
 
-    # Stop generating input immediately after the authoritative kill. This
-    # preserves the REWARD/처치 event in the visible event log even if another
-    # kobold kills CryptMira a moment later.
-    if server_kill_seen:
-        time.sleep(1.5)
+    # The real kill has already happened before this point. Freeze only the
+    # external server simulation so a second kobold cannot overwrite the
+    # just-delivered REWARD state while slow UIAutomator captures evidence.
+    if server_kill_seen and args.server_pid:
+        time.sleep(0.2)
+        os.kill(args.server_pid, signal.SIGSTOP)
+        time.sleep(0.25)
 
     resolved = False
     combat_root = None
