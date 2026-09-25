@@ -1883,8 +1883,34 @@ Verification PR:
   - assert resolver exists before releasing the first queued send
 - fix commit on `idea2`:
   `916f1fe3cee8758a4b41444b761db249f1e4d0b9`
-- latest PR #7 head:
+- latest PR #7 head before emulator-launcher stabilization:
   `2ea870ca003938ecb7fd0dc28b96fdab9437cb96`
+- validation results:
+  - PR Quality `36106994861` — **SUCCESS**
+  - real pinned OpenMMO adapter `36106994927` — **SUCCESS**
+  - Android OpenMMO Client APK `36106994864` — **SUCCESS**
+  - Windows Tauri real OpenMMO acceptance `36106994840` — **SUCCESS**
+  - Android Runtime E2E `36106994873` — **FAILURE only in final emulator UI step**
+- Android runtime failure artifact was downloaded and inspected directly
+- evidence:
+  - taurin4's `Android OpenMMO Connection` screen was visibly rendered behind the system dialog
+  - UI XML foreground was `Pixel Launcher isn't responding`
+  - Android logcat contained no taurin4 fatal exception for this failure
+- root cause:
+  - emulator Pixel Launcher ANR overlay blocked UIAutomator from seeing the already-running
+    taurin4 WebView
+  - this is outside the application/protocol acceptance boundary
+- stabilization:
+  - resolve the installed taurin4 launcher activity with
+    `cmd package resolve-activity --brief`
+  - launch it directly with `am start -W -n`
+  - do not depend on Pixel Launcher for app startup
+  - while waiting for app UI, automatically dismiss unrelated Android
+    `isn't responding` dialogs by tapping `Close app` / `Wait`
+- fix commit on `idea2`:
+  `3b4507cc74d5c2e4c4350152b9b63984e9451359`
+- latest PR #7 head:
+  `e9b220b427a4cf174a0f197bddc60fbe0787d002`
 - first workflow lookup for that head returned no runs yet; no repeated polling was performed
 - current official Tauri v2 websocket guest binding was rechecked:
   - `WebSocket.connect(url)`
