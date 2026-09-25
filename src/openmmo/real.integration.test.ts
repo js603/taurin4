@@ -1043,23 +1043,23 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
           expect(currentDungeonMonster(session)).toBeDefined();
 
           if (!position) throw new Error("Seed staging lost player position");
-          const monsterDistances = (snapshot.semanticDestinations ?? [])
-            .filter(
-              (destination) =>
-                destination.kind === "monster" &&
-                destination.floorLevel === -1,
-            )
-            .map((destination) =>
+          // Validate isolation against the pinned deterministic spawn cells,
+          // not live semantic monster positions. The one in-range aggressive
+          // kobold is expected to move toward the staged player before this
+          // assertion runs, so live distances no longer represent the spawn
+          // isolation that the seed is intended to persist.
+          const spawnDistances = spawnPoints
+            .map((entry) =>
               Math.hypot(
-                position.x - destination.position.x,
-                position.z - destination.position.z,
+                position.x - entry.point.x,
+                position.z - entry.point.z,
               ),
             )
             .sort((a, b) => a - b);
 
-          expect(monsterDistances[0]).toBeLessThanOrEqual(20);
-          if (monsterDistances.length > 1) {
-            expect(monsterDistances[1]).toBeGreaterThan(20);
+          expect(spawnDistances[0]).toBeLessThanOrEqual(20);
+          if (spawnDistances.length > 1) {
+            expect(spawnDistances[1]).toBeGreaterThan(20);
           }
           return;
         }
