@@ -1608,7 +1608,7 @@ First M3-C implementation after M3-B closes:
 
 ### M3-C slice 1 — Android OpenMMO runtime transport + APK
 
-Status: **IMPLEMENTED-NOT-VERIFIED**
+Status: **IMPLEMENTED-CI-VERIFIED**
 
 Implementation candidate:
 
@@ -1649,7 +1649,14 @@ Dedicated CI:
   6. APK artifact upload
 - temporary PR: #6 `ci/idea2-m3c-android-openmmo-20260925`
 - probe head: `df37c8b4e6e30f4ce827d17220dcbd04bbba2cf1`
-- first workflow lookup returned no runs yet; no repeated polling was performed
+- Android OpenMMO Client run `36088687797` — **SUCCESS**
+- real pinned OpenMMO adapter run `36088687796` — **SUCCESS**
+- PR Quality run `36088687743` — **SUCCESS**
+- Windows Tauri regression run `36088687782` — **SUCCESS**
+- PR #6 closed without merging
+- recovery checkpoint:
+  - branch: `checkpoint/idea2-m3c-slice1-ci-verified-20260925`
+  - commit: `85108dc083a3ea9d2fd697c7d8608da223aa3821`
 
 M3-C slice 1 PASS boundary:
 
@@ -1676,6 +1683,82 @@ Android emulator / device
 → MONSTER / WORLD ENCOUNTER
 → touch combat
 → authoritative result
+```
+
+### M3-C slice 2 — Actual Android APK runtime acceptance
+
+Status: **IMPLEMENTED / VERIFICATION RUNNING**
+
+Purpose:
+
+Prove the Android APK itself, not only compilation, against the same pinned OpenMMO server.
+
+Implementation:
+
+- configurable real-dungeon seed account:
+  `OPENMMO_DUNGEON_ACCOUNT`
+- stable accessibility labels for:
+  - OpenMMO server input
+  - OpenMMO token input
+  - OpenMMO play button
+  - Character entry button
+  - OpenMMO GameScreen
+  - encounter/combat attention choices
+- `scripts/ci/android_openmmo_runtime_acceptance.py`
+  - installs the actual APK through ADB
+  - launches `com.js603.taurin4`
+  - drives the real Android UI through UIAutomator accessibility nodes
+  - enters `ws://10.0.2.2:10006`
+  - enters the real NPC token
+  - requires Character Lobby and persisted `CryptMira`
+  - enters the character
+  - requires `SERVER AUTHORITATIVE`
+  - requires a real `MONSTER` encounter/combat state
+  - clicks `살펴본다` when needed
+  - clicks the visible `빠른 공격` control
+  - requires visible authoritative kill/reward resolution
+  - captures screenshots, failure UI XML and Android logcat
+- `scripts/ci/run_android_openmmo_acceptance.sh`
+  - starts the exact pinned OpenMMO server on the CI host
+  - binds gameplay websocket to `0.0.0.0:10006`
+  - seeds `CryptMira` through the real old_crypt path under
+    `npc_idea2_player`
+  - Android Emulator reaches the host through the standard emulator host alias
+    `10.0.2.2`
+- `.github/workflows/idea2-android-openmmo-runtime.yml`
+  - exact pinned OpenMMO sparse checkout
+  - server build
+  - Node seed codec build
+  - browser codec build
+  - browser codec must be present inside the APK
+  - actual Android debug APK build
+  - hardware-accelerated Android Emulator
+  - actual APK installation and UI play acceptance
+  - screenshot/log/APK evidence upload
+
+Verification PR:
+
+- PR #7 — `ci/idea2-m3c-android-runtime-20260925`
+- probe head: `562cc6242cba33b343a134876fade4b91258f20c`
+- Android Runtime E2E run `36092671807` — latest status **queued**
+- PR Quality run `36092671756` — latest status **in_progress**
+- no repeated polling performed
+
+M3-C slice 2 PASS boundary:
+
+```text
+actual Android APK
+→ packaged pinned OpenMMO browser codec
+→ Android Tauri Rust websocket plugin
+→ emulator → host pinned OpenMMO server
+→ authenticate
+→ Character Lobby
+→ CryptMira
+→ EnterGame
+→ GameScreen
+→ MONSTER / encounter-combat state
+→ touch-equivalent UI actions
+→ authoritative combat result
 ```
 
 ### M3-C — Android real OpenMMO play client — NEXT AFTER M3-B
