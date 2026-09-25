@@ -1480,7 +1480,30 @@ Verification PR:
 - new method keeps server start → real old_crypt seed → actual Tauri/WebView2 acceptance
   inside one PowerShell step, guaranteeing the same server process lifetime
 - retry PR head: `d7e2057cd01bbc4d530a5b960989db73e65d8a19`
-- first lookup for that head returned no runs yet; no repeated polling was performed
+- run `36075153376` progressed through:
+  - pinned OpenMMO server build — PASS
+  - Node codec build — PASS
+  - browser codec build — PASS
+  - real Tauri debug app build — PASS
+  - tauri-driver install — PASS
+  - matching Edge WebDriver install — PASS
+- failure then occurred inside the combined seed/UI step because `CryptMira` died to a
+  real kobold before the UI acceptance began
+- server evidence confirms real auth, character creation, old_crypt entry, three real kobold
+  spawns and authentic dungeon door opens before that death
+- this is not treated as an app/runtime failure; it exposed that the full kill Gate was an
+  overly aggressive fixture for acceptance seeding
+- seed method is now split correctly:
+  - `OPENMMO_ACCEPTANCE_SEED_ONLY=1`
+  - enter real old_crypt
+  - reach a real semantic dungeon monster while alive
+  - stop before player-vs-kobold combat
+  - persist/disconnect
+  - let the actual Tauri/WebView2 UI perform the encounter and kill
+- seed implementation commit: `f052e1575d6e46e758ad80a10c4bf2db09f3bf52`
+- workflow commit: `bdce6fc6ff86a0ad02f53dcba6bbc10268b70d3b`
+- retry PR head: `8e8279f34f8f938a20e7349a7b79ccd453ecf15f`
+- first workflow lookup for the new head returned no runs yet; no repeated polling was performed
 
 M3-B must remain **IMPLEMENTED-CI-VERIFIED** until the Windows Tauri acceptance run itself
 finishes SUCCESS. A renderer-only success is not sufficient.
