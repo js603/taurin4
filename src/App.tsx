@@ -1,26 +1,18 @@
 import { useEffect, useState } from "react";
 import { GameScreen } from "./features/game/ui/GameScreen";
 import { OpenMmoBootstrap } from "./features/game/ui/OpenMmoBootstrap";
+import { isAndroidTauriRuntime, isTauriRuntime } from "./app/platformRuntime";
 import { resolveAppRuntimeMode } from "./app/runtimeMode";
 import {
   loadOpenMmoNativeLaunchConfig,
   type OpenMmoNativeLaunchConfig,
 } from "./openmmo/nativeLaunch";
 
-function isTauriRuntime() {
-  return (
-    (
-      window as Window & {
-        __TAURI_INTERNALS__?: unknown;
-      }
-    ).__TAURI_INTERNALS__ !== undefined
-  );
-}
-
 export default function App() {
   const explicitMode = resolveAppRuntimeMode(window.location.search);
+  const androidTauri = isAndroidTauriRuntime();
   const shouldProbeNative =
-    explicitMode !== "openmmo" && isTauriRuntime();
+    explicitMode !== "openmmo" && isTauriRuntime() && !androidTauri;
   const [nativeLaunchConfig, setNativeLaunchConfig] = useState<
     OpenMmoNativeLaunchConfig | null | undefined
   >(shouldProbeNative ? undefined : null);
@@ -40,7 +32,7 @@ export default function App() {
     };
   }, [shouldProbeNative]);
 
-  if (explicitMode === "openmmo") {
+  if (explicitMode === "openmmo" || androidTauri) {
     return <OpenMmoBootstrap />;
   }
 
