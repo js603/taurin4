@@ -1950,8 +1950,42 @@ Verification PR:
   - reward projection: `b25cf1a1314cf90a5d25c6012847937ccccbaac4`
   - state consistency: `9e26ca0238ea72e476a5870a747cdb4202c50ae7`
   - regression test: `16cbdcac4a629bd2b585385068c2a5b65efc3701`
-- latest PR #7 head:
+- latest PR #7 head before Android cadence stabilization:
   `da93a2452713dd245c9cd3fb8b8106e90946b62b`
+- validation results:
+  - Android OpenMMO Client APK `36126812639` — **SUCCESS**
+  - PR Quality `36126812654` — **SUCCESS**
+  - real pinned OpenMMO adapter `36126812659` — **SUCCESS**
+  - Windows Tauri real OpenMMO acceptance `36126812649` — **SUCCESS**
+  - Android Runtime E2E `36126812662` — **FAILURE in actual combat**
+- Android failure artifact was downloaded and inspected directly
+- Android evidence:
+  - actual APK launched
+  - Character Lobby and `CryptMira` entered
+  - `OpenMMO World` + `SERVER AUTHORITATIVE` visible
+  - real `MONSTER` entries visible
+  - visible `빠른 공격` control reached and tapped
+  - final UI: `HP 0/14`
+  - logs: repeated `공격 거부: 쓰러진 상태에서는 공격할 수 없다`
+  - server: CryptMira died to kobold before killing one
+- this differs from Windows, where the same server rules killed a kobold successfully
+- root cause in Android automation:
+  - every attack iteration performed a fresh expensive UIAutomator hierarchy dump
+  - effective attack cadence became much slower than OpenMMO's real player attack cooldown
+  - several aggressive kobolds therefore killed the player before enough attacks were sent
+- stabilization:
+  - after EnterGame, use a single hierarchy pass to verify
+    `OpenMMO World + SERVER AUTHORITATIVE + MONSTER + encounter/combat`
+  - find `빠른 공격` once
+  - reuse the button bounds without additional hierarchy dumps
+  - tap at ~1.42 s intervals to match the real ~1.38 s player attack cadence
+  - issue 6 taps max, then inspect the UI for `REWARD/처치`
+  - extra taps after kill are harmless because the reward primary action currently maps to
+    `COLLECT_REWARD`, which is intentionally a no-op
+- fix commit on `idea2`:
+  `cb15179b7c36d8b8b8654a029b532e603d3ea966`
+- latest PR #7 head:
+  `cdf085e104439011cf64579e2455b5b1d70139d3`
 - first workflow lookup for that head returned no runs yet; no repeated polling was performed
 - current official Tauri v2 websocket guest binding was rechecked:
   - `WebSocket.connect(url)`
