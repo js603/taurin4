@@ -308,8 +308,8 @@ export function GameScreen({
           </div>
         ) : null}
 
-        <footer className="status-bar" aria-label={openMmoStateLabel}>
-          <span>
+        <footer className="status-bar">
+          <span aria-label={openMmoStateLabel}>
             HP {state.player.hp}/{state.player.maxHp} · MP {state.player.mp}/
             {state.player.maxMp}
           </span>
