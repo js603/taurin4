@@ -2618,3 +2618,28 @@ Paste or send this in the new conversation:
   - Android OpenMMO Lifecycle E2E `36150478248` — **IN PROGRESS**
   - Android Runtime regression `36150478052` — **IN PROGRESS**
 - strict no-polling rule applied after this checkpoint
+
+
+### M3-C Slice 3 first verification — accessibility instrumentation regression
+- verification head:
+  `68507b70b7bd09230650e5cff3040f6747fe6dd8`
+- results:
+  - PR Quality `36150478144` — **SUCCESS**
+  - Windows Acceptance `36150477966` — **SUCCESS**
+  - real OpenMMO adapter `36150478234` — **SUCCESS**
+  - Android Lifecycle E2E `36150478248` — **FAILURE**
+  - Android Runtime regression `36150478052` — **FAILURE**
+- both Android failures shared the same instrumentation regression
+- root cause:
+  - Slice 3 added an authoritative player-state `aria-label` to the entire `status-bar` footer
+  - Android WebView accessibility therefore exposed the footer as one labeled node
+  - the existing child marker `SERVER AUTHORITATIVE` was no longer independently visible
+  - runtime/lifecycle drivers timed out on that marker even though the actual GameScreen had loaded
+- correction:
+  - remove the state label from the footer container
+  - attach the state label only to the HP/MP span
+  - preserve the sibling `SERVER AUTHORITATIVE` accessibility node unchanged
+  - lifecycle still gets `HP / MP / FLOOR / X / Z` from the dedicated state span
+- correction commit on verification branch:
+  `b4df03771825c488dbfd17b7e10c0fd37d9421eb`
+- first workflow lookup for the corrected head returned no runs yet; no repeated polling performed
