@@ -1778,8 +1778,33 @@ Verification PR:
   3. require both OpenMMO resource paths inside the native library
 - fix commit on `idea2`: `26003f8d34cbd1e41ea7cd32f96bd841090289a9`
 - latest PR #7 head: `f3335c3f576cfdebd054d2f162395cb6530e1161`
-- Android Runtime E2E run `36095925953` — latest status **queued**
-- PR Quality run `36095925966` — latest status **queued**
+- Android Runtime E2E run `36095925953` — **FAILURE at final runtime step**
+- PR Quality run `36095925966` — **SUCCESS**
+- runtime run progressed through:
+  - taurin4 quality — PASS
+  - pinned OpenMMO server build — PASS
+  - Node codec build — PASS
+  - browser codec build — PASS
+  - Android init — PASS
+  - actual debug APK build — PASS
+  - embedded pinned codec verification — PASS
+  - KVM / Android Emulator boot — PASS
+- failure occurred before APK installation because the OpenMMO server was started with the
+  taurin4 repository root as its working directory
+- the server itself reached `WebSocket server ready for connections` on
+  `ws://0.0.0.0:10006`, but wrote `./data/npc_token` relative to the wrong working directory
+- the acceptance readiness loop correctly required
+  `openmmo/data/npc_token`, so it timed out despite the server being healthy
+- fix:
+  - launch the pinned server from `$OPENMMO_DIR`
+  - preserve logs and terrain path exactly as before
+  - server-generated DB/token now live in the same paths used by the proven Windows/real-server flows
+- fix commit on `idea2`:
+  `1eb9c5e81af3728a5007b6be3dce532a39c6bf2f`
+- latest PR #7 head:
+  `999871a1167571e5c66c6b18730323703637a6f3`
+- Android Runtime E2E run `36097102662` — latest status **in_progress**
+- PR Quality run `36097102634` — latest status **in_progress**
 - no repeated polling performed
 - current official Tauri v2 websocket guest binding was rechecked:
   - `WebSocket.connect(url)`
