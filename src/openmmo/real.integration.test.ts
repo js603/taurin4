@@ -12,6 +12,7 @@ import { WebSocketOpenMmoTransport } from "./transport";
 const wasmModulePath = process.env.OPENMMO_WASM_MODULE;
 const serverUrl = process.env.OPENMMO_SERVER_URL;
 const npcToken = process.env.OPENMMO_NPC_TOKEN;
+const acceptanceSeedOnly = process.env.OPENMMO_ACCEPTANCE_SEED_ONLY === "1";
 const enabled = Boolean(wasmModulePath && serverUrl && npcToken);
 
 function waitForConnected(adapter: OpenMmoAdapter, timeoutMs = 5_000) {
@@ -963,6 +964,13 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
           () => Boolean(currentDungeonMonster(session)),
           10_000,
         );
+
+        if (acceptanceSeedOnly) {
+          expect(session.getSnapshot().player.floorLevel).toBe(-1);
+          expect(session.getSnapshot().player.hp).toBeGreaterThan(0);
+          expect(currentDungeonMonster(session)).toBeDefined();
+          return;
+        }
 
         const witnessedEncounter = encounterWitness.value;
         expect(witnessedEncounter).not.toBeNull();
