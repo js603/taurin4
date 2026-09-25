@@ -2371,3 +2371,29 @@ Paste or send this in the new conversation:
 > CI polling. Keep LocalGameSession working, preserve the real OpenMMO regression Gate,
 > and update the MASTER RECORD after material progress.
 
+
+
+### M3-C Slice 2 verification correction — stale PR seed assertion
+- verification head before correction:
+  `ef261747ae560eb9a9828176678555bf306b1c0d`
+- observed results:
+  - real pinned OpenMMO adapter `36132784634` — **SUCCESS**
+  - Android OpenMMO Client APK `36132784671` — **SUCCESS**
+  - PR Quality `36132784850` — **SUCCESS**
+  - Windows Acceptance `36132784773` — **FAILURE during seed assertion**
+  - Android Runtime E2E `36132784700` — **FAILURE during seed assertion**
+- both Windows and Android failed before actual UI combat because the PR branch was still
+  validating live semantic monster positions:
+  `expected ~13m to be greater than 20m`
+- root cause:
+  - `idea2` already contained the corrected deterministic-spawn assertion
+  - PR #7's `src/openmmo/real.integration.test.ts` was one revision behind
+  - aggressive kobolds had already moved toward CryptMira, so live semantic distances
+    no longer represented the intended persisted staging geometry
+- correction:
+  - synchronized PR #7 `real.integration.test.ts` byte-for-byte with `idea2`
+  - staging isolation is now validated against pinned deterministic spawn points, not
+    live chasing-monster positions
+- latest PR #7 head:
+  `57d310bd4a44231e84ea380ae65655bc088e4e61`
+- first workflow lookup for that head returned no runs yet; no repeated polling was performed
