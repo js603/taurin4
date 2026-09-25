@@ -280,47 +280,73 @@ def main():
     enter = wait_node(text="Enter character CryptMira", timeout=15)
     tap_node(enter)
 
-    wait_node(text="OpenMMO World", timeout=35)
-    wait_node(contains_text="SERVER AUTHORITATIVE", timeout=15)
-    screenshot("04-android-game-screen")
-
     deadline = time.monotonic() + 35
+    combat_root = None
     while time.monotonic() < deadline:
-        if ui_contains("MONSTER") and (
-            ui_contains("WORLD ENCOUNTER")
-            or ui_contains("Attention action 살펴본다")
-            or ui_contains("Attention action 빠른 공격")
-        ):
+        root, _ = dump_ui()
+        if dismiss_blocking_system_dialog(root):
+            continue
+
+        has_world = find_node(root, text="OpenMMO World") is not None
+        has_authority = (
+            find_node(root, contains_text="SERVER AUTHORITATIVE") is not None
+        )
+        has_monster = find_node(root, contains_text="MONSTER") is not None
+        has_entry = (
+            find_node(root, contains_text="WORLD ENCOUNTER") is not None
+            or find_node(root, text="Attention action 살펴본다") is not None
+            or find_node(root, text="Attention action 빠른 공격") is not None
+        )
+
+        if has_world and has_authority and has_monster and has_entry:
+            combat_root = root
             break
-        time.sleep(0.5)
-    else:
+        time.sleep(0.2)
+
+    if combat_root is None:
         raise TimeoutError(
             "real Android GameScreen never exposed a MONSTER encounter/combat state"
         )
 
+    screenshot("04-android-game-screen")
     screenshot("05-android-monster-encounter")
 
-    root, _ = dump_ui()
-    investigate = find_node(root, text="Attention action 살펴본다")
+    investigate = find_node(
+        combat_root,
+        text="Attention action 살펴본다",
+    )
     if investigate is not None:
         tap_node(investigate)
 
-    attack_seen = wait_node(text="Attention action 빠른 공격", timeout=20)
+    attack_seen = wait_node(
+        text="Attention action 빠른 공격",
+        timeout=12,
+    )
     if attack_seen is None:
         raise RuntimeError("Android combat did not expose the attack control")
 
+    # UIAutomator hierarchy dumps are relatively expensive on the emulator.
+    # Once the visible attack control is found, reuse its stable bounds and
+    # send attacks at the real server cadence instead of re-dumping the tree
+    # before every tap. Reward's primary button occupies the same interaction
+    # area and COLLECT_REWARD is currently a no-op, so extra taps after a kill
+    # do not erase the authoritative reward state.
+    attack_x, attack_y = parse_bounds(attack_seen.attrib["bounds"])
+    for _ in range(6):
+        adb("shell", "input", "tap", str(attack_x), str(attack_y))
+        time.sleep(1.42)
+
     resolved = False
-    for _ in range(10):
-        if ui_contains("REWARD") or ui_contains("처치"):
+    deadline = time.monotonic() + 8
+    while time.monotonic() < deadline:
+        root, _ = dump_ui()
+        if (
+            find_node(root, contains_text="REWARD") is not None
+            or find_node(root, contains_text="처치") is not None
+        ):
             resolved = True
             break
-
-        attack = wait_node(text="Attention action 빠른 공격", timeout=12)
-        tap_node(attack)
-        time.sleep(1.5)
-
-    if not resolved:
-        resolved = ui_contains("REWARD") or ui_contains("처치")
+        time.sleep(0.2)
 
     screenshot("06-android-combat-result")
     if not resolved:
