@@ -1909,8 +1909,49 @@ Verification PR:
     `isn't responding` dialogs by tapping `Close app` / `Wait`
 - fix commit on `idea2`:
   `3b4507cc74d5c2e4c4350152b9b63984e9451359`
-- latest PR #7 head:
+- latest PR #7 head before reward-projection correction:
   `e9b220b427a4cf174a0f197bddc60fbe0787d002`
+- validation results:
+  - real pinned OpenMMO adapter `36121623285` — **SUCCESS**
+  - PR Quality `36121623040` — **SUCCESS**
+  - Android OpenMMO Client APK `36121622991` — **SUCCESS**
+  - Windows Tauri real OpenMMO acceptance `36121623120` — **FAILURE at kill/reward observation**
+  - Android Runtime E2E `36121623043` — **FAILURE at kill/reward observation**
+- both failing runs reached real combat
+- Windows server evidence:
+  - actual Tauri UI entered `OpenMMO World`
+  - multiple real `MONSTER` destinations were visible
+  - `빠른 공격` was visible and used
+  - server recorded `Player CryptMira killed kobold`
+  - about 3 seconds later remaining kobolds killed CryptMira
+- Android also reached visible attack controls but did not observe `REWARD/처치`
+- root cause in semantic projection:
+  - `MonsterDead` only produced REWARD if the dead monster was still
+    `state.combat.enemy`
+  - with several aggressive kobolds, current combat context could drift before the
+    authoritative death event was projected
+  - the actual kill therefore degraded to `주변 몬스터가 쓰러졌다`
+  - the server still granted kill XP with `XpGained.monster_id`
+- correction:
+  - remember recently dead monster names
+  - parse optional authoritative `XpGained.monster_id`
+  - when the server awards this player XP for that dead monster, promote it to
+    `phase=reward` even if combat target drifted
+  - preserve the existing immediate `MonsterDead` reward path when the current
+    combat target still matches
+  - do not infer ownership merely from the last local attack; attribution comes from
+    the server's XP event
+- regression test:
+  - combat is intentionally focused on `kobold-b`
+  - `kobold-a` dies as a non-current target
+  - only `XpGained { monster_id: "kobold-a" }` is allowed to promote
+    `Kobold 처치` REWARD
+- fix commits on `idea2`:
+  - reward projection: `b25cf1a1314cf90a5d25c6012847937ccccbaac4`
+  - state consistency: `9e26ca0238ea72e476a5870a747cdb4202c50ae7`
+  - regression test: `16cbdcac4a629bd2b585385068c2a5b65efc3701`
+- latest PR #7 head:
+  `da93a2452713dd245c9cd3fb8b8106e90946b62b`
 - first workflow lookup for that head returned no runs yet; no repeated polling was performed
 - current official Tauri v2 websocket guest binding was rechecked:
   - `WebSocket.connect(url)`
