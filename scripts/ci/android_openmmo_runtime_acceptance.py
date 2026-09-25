@@ -75,6 +75,25 @@ def find_node(
     return None
 
 
+def find_edit_text_for_label(root: ET.Element, label: str):
+    # Android WebView exposes HTML <label><span>TEXT</span><input/></label>
+    # as a container with a TextView followed by an EditText. aria-label on
+    # EditText is not surfaced as content-desc in UIAutomator.
+    for container in root.iter("node"):
+        children = list(container)
+        has_label = any(
+            child.attrib.get("text", "") == label for child in children
+        )
+        if not has_label:
+            continue
+
+        for child in children:
+            if child.attrib.get("class") == "android.widget.EditText":
+                return child
+
+    return None
+
+
 def wait_node(
     *,
     desc: str | None = None,
@@ -111,8 +130,26 @@ def tap_node(node: ET.Element):
     adb("shell", "input", "tap", str(x), str(y))
 
 
-def set_field(desc: str, value: str):
-    node = wait_node(desc=desc, timeout=20)
+def set_field(label: str, value: str):
+    deadline = time.monotonic() + 20
+    node = None
+    last_xml = ""
+    while time.monotonic() < deadline:
+        root, last_xml = dump_ui()
+        node = find_edit_text_for_label(root, label)
+        if node is not None:
+            break
+        time.sleep(0.5)
+
+    if node is None:
+        ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
+        (ARTIFACT_DIR / "field-timeout-window.xml").write_text(
+            last_xml, encoding="utf-8"
+        )
+        raise TimeoutError(
+            f"timed out waiting for Android EditText after label: {label}"
+        )
+
     tap_node(node)
     time.sleep(0.2)
     # Clear any pre-existing value without depending on desktop keyboard shortcuts.
@@ -174,21 +211,21 @@ def main():
     wait_node(contains_text="Android OpenMMO Connection", timeout=30)
     screenshot("01-android-openmmo-entry")
 
-    set_field("OpenMMO server websocket", args.server)
-    set_field("OpenMMO token", args.token)
+    set_field("SERVER WEBSOCKET · LAN / REMOTE", args.server)
+    set_field("LOCAL AUTH TOKEN", args.token)
     screenshot("02-android-openmmo-configured")
 
-    play = wait_node(desc="OpenMMO play", timeout=15)
+    play = wait_node(text="OpenMMO play", timeout=15)
     tap_node(play)
 
-    wait_node(desc="OpenMMO character lobby", timeout=45)
+    wait_node(text="Character Lobby", timeout=45)
     wait_node(contains_text="CryptMira", timeout=15)
     screenshot("03-android-character-lobby")
 
-    enter = wait_node(desc="Enter character CryptMira", timeout=15)
+    enter = wait_node(text="Enter character CryptMira", timeout=15)
     tap_node(enter)
 
-    wait_node(desc="OpenMMO game screen", timeout=35)
+    wait_node(text="OpenMMO World", timeout=35)
     wait_node(contains_text="SERVER AUTHORITATIVE", timeout=15)
     screenshot("04-android-game-screen")
 
@@ -209,11 +246,11 @@ def main():
     screenshot("05-android-monster-encounter")
 
     root, _ = dump_ui()
-    investigate = find_node(root, desc="Attention action 살펴본다")
+    investigate = find_node(root, text="Attention action 살펴본다")
     if investigate is not None:
         tap_node(investigate)
 
-    attack_seen = wait_node(desc="Attention action 빠른 공격", timeout=20)
+    attack_seen = wait_node(text="Attention action 빠른 공격", timeout=20)
     if attack_seen is None:
         raise RuntimeError("Android combat did not expose the attack control")
 
@@ -223,7 +260,7 @@ def main():
             resolved = True
             break
 
-        attack = wait_node(desc="Attention action 빠른 공격", timeout=12)
+        attack = wait_node(text="Attention action 빠른 공격", timeout=12)
         tap_node(attack)
         time.sleep(1.5)
 
