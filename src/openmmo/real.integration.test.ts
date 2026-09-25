@@ -900,35 +900,74 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
         // Walk toward the deterministic nearest spawn before requiring an AOI
         // monster, otherwise a valid layout can have every fresh spawn outside
         // the initial view.
-        const nearestSpawn = firstFloor.spawns
-          .map((spawn) => ({
-            spawn,
-            point: cellCenter(constants, { x: spawn.x, z: spawn.z }),
-          }))
-          .sort(
-            (a, b) =>
-              Math.hypot(a.point.x - exit.x, a.point.z - exit.z) -
-              Math.hypot(b.point.x - exit.x, b.point.z - exit.z),
-          )[0];
+        const spawnPoints = firstFloor.spawns.map((spawn, index) => ({
+          spawn,
+          index,
+          point: cellCenter(constants, { x: spawn.x, z: spawn.z }),
+        }));
+        const nearestSpawn = [...spawnPoints].sort(
+          (a, b) =>
+            Math.hypot(a.point.x - exit.x, a.point.z - exit.z) -
+            Math.hypot(b.point.x - exit.x, b.point.z - exit.z),
+        )[0];
         expect(nearestSpawn).toBeDefined();
         if (!nearestSpawn) throw new Error("old_crypt floor 1 has no spawn");
+
+        // Do not park the persisted test character inside the three-kobold
+        // spawn cluster. Stage just inside one kobold's 20m chase range while
+        // maximizing separation from every other deterministic spawn. The
+        // nearest kobold then runs out of the pack toward the player, giving
+        // both the real integration test and actual desktop/mobile UI a
+        // server-authentic 1v1 window without changing monster stats or AI.
+        const stagingRadius = 17.5;
+        const stagingGoals = Array.from({ length: 24 }, (_, index) => {
+          const angle = (Math.PI * 2 * index) / 24;
+          const point = {
+            x: nearestSpawn.point.x + Math.cos(angle) * stagingRadius,
+            z: nearestSpawn.point.z + Math.sin(angle) * stagingRadius,
+          };
+          const minOtherDistance = Math.min(
+            ...spawnPoints
+              .filter((entry) => entry.index !== nearestSpawn.index)
+              .map((entry) =>
+                Math.hypot(
+                  point.x - entry.point.x,
+                  point.z - entry.point.z,
+                ),
+              ),
+          );
+          return { point, minOtherDistance };
+        })
+          .filter((candidate) => candidate.minOtherDistance > 21)
+          .sort((a, b) => b.minOtherDistance - a.minOtherDistance)
+          .map((candidate) => candidate.point);
+
+        expect(stagingGoals.length).toBeGreaterThan(0);
 
         for (let scoutPass = 0; scoutPass <= doors.length; scoutPass += 1) {
           const position = session.getSnapshot().player.position;
           if (!position) throw new Error("Lost player position while scouting");
 
-          const scoutPath = pathResult(
-            wasm.passability_find_path_budget(
-              position.x,
-              position.z,
-              constants.floorIndexBase,
-              nearestSpawn.point.x,
-              nearestSpawn.point.z,
-              constants.floorIndexBase,
-              constants.pathMaxNodes,
-            ),
-          );
-          if (scoutPath.found && scoutPath.waypoints.length > 0) {
+          let scoutPath: PathResult | null = null;
+          for (const goal of stagingGoals) {
+            const candidate = pathResult(
+              wasm.passability_find_path_budget(
+                position.x,
+                position.z,
+                constants.floorIndexBase,
+                goal.x,
+                goal.z,
+                constants.floorIndexBase,
+                constants.pathMaxNodes,
+              ),
+            );
+            if (candidate.found && candidate.waypoints.length > 0) {
+              scoutPath = candidate;
+              break;
+            }
+          }
+
+          if (scoutPath) {
             await queueDungeonPath(adapter, session, wasm, scoutPath, 25_000);
             break;
           }
@@ -996,9 +1035,32 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
         );
 
         if (acceptanceSeedOnly) {
-          expect(session.getSnapshot().player.floorLevel).toBe(-1);
-          expect(session.getSnapshot().player.hp).toBeGreaterThan(0);
+          const snapshot = session.getSnapshot();
+          const position = snapshot.player.position;
+          expect(snapshot.player.floorLevel).toBe(-1);
+          expect(snapshot.player.hp).toBeGreaterThan(0);
+          expect(position).toBeDefined();
           expect(currentDungeonMonster(session)).toBeDefined();
+
+          if (!position) throw new Error("Seed staging lost player position");
+          const monsterDistances = (snapshot.semanticDestinations ?? [])
+            .filter(
+              (destination) =>
+                destination.kind === "monster" &&
+                destination.floorLevel === -1,
+            )
+            .map((destination) =>
+              Math.hypot(
+                position.x - destination.position.x,
+                position.z - destination.position.z,
+              ),
+            )
+            .sort((a, b) => a - b);
+
+          expect(monsterDistances[0]).toBeLessThanOrEqual(20);
+          if (monsterDistances.length > 1) {
+            expect(monsterDistances[1]).toBeGreaterThan(20);
+          }
           return;
         }
 
@@ -1030,6 +1092,36 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
         expect(["encounter", "combat"]).toContain(currentPhase);
         if (currentPhase === "combat") {
           expect(session.getSnapshot().combat?.enemy.id).toBe(targetId);
+        }
+
+        // At the safe staging point, let the one in-range aggressive kobold
+        // come to the player instead of walking the player back into the
+        // three-spawn cluster. This keeps the combat fully server-driven while
+        // removing unrelated multi-kobold survival RNG from a 1-kill gate.
+        try {
+          await waitForSession(
+            session,
+            () => {
+              const target = currentDungeonMonster(
+                session,
+                targetSemanticId,
+              );
+              return Boolean(
+                session.getSnapshot().player.hp <= 0 ||
+                  (target && target.distanceMeters <= 2.2),
+              );
+            },
+            8_000,
+          );
+        } catch {
+          // Fallback below will use authoritative movement if the monster did
+          // not close the distance in time.
+        }
+
+        if (session.getSnapshot().player.hp <= 0) {
+          throw new Error(
+            "Dungeon test character died before isolated kobold combat",
+          );
         }
 
         const findMonsterPath = () => {
