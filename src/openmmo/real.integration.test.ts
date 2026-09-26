@@ -1239,7 +1239,12 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
         const combatStart = observed.length;
         let killed = false;
 
-        for (let attack = 0; attack < 10; attack += 1) {
+        // Drive input more frequently than the authoritative 1.38s player
+        // attack cadence. This does not change combat rules: OpenMMO rejects
+        // early commands and decides exactly which attacks are legal. It only
+        // prevents CI scheduling jitter from missing a legal attack window in
+        // the real 1v1 regression.
+        for (let attackInput = 0; attackInput < 40; attackInput += 1) {
           if (
             observed
               .slice(combatStart)
@@ -1260,7 +1265,7 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
           }
 
           session.command({ type: "ATTACK" });
-          await delay(1_500);
+          await delay(350);
         }
 
         if (!killed) {

@@ -142,6 +142,16 @@ export function GameScreen({
   const card = getAttentionCard(state);
   const currentLocation = LOCATIONS[state.currentLocationId];
   const openMmo = state.source === "openmmo";
+  const openMmoStateLabel = openMmo
+    ? [
+        "OpenMMO player state",
+        "HP " + state.player.hp + "/" + state.player.maxHp,
+        "MP " + state.player.mp + "/" + state.player.maxMp,
+        "FLOOR " + state.player.floorLevel,
+        "X " + (state.player.position?.x.toFixed(2) ?? "NA"),
+        "Z " + (state.player.position?.z.toFixed(2) ?? "NA"),
+      ].join(" · ")
+    : undefined;
 
   useEffect(() => {
     session.start();
@@ -299,7 +309,7 @@ export function GameScreen({
         ) : null}
 
         <footer className="status-bar">
-          <span>
+          <span aria-label={openMmoStateLabel}>
             HP {state.player.hp}/{state.player.maxHp} · MP {state.player.mp}/
             {state.player.maxMp}
           </span>
