@@ -1,0 +1,117 @@
+name: idea2 M3-D Android OpenMMO Server Feasibility
+
+on:
+  pull_request:
+    branches: ["idea2"]
+    paths:
+      - ".github/workflows/idea2-m3d-android-server-feasibility.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-server-cross-compile:
+    name: Pinned OpenMMO server Android cross-compile
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout taurin4
+        uses: actions/checkout@v5
+
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Resolve Android NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          if [ ! -d "$ANDROID_HOME/ndk" ] || [ -z "$(ls -A "$ANDROID_HOME/ndk" 2>/dev/null)" ]; then
+            NDK_PACKAGE="$(sdkmanager --list | awk '/^  ndk;[0-9]/{print $1}' | sort -V | tail -n 1)"
+            test -n "$NDK_PACKAGE"
+            sdkmanager "$NDK_PACKAGE"
+          fi
+          NDK_VERSION="$(ls -1 "$ANDROID_HOME/ndk" | sort -V | tail -n 1)"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          echo "Using NDK $NDK_VERSION"
+
+      - name: Checkout exact pinned OpenMMO
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init openmmo
+          git -C openmmo remote add origin https://github.com/Julian-adv/OpenMMO.git
+          git -C openmmo sparse-checkout init --cone
+          git -C openmmo sparse-checkout set \
+            .cargo \
+            server \
+            shared \
+            terrain \
+            tools \
+            data-src \
+            data \
+            client/public/models/objects
+          git -C openmmo fetch --depth=1 --filter=blob:none origin 950e081c178d920c10c51f2d31f60c1b3383c925
+          git -C openmmo checkout --detach FETCH_HEAD
+          test "$(git -C openmmo rev-parse HEAD)" = "950e081c178d920c10c51f2d31f60c1b3383c925"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: openmmo
+
+      - name: Configure Android linker
+        shell: bash
+        run: |
+          set -euo pipefail
+          HOST_TAG=linux-x86_64
+          TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$HOST_TAG/bin"
+          API=26
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$TOOLCHAIN/aarch64-linux-android${API}-clang" >> "$GITHUB_ENV"
+          echo "CC_aarch64_linux_android=$TOOLCHAIN/aarch64-linux-android${API}-clang" >> "$GITHUB_ENV"
+          echo "AR_aarch64_linux_android=$TOOLCHAIN/llvm-ar" >> "$GITHUB_ENV"
+          test -x "$TOOLCHAIN/aarch64-linux-android${API}-clang"
+
+      - name: Check pinned shared and terrain crates for Android
+        working-directory: openmmo
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo check -p onlinerpg-shared --target aarch64-linux-android --locked
+          cargo check -p onlinerpg-terrain --target aarch64-linux-android --locked
+
+      - name: Check original pinned server executable for Android
+        working-directory: openmmo
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo check -p onlinerpg-server --target aarch64-linux-android --locked
+
+      - name: Build original pinned server executable for Android
+        working-directory: openmmo
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build -p onlinerpg-server --target aarch64-linux-android --locked
+          SERVER=target/aarch64-linux-android/debug/onlinerpg-server
+          test -f "$SERVER"
+          file "$SERVER"
+          readelf -h "$SERVER" | tee "$GITHUB_WORKSPACE/android-server-elf.txt"
+          ls -lh "$SERVER" | tee "$GITHUB_WORKSPACE/android-server-size.txt"
+
+      - name: Upload feasibility evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: idea2-m3d-android-server-feasibility
+          path: |
+            android-server-elf.txt
+            android-server-size.txt
+          if-no-files-found: warn
+          retention-days: 14
