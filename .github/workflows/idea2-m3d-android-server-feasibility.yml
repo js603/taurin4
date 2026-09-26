@@ -5,6 +5,7 @@ on:
     branches: ["idea2"]
     paths:
       - ".github/workflows/idea2-m3d-android-server-feasibility.yml"
+      - "scripts/ci/android_openmmo_server_runtime_probe.sh"
   workflow_dispatch:
 
 permissions:
@@ -12,12 +13,17 @@ permissions:
 
 jobs:
   android-server-cross-compile:
-    name: Pinned OpenMMO server Android cross-compile
+    name: Pinned OpenMMO server Android compile + runtime
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 55
     steps:
       - name: Checkout taurin4
         uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
 
       - uses: android-actions/setup-android@v4
         with:
@@ -25,7 +31,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android
+          targets: aarch64-linux-android,x86_64-linux-android
 
       - name: Resolve Android NDK
         shell: bash
@@ -40,6 +46,7 @@ jobs:
           NDK_VERSION="$(ls -1 "$ANDROID_HOME/ndk" | sort -V | tail -n 1)"
           echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          echo "ANDROID_LLVM_TOOLCHAIN=$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_ENV"
           echo "Using NDK $NDK_VERSION"
 
       - name: Checkout exact pinned OpenMMO
@@ -72,19 +79,21 @@ jobs:
         with:
           workspaces: openmmo
 
-      - name: Configure Android linker
+      - name: Configure Android linkers
         shell: bash
         run: |
           set -euo pipefail
-          HOST_TAG=linux-x86_64
-          TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$HOST_TAG/bin"
           API=26
-          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$TOOLCHAIN/aarch64-linux-android${API}-clang" >> "$GITHUB_ENV"
-          echo "CC_aarch64_linux_android=$TOOLCHAIN/aarch64-linux-android${API}-clang" >> "$GITHUB_ENV"
-          echo "AR_aarch64_linux_android=$TOOLCHAIN/llvm-ar" >> "$GITHUB_ENV"
-          test -x "$TOOLCHAIN/aarch64-linux-android${API}-clang"
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$ANDROID_LLVM_TOOLCHAIN/aarch64-linux-android${API}-clang" >> "$GITHUB_ENV"
+          echo "CC_aarch64_linux_android=$ANDROID_LLVM_TOOLCHAIN/aarch64-linux-android${API}-clang" >> "$GITHUB_ENV"
+          echo "AR_aarch64_linux_android=$ANDROID_LLVM_TOOLCHAIN/llvm-ar" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=$ANDROID_LLVM_TOOLCHAIN/x86_64-linux-android${API}-clang" >> "$GITHUB_ENV"
+          echo "CC_x86_64_linux_android=$ANDROID_LLVM_TOOLCHAIN/x86_64-linux-android${API}-clang" >> "$GITHUB_ENV"
+          echo "AR_x86_64_linux_android=$ANDROID_LLVM_TOOLCHAIN/llvm-ar" >> "$GITHUB_ENV"
+          test -x "$ANDROID_LLVM_TOOLCHAIN/aarch64-linux-android${API}-clang"
+          test -x "$ANDROID_LLVM_TOOLCHAIN/x86_64-linux-android${API}-clang"
 
-      - name: Check pinned shared and terrain crates for Android
+      - name: Check pinned shared and terrain crates for Android ARM64
         working-directory: openmmo
         shell: bash
         run: |
@@ -92,14 +101,14 @@ jobs:
           cargo check -p onlinerpg-shared --target aarch64-linux-android --locked
           cargo check -p onlinerpg-terrain --target aarch64-linux-android --locked
 
-      - name: Check original pinned server executable for Android
+      - name: Check original pinned server executable for Android ARM64
         working-directory: openmmo
         shell: bash
         run: |
           set -euo pipefail
           cargo check -p onlinerpg-server --target aarch64-linux-android --locked
 
-      - name: Build original pinned server executable for Android
+      - name: Build original pinned server executable for Android ARM64
         working-directory: openmmo
         shell: bash
         run: |
@@ -108,8 +117,47 @@ jobs:
           SERVER=target/aarch64-linux-android/debug/onlinerpg-server
           test -f "$SERVER"
           file "$SERVER"
-          readelf -h "$SERVER" | tee "$GITHUB_WORKSPACE/android-server-elf.txt"
-          ls -lh "$SERVER" | tee "$GITHUB_WORKSPACE/android-server-size.txt"
+          readelf -h "$SERVER" | tee "$GITHUB_WORKSPACE/android-server-arm64-elf.txt"
+          ls -lh "$SERVER" | tee "$GITHUB_WORKSPACE/android-server-arm64-size.txt"
+
+      - name: Build emulator-matching original server executable
+        working-directory: openmmo
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build -p onlinerpg-server --target x86_64-linux-android --locked
+          SERVER=target/x86_64-linux-android/debug/onlinerpg-server
+          RUNTIME_SERVER="$GITHUB_WORKSPACE/android-openmmo-server-x86_64"
+          test -f "$SERVER"
+          cp "$SERVER" "$RUNTIME_SERVER"
+          "$ANDROID_LLVM_TOOLCHAIN/llvm-strip" "$RUNTIME_SERVER"
+          chmod 755 "$RUNTIME_SERVER"
+          file "$RUNTIME_SERVER" | tee "$GITHUB_WORKSPACE/android-server-runtime-file.txt"
+          readelf -h "$RUNTIME_SERVER" | tee "$GITHUB_WORKSPACE/android-server-runtime-elf.txt"
+          ls -lh "$RUNTIME_SERVER" | tee "$GITHUB_WORKSPACE/android-server-runtime-size.txt"
+
+      - name: Enable KVM for Android Emulator
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm || true
+          sudo chmod 666 /dev/kvm || true
+
+      - name: Execute original pinned server inside Android and probe WebSocket
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          cores: 2
+          ram-size: 4096M
+          heap-size: 512
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: OPENMMO_DIR="$GITHUB_WORKSPACE/openmmo" ANDROID_SERVER_BIN="$GITHUB_WORKSPACE/android-openmmo-server-x86_64" bash scripts/ci/android_openmmo_server_runtime_probe.sh
 
       - name: Upload feasibility evidence
         if: always()
@@ -117,7 +165,11 @@ jobs:
         with:
           name: idea2-m3d-android-server-feasibility
           path: |
-            android-server-elf.txt
-            android-server-size.txt
+            android-server-arm64-elf.txt
+            android-server-arm64-size.txt
+            android-server-runtime-file.txt
+            android-server-runtime-elf.txt
+            android-server-runtime-size.txt
+            artifacts/android-openmmo-server-probe/**
           if-no-files-found: warn
           retention-days: 14
