@@ -126,7 +126,21 @@ jobs:
         run: npm run tauri -- android init --ci
 
       - name: Build actual Android APK with authoritative core linked
-        run: npm run tauri -- android build --debug --apk --ci --features embedded-openmmo --target aarch64
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p artifacts/m3d-tauri-link
+          set +e
+          npm run tauri -- android build --debug --apk --ci --features embedded-openmmo --target aarch64 \
+            2>&1 | tee artifacts/m3d-tauri-link/android-apk-build.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo '::group::Android APK build failure tail'
+            tail -n 250 artifacts/m3d-tauri-link/android-apk-build.log
+            echo '::endgroup::'
+            exit "$status"
+          fi
 
       - name: Inspect feature-linked APK
         shell: bash
