@@ -1,6 +1,6 @@
 # M3-D Slice 1 — Embedded OpenMMO controller
 
-Status: **Slice 1A VERIFIED / Slice 1B IMPLEMENTED-NOT-VERIFIED**
+Status: **Slice 1A VERIFIED / Slice 1B VERIFIED / Slice 1C NEXT**
 
 Date: 2026-09-27 (Asia/Seoul)
 
@@ -40,9 +40,9 @@ Recovery checkpoint:
 
 `checkpoint/idea2-m3d-slice1a-verified-20260927`
 
-## Slice 1B — real authoritative core extraction — IMPLEMENTED-NOT-VERIFIED
+## Slice 1B — real authoritative core extraction — VERIFIED
 
-Goal:
+Verified contract:
 
 ```text
 caller config / argv
@@ -61,13 +61,13 @@ Verification branch:
 
 Temporary draft PR:
 
-`#11` — open / do not merge.
+`#11` — **CLOSED / merged=false** after direct promotion of proof files.
 
-Current verification head:
+Verified head:
 
 `aa520df43bdacd1452e275a539a2b6d37017bd57`
 
-Proof implementation:
+Proof implementation preserved on `idea2`:
 
 1. `scripts/ci/extract_openmmo_server_lib.py`
    - generates `server/src/lib.rs` from the exact pinned upstream `server/src/main.rs`
@@ -90,43 +90,71 @@ Proof implementation:
    - executable start / WebSocket / stop / persistence / restart proof
    - Android ARM64 library compile
 
-### Verification attempt 1
+Promotion commit:
 
-Head: `c04d4feaf2104920a786d94d4a69b99d5e3c45cc`
+`eab16845599eff1a79335970218e53944c4473b9`
+
+### Verification evidence
+
+Attempt 1:
 
 - Pull Request Quality `36318827498` — **SUCCESS**
-- Core Extraction `36318827513` — **FAILURE before compilation**
+- Core Extraction `36318827513` — failed before compilation because `server/examples/` did not exist
+- correction: create the examples directory before copying the probe
 
-Root cause was CI-only: the pinned server checkout does not contain `server/examples/`, so copying the probe failed with `No such file or directory` after `lib.rs` had already been generated successfully.
+Attempt 2, head `aa520df43bdacd1452e275a539a2b6d37017bd57`:
 
-No OpenMMO extraction/runtime/compiler incompatibility was observed in this attempt because compilation had not started.
+- Pull Request Quality `36319065969` — **SUCCESS**
+- Core Extraction `36319065965` — **SUCCESS**
+- job `108619250201` — **SUCCESS**
+- host `cargo check -p onlinerpg-server --lib --locked` — SUCCESS
+- actual extracted authoritative start/stop/persistence/restart proof — SUCCESS
+- Android ARM64 `cargo check -p onlinerpg-server --lib --target aarch64-linux-android --locked` — SUCCESS
+- evidence artifact `idea2-m3d-openmmo-core-extraction` / `10931169956`
+- artifact digest `sha256:4fa648be208c71959d3d62d9d9a84c57c6ec8ca22d3708c244ec5627eeaa15e6`
 
-Correction:
+Direct artifact inspection confirmed:
 
-- create `openmmo/server/examples` before copying the probe
-- correction commit/head: `aa520df43bdacd1452e275a539a2b6d37017bd57`
+- first authoritative OpenMMO server startup reached WebSocket readiness
+- first explicit caller-owned shutdown reached `Graceful shutdown complete`
+- second startup against the same state root also reached readiness
+- second explicit shutdown also completed gracefully
+- final probe printed `M3-D Slice 1B embedded authoritative OpenMMO core probe: PASS`
+- persisted state included `game_data.db`, `network_metrics.db`, and owner-only `npc_token`
 
-### Verification attempt 2
+Slice 1B PASS is therefore satisfied:
 
-- Core Extraction `36319065965` — **IN PROGRESS**
-- Pull Request Quality `36319065969` — **IN PROGRESS**
-
-Strict no-polling rule applied after this checkpoint.
-
-## Slice 1B PASS
-
-Slice 1B becomes VERIFIED only when the same extracted pinned authoritative core proves all of the following:
-
-1. host `cargo check --lib` succeeds,
-2. actual authoritative initialization reaches listener readiness,
-3. real WebSocket upgrade returns HTTP 101,
+1. host library compile succeeds,
+2. authoritative initialization reaches listener readiness,
+3. real WebSocket upgrade succeeds with HTTP 101,
 4. explicit caller-owned stop exits successfully,
-5. `game_data.db` and NPC token exist,
+5. SQLite state and NPC token are persisted,
 6. restart against the same state succeeds and preserves the token,
-7. the extracted library still compiles for `aarch64-linux-android`.
+7. the same extracted authoritative library compiles for Android ARM64.
 
-Until then `coreLinked` remains `false`.
+`coreLinked` remains `false` in production code until Slice 1C actually connects this verified runtime behind `OpenMmoEmbeddedController`.
 
-## Next after Slice 1B
+## Slice 1C — actual Tauri linkage — NEXT
 
-Connect this verified extracted runtime behind `OpenMmoEmbeddedController`, expose only loopback endpoint/readiness/memory-only token to the native bootstrap, then prove the complete path inside an actual Android APK.
+Goal:
+
+```text
+Tauri OpenMmoEmbeddedController.start()
+→ exact pinned OpenMMO source
+→ extracted run_embedded_server()
+→ app-private state/data paths
+→ loopback readiness
+→ memory-only token handoff
+→ existing OpenMmoAdapter
+→ explicit stop
+→ persisted authoritative restart
+```
+
+Implementation policy:
+
+- use the exact OpenMMO pin as build input rather than copying gameplay rules into taurin4,
+- keep the OpenMMO WebSocket protocol boundary,
+- keep token handoff native/in-memory only,
+- do not set `coreLinked=true` until the actual Tauri controller starts the extracted authoritative core,
+- preserve existing external-server M3-C behavior while the standalone path is introduced,
+- prove the linkage with an actual Tauri/Android build before enabling standalone as the default Android path.
