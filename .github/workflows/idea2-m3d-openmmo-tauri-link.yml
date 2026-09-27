@@ -83,15 +83,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C openmmo rev-parse HEAD)" = "950e081c178d920c10c51f2d31f60c1b3383c925"
-          test -f openmmo/server/src/lib.rs
-          grep -q 'pub async fn run_embedded_server' openmmo/server/src/lib.rs
-          grep -q 'EmbeddedServerReady' openmmo/server/src/lib.rs
+          test "$(git -C src-tauri/openmmo rev-parse HEAD)" = "950e081c178d920c10c51f2d31f60c1b3383c925"
+          test -f src-tauri/openmmo/server/src/lib.rs
+          grep -q 'pub async fn run_embedded_server' src-tauri/openmmo/server/src/lib.rs
+          grep -q 'EmbeddedServerReady' src-tauri/openmmo/server/src/lib.rs
 
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
-            openmmo
+            src-tauri/openmmo
             src-tauri
 
       - name: Execute Tauri controller against real pinned authoritative core
