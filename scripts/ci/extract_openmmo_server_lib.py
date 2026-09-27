@@ -3,11 +3,11 @@
 
 This is intentionally a narrow compatibility transform for M3-D Slice 1B. It
 moves no gameplay rules and edits no authoritative game modules. The generated
-lib keeps the pinned bootstrap body intact while replacing two process-only
-inputs:
+lib keeps the pinned bootstrap body intact while replacing process-only inputs:
 
 - Args::parse() -> caller supplied argv parsed by the same upstream clap Args
 - OS signal -> caller supplied oneshot shutdown receiver
+- tracing global init -> idempotent try_init for in-process restart
 
 It also reports listener readiness and the already-created NPC token back to the
 native owner so Tauri can keep the token in memory only.
@@ -50,9 +50,15 @@ def generate(main_rs: Path, lib_rs: Path) -> None:
 
     text = replace_once(
         text,
-        "    let args = Args::parse();\n",
-        "    let args = Args::parse_from(cli_args);\n",
-        "CLI parse",
+        "    tracing_subscriber::fmt()\n",
+        "    let _ = tracing_subscriber::fmt()\n",
+        "tracing initializer binding",
+    )
+    text = replace_once(
+        text,
+        "        .init();\n\n    let args = Args::parse();\n",
+        "        .try_init();\n\n    let args = Args::parse_from(cli_args);\n",
+        "tracing/CLI process inputs",
     )
 
     text = replace_once(
