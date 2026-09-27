@@ -76,6 +76,7 @@ jobs:
           grep -q 'pub async fn run_embedded_server' openmmo/server/src/lib.rs
           grep -q 'external_shutdown' openmmo/server/src/lib.rs
           grep -q 'EmbeddedServerReady' openmmo/server/src/lib.rs
+          mkdir -p openmmo/server/examples
           cp scripts/ci/openmmo_embedded_core_probe.rs openmmo/server/examples/embedded_core_probe.rs
 
       - name: Check extracted authoritative library on host
