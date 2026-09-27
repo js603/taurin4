@@ -4,97 +4,54 @@ Status: **Slice 1A VERIFIED / Slice 1B IMPLEMENTED-NOT-VERIFIED**
 
 Date: 2026-09-27 (Asia/Seoul)
 
-Canonical parent decision:
+Pinned OpenMMO: `950e081c178d920c10c51f2d31f60c1b3383c925`
 
-- M3-D Gate 0: **VERIFIED / Decision B**
-- pinned OpenMMO: `950e081c178d920c10c51f2d31f60c1b3383c925`
-- architecture: embed authoritative OpenMMO server core in the Tauri Rust process while preserving the WebSocket protocol boundary.
+Architecture decision: embed the pinned authoritative OpenMMO server core in the Tauri Rust process while preserving the existing WebSocket protocol boundary. No OpenMMO gameplay rules are duplicated into React or taurin4.
 
 ## Slice 1A — VERIFIED
 
-Verification branch:
+Verified implementation:
 
-`ci/idea2-m3d-embedded-openmmo-slice1-20260927`
+- `src-tauri/src/openmmo_embedded.rs`
+  - `OpenMmoEmbeddedController`
+  - `idle / prepared / failed`
+  - Tauri app-private OpenMMO storage layout
+  - persistent data survives stop
+  - `coreLinked=false` until the real authoritative core is actually attached
+- `src-tauri/src/lib.rs`
+  - managed controller
+  - status / prepare / stop Tauri commands
+- `src/openmmo/embeddedHost.ts`
+  - typed frontend bridge
 
-Temporary draft PR:
+Verification PR #10 was closed without merge after direct promotion to `idea2`.
 
-`#10` — closed without merge after verification.
+All required regressions passed:
 
-Verified PR head:
-
-`0d7905c85f8bdc10d87ba90fe0598ab9fd9e2068`
-
-Implemented and promoted to `idea2`:
-
-1. `src-tauri/src/openmmo_embedded.rs`
-   - `OpenMmoEmbeddedController`
-   - exact pinned commit constant
-   - explicit lifecycle phases: `idle / prepared / failed`
-   - Tauri `app_local_data_dir()/openmmo` storage root
-   - creation of state/terrain/NPC/tales/geoip parent directories
-   - persistent paths survive `stop()`
-   - unit test for layout + lifecycle
-   - `coreLinked=false` until the real authoritative core is actually connected
-2. `src-tauri/src/lib.rs`
-   - managed `OpenMmoEmbeddedController`
-   - `openmmo_embedded_status`
-   - `openmmo_embedded_prepare`
-   - `openmmo_embedded_stop`
-3. `src/openmmo/embeddedHost.ts`
-   - typed frontend bridge for status/prepare/stop
-
-Promotion commits on `idea2`:
-
-- `b2eb5ecbaeaa49b5f95baf8dc3a3586ef757a0ed`
-- `416275cd1fd58a5f21902810beb93589774c8f72`
-- `96e29c411973aaf1b61a2d4ba393ffd56bf2ddd6`
-
-### Verification evidence
-
-For PR head `0d7905c85f8bdc10d87ba90fe0598ab9fd9e2068`:
-
-- Pull Request Quality `36304747737` — **SUCCESS**
-- Windows Playable Entry `36304747738` — **SUCCESS**
-- Windows Human Acceptance E2E `36304747741` — **SUCCESS**
-- Android OpenMMO Client `36304747747` — **SUCCESS**
-- Android OpenMMO Runtime E2E `36304747756` — **SUCCESS**
-- Android OpenMMO Lifecycle E2E `36304747771` — **SUCCESS**
-- OpenMMO Adapter Integration `36304747754`
-  - first attempt: existing old_crypt combat RNG failure (`CryptMira` died before kobold kill)
-  - re-run job `108615150371`: **SUCCESS**
-  - `Run taurin4 adapter against real pinned server`: **SUCCESS**
-
-Slice 1A therefore passes all required regressions.
+- Pull Request Quality `36304747737` — SUCCESS
+- Windows Playable Entry `36304747738` — SUCCESS
+- Windows Human Acceptance E2E `36304747741` — SUCCESS
+- Android OpenMMO Client `36304747747` — SUCCESS
+- Android OpenMMO Runtime E2E `36304747756` — SUCCESS
+- Android OpenMMO Lifecycle E2E `36304747771` — SUCCESS
+- OpenMMO Adapter Integration `36304747754` — SUCCESS on one allowed re-run job `108615150371` after the existing old_crypt combat RNG failure
 
 Recovery checkpoint:
 
 `checkpoint/idea2-m3d-slice1a-verified-20260927`
 
-Important boundary remains unchanged:
-
-- Slice 1A does **not** claim a fake/placeholder server is OpenMMO.
-- current embedded state is prepared-only and explicitly reports `coreLinked=false`.
-- existing M3-C external OpenMMO runtime behavior is unchanged.
-- no OpenMMO combat/world rules are duplicated into React or taurin4.
-- no JS-side token persistence is introduced.
-
 ## Slice 1B — real authoritative core extraction — IMPLEMENTED-NOT-VERIFIED
 
-Pinned `onlinerpg-server` is currently a binary-only crate; `server/src/main.rs` owns CLI parsing and authoritative server bootstrap together.
-
-Slice 1B extracts only the process boundary while keeping all authoritative game modules as the exact pinned upstream source.
-
-Target contract:
+Goal:
 
 ```text
-OpenMmoServerConfig / caller argv
+caller config / argv
 → run_embedded_server()
-→ authoritative OpenMMO GameState initialization
-→ world/combat/monster/movement background tasks
+→ original authoritative OpenMMO GameState/bootstrap
+→ original world/combat/monster/movement tasks
 → loopback WebSocket readiness + in-memory NPC token
-→ existing OpenMmoAdapter
-→ caller-owned explicit shutdown
-→ task drain + final persistence
+→ explicit caller-owned shutdown
+→ original task drain + final persistence
 → restart from same state
 ```
 
@@ -104,55 +61,72 @@ Verification branch:
 
 Temporary draft PR:
 
-`#11` — **open / do not merge**
+`#11` — open / do not merge.
 
-Current PR head:
+Current verification head:
 
-`c04d4feaf2104920a786d94d4a69b99d5e3c45cc`
+`aa520df43bdacd1452e275a539a2b6d37017bd57`
 
-Implemented proof files:
+Proof implementation:
 
 1. `scripts/ci/extract_openmmo_server_lib.py`
-   - operates only on exact pinned OpenMMO checkout
-   - generates `server/src/lib.rs` from upstream `server/src/main.rs`
-   - does not copy or reimplement gameplay modules
-   - `Args::parse()` becomes caller-supplied argv parsed by the same upstream clap `Args`
-   - OS signal becomes caller-provided oneshot shutdown receiver
-   - readiness reports actual loopback WebSocket/API socket addresses
-   - already-created NPC token is returned in memory
-   - tracing initialization uses restart-safe `try_init()`
+   - generates `server/src/lib.rs` from the exact pinned upstream `server/src/main.rs`
+   - does not duplicate gameplay modules
+   - replaces process-only CLI ownership with caller supplied argv parsed by upstream clap
+   - replaces OS shutdown signal with caller-owned oneshot shutdown
+   - reports actual WebSocket/API listener addresses and the already-created NPC token
+   - changes process-global tracing init to restart-safe `try_init()`
 2. `scripts/ci/openmmo_embedded_core_probe.rs`
-   - starts the extracted authoritative core with ephemeral loopback ports
+   - starts the extracted authoritative server core on loopback ephemeral ports
    - requires real WebSocket HTTP 101
-   - requires generated `npc_token`
-   - explicitly requests shutdown
-   - requires successful graceful exit and `game_data.db`
-   - restarts against the same state root
+   - requires generated NPC token
+   - requests explicit shutdown
+   - requires graceful success and persisted `game_data.db`
+   - restarts using the same state root
    - requires the NPC token to persist across restart
 3. `.github/workflows/idea2-m3d-openmmo-core-extraction.yml`
    - exact pinned checkout
-   - host `cargo check --lib`
-   - executable start/stop/persistence/restart proof
-   - Android ARM64 `cargo check --lib`
+   - host library compile
+   - executable start / WebSocket / stop / persistence / restart proof
+   - Android ARM64 library compile
 
-Initial verification runs for head `c04d4feaf2104920a786d94d4a69b99d5e3c45cc`:
+### Verification attempt 1
 
-- M3-D OpenMMO Core Extraction `36318827513` — **QUEUED**
-- Pull Request Quality `36318827498` — **QUEUED**
+Head: `c04d4feaf2104920a786d94d4a69b99d5e3c45cc`
+
+- Pull Request Quality `36318827498` — **SUCCESS**
+- Core Extraction `36318827513` — **FAILURE before compilation**
+
+Root cause was CI-only: the pinned server checkout does not contain `server/examples/`, so copying the probe failed with `No such file or directory` after `lib.rs` had already been generated successfully.
+
+No OpenMMO extraction/runtime/compiler incompatibility was observed in this attempt because compilation had not started.
+
+Correction:
+
+- create `openmmo/server/examples` before copying the probe
+- correction commit/head: `aa520df43bdacd1452e275a539a2b6d37017bd57`
+
+### Verification attempt 2
+
+- Core Extraction `36319065965` — **IN PROGRESS**
+- Pull Request Quality `36319065969` — **IN PROGRESS**
 
 Strict no-polling rule applied after this checkpoint.
 
-Allowed extraction:
+## Slice 1B PASS
 
-- CLI `Args` → caller-owned config/argv
-- OS shutdown signal → caller-provided shutdown receiver / handle
-- listener readiness → explicit startup result
-- tracing process-global initialization → idempotent in-process initialization
+Slice 1B becomes VERIFIED only when the same extracted pinned authoritative core proves all of the following:
 
-Not allowed:
+1. host `cargo check --lib` succeeds,
+2. actual authoritative initialization reaches listener readiness,
+3. real WebSocket upgrade returns HTTP 101,
+4. explicit caller-owned stop exits successfully,
+5. `game_data.db` and NPC token exist,
+6. restart against the same state succeeds and preserves the token,
+7. the extracted library still compiles for `aarch64-linux-android`.
 
-- copying game rules into React or a taurin4 replacement server
-- setting `coreLinked=true` before the actual pinned authoritative core is running behind the Tauri controller
-- weakening OpenMMO combat, monster AI, persistence or protocol authority for mobile
+Until then `coreLinked` remains `false`.
 
-Slice 1B PASS requires executable proof that the extracted pinned server core can start, return loopback readiness, accept a real WebSocket upgrade, stop explicitly, persist state, restart from that state, and still compile for Android ARM64.
+## Next after Slice 1B
+
+Connect this verified extracted runtime behind `OpenMmoEmbeddedController`, expose only loopback endpoint/readiness/memory-only token to the native bootstrap, then prove the complete path inside an actual Android APK.
