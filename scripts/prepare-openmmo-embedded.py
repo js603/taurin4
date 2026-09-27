@@ -84,10 +84,11 @@ def ensure_checkout(repo_root: Path, openmmo: Path) -> None:
     git(openmmo, "sparse-checkout", "set", *SPARSE_PATHS)
     git(openmmo, "fetch", "--depth=1", "--filter=blob:none", "origin", PIN)
 
-    current = git(openmmo, "rev-parse", "HEAD", capture=True) if (openmmo / ".git" / "HEAD").exists() else ""
-    if current != PIN:
-        ensure_clean_enough(openmmo)
-        git(openmmo, "checkout", "--detach", "FETCH_HEAD")
+    # A freshly initialized repository has an unborn HEAD. Always checking out
+    # FETCH_HEAD avoids rev-parse failure there and also makes repeated runs
+    # deterministically re-assert the exact canonical pin.
+    ensure_clean_enough(openmmo)
+    git(openmmo, "checkout", "--detach", "FETCH_HEAD")
 
     actual = git(openmmo, "rev-parse", "HEAD", capture=True)
     if actual != PIN:
