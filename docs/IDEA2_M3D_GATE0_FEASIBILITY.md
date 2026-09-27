@@ -1,8 +1,8 @@
 # M3-D Gate 0 — Android standalone OpenMMO feasibility
 
-Status: **IN PROGRESS**
+Status: **VERIFIED / DECISION B**
 
-Date: 2026-09-26 (Asia/Seoul)
+Date: 2026-09-27 (Asia/Seoul)
 
 Pinned OpenMMO revision:
 
@@ -18,47 +18,39 @@ Determine with executable evidence whether Android standalone should use:
 
 No OpenMMO combat/world rules may be duplicated into React merely to make standalone easier.
 
-## Source audit findings
+## Final decision
 
-The pinned server depends on ordinary Rust/server components including Tokio, tokio-tungstenite, Axum, bundled rusqlite, r2d2_sqlite, rustls-backed reqwest, filesystem-backed state and the pinned shared/terrain crates.
+**B — extract/embed the authoritative OpenMMO server core in-process inside the Tauri Rust backend while preserving the current WebSocket protocol boundary.**
 
-The current upstream shape is an executable-only `server/src/main.rs`. Startup currently owns:
+The Gate proved that the original executable itself is technically Android-portable, so this is not a fallback caused by incompatible server dependencies. B is selected as the production architecture because it gives taurin4 ownership of Android lifecycle, storage and shutdown without relying on deployment/execution of a separate raw native server process.
 
-- CLI/env parsing,
-- SQLite/state directory initialization,
-- NPC token generation,
-- terrain/NPC/housing stores,
-- authoritative `GameState`,
-- background world/combat/movement ticks,
-- WebSocket listener,
-- REST listener,
-- OS shutdown signal handling,
-- graceful drain and final persistence.
+Target shape:
 
-For an embedded Android runtime the likely extraction boundary is therefore:
+```text
+Android taurin4 APK
+        ↓
+Tauri Rust backend
+        ↓
+OpenMmoServerController
+        ↓
+embedded pinned OpenMMO authoritative core
+ ├─ SQLite/state
+ ├─ movement/combat
+ ├─ monster AI
+ ├─ dungeon/world
+ ├─ persistence
+ └─ background ticks
+        ↓
+127.0.0.1:<local port> WebSocket
+        ↓
+existing OpenMmoAdapter / OpenMmoGameSession
+        ↓
+Text/Card GameScreen
+```
 
-`ServerConfig + ServerHandle/start/stop`
+The gameplay protocol and server authority remain unchanged.
 
-while preserving the existing authoritative modules and WebSocket protocol.
-
-Expected mobile substitutions if B is selected:
-
-- CLI `Args` → Tauri/native configuration object
-- `STATE_DIR` → Android app-private data directory
-- Unix/desktop signal handling → explicit Tauri lifecycle stop signal
-- standalone process ownership → Tokio task owned by the Tauri Rust backend
-- game WebSocket → loopback listener (`127.0.0.1`, preferably dynamically selected port)
-- existing `OpenMmoAdapter` / codec / protocol remain unchanged
-
-## Persistence / I/O findings
-
-Pinned terrain I/O uses standard Rust filesystem/Tokio filesystem operations. Atomic writes are performed using same-directory temporary files, `sync_data`, and rename.
-
-Pinned auth persistence uses bundled SQLite (`rusqlite` + `r2d2_sqlite`) and accepts an explicit state-directory path.
-
-These APIs are structurally compatible with mapping state into Android app-private storage; actual Android runtime persistence remains a later executable Gate.
-
-## Android cross-compile probe
+## Executable evidence
 
 Temporary verification branch:
 
@@ -66,56 +58,112 @@ Temporary verification branch:
 
 Temporary draft PR:
 
-`#9` — **do not merge**
+`#9` — closed without merge after verification.
 
-Initial probe head:
+Final verified PR head:
 
-`1eb1f140cdce0ab32cd174d9c24df612bc537ef5`
+`9b3cf532b371adc18e1312359130a0e4a4a23537`
 
-Initial run:
+Final feasibility run:
 
-`36227785057`
+`36303619258` — **SUCCESS**
 
-The initial run did **not** reach Android compilation. Sparse checkout omitted the upstream workspace member `agent-client`, so Cargo stopped while loading workspace metadata.
+Quality run:
 
-This is a CI checkout defect, not Android incompatibility.
+`36303619268` — **SUCCESS**
 
-Upstream workspace members are:
+Evidence artifact:
 
-`agent-client`, `server`, `shared`, `terrain`, `tools/terrain-gen`.
+`idea2-m3d-android-server-feasibility` / artifact `10926178241`
 
-Corrected probe head:
+Final run proved all of the following:
 
-`a01f19503fe5acf03b43b46eb0f11bd944010830`
+1. exact pinned OpenMMO checkout — PASS
+2. Android NDK/linker setup — PASS
+3. `onlinerpg-shared` `aarch64-linux-android` cargo check — PASS
+4. `onlinerpg-terrain` `aarch64-linux-android` cargo check — PASS
+5. original `onlinerpg-server` `aarch64-linux-android` cargo check — PASS
+6. original server ARM64 Android ELF build — PASS
+7. emulator-matching x86_64 Android server ELF build — PASS
+8. original pinned server executes inside Android userspace — PASS
+9. server binds `127.0.0.1:10006` inside Android — PASS
+10. real WebSocket Upgrade returns HTTP `101 Switching Protocols` — PASS
+11. evidence upload and bounded cleanup — PASS
 
-Corrected run:
+ARM64 output was a real Android AArch64 PIE executable using `/system/bin/linker64`.
 
-`36227927324`
+## Persistence / filesystem evidence
 
-Observed executable evidence at the first meaningful checkpoint:
+The Android runtime probe created actual mutable OpenMMO state under the supplied state directory, including:
 
-- Android SDK/NDK setup — PASS
-- exact pinned OpenMMO checkout — PASS
-- Android NDK linker configuration — PASS
-- **`onlinerpg-shared` Android cargo check — PASS**
-- **`onlinerpg-terrain` Android cargo check — PASS**
-- original `onlinerpg-server` Android cargo check — IN PROGRESS at checkpoint
-- original server Android ELF build — pending at checkpoint
+- `game_data.db`
+- SQLite journal/WAL-related files
+- `network_metrics.db`
+- `network_metrics.db-shm`
+- `network_metrics.db-wal`
+- `npc_token`
+- `cape-textures/`
 
-No repeated polling was performed after this checkpoint.
+Therefore bundled SQLite plus normal server filesystem state is not merely structurally portable: it executed successfully in Android userspace.
 
-## Current decision state
+For the production APK these paths must move from the probe's `/data/local/tmp/...` location into Tauri/Android app-private storage.
 
-**A/B/C decision is not final yet.**
+## Source extraction boundary
 
-However, current evidence already rules out a broad claim that the OpenMMO protocol/terrain foundation is intrinsically non-portable to Android. Both pinned shared and terrain crates compile for `aarch64-linux-android`.
+The pinned upstream currently keeps startup in executable-only `server/src/main.rs`. It owns:
 
-Architecturally, B (in-process authoritative server core) is currently the preferred candidate because the Android/Tauri application itself is a Rust shared-library runtime, while the pinned upstream server is presently organized as a standalone CLI/process executable. Final selection waits for the corrected original-server cross-compile result.
+- CLI/env parsing
+- state path setup
+- auth/SQLite initialization
+- terrain/NPC/housing stores
+- authoritative `GameState`
+- movement/combat/monster/world background ticks
+- WebSocket listener
+- REST listener
+- OS shutdown signal
+- graceful drain/final persistence
 
-## Next exact action
+M3-D must separate this into a reusable native lifecycle boundary, approximately:
 
-1. inspect corrected run `36227927324` once at the next checkpoint,
-2. if the server check/build fails, inspect only that compiler/linker failure,
-3. classify the blocker as gameplay-critical vs executable-only/observability/lifecycle,
-4. if core dependencies remain portable, proceed to a bounded in-process skeleton Gate,
-5. prove on Android that Tauri can start/stop an authoritative loopback server task and persist state in app-private storage before beginning standalone gameplay integration.
+```text
+OpenMmoServerConfig
+OpenMmoServerController::start(config)
+OpenMmoServerHandle::endpoint()
+OpenMmoServerHandle::auth_token()
+OpenMmoServerHandle::stop()
+```
+
+Mobile substitutions:
+
+- CLI `Args` → native/Tauri config
+- `STATE_DIR` → Android app-private data directory
+- desktop/Unix shutdown signal → explicit controller stop signal
+- standalone process ownership → Tauri-owned Tokio runtime/task
+- fixed external endpoint → loopback endpoint owned by controller
+
+All authoritative gameplay modules remain the pinned OpenMMO implementation.
+
+## Probe delay correction
+
+An earlier runtime run reached PASS but the workflow was later cancelled because probe cleanup waited indefinitely on the attached `adb shell ... wait $pid` keepalive process.
+
+The correction bounds both remote-server termination and local adb-shell reaping. The final run `36303619258` proved the same runtime path and completed the job successfully, eliminating the previous delay mode without skipping any verification scope.
+
+## Known follow-up
+
+The earlier artifact's process-memory sample targeted the keepalive shell rather than the actual server process, so no RSS number is treated as verified. This does **not** block Gate 0 because Android compile, execution, socket, SQLite/filesystem and shutdown feasibility are independently proven. Accurate embedded-process memory/CPU measurement belongs to the M3-D implementation acceptance Gate.
+
+## Next exact action — M3-D Slice 1
+
+Implement the smallest embedded authoritative-server skeleton:
+
+1. introduce reusable `OpenMmoServerConfig` / controller lifecycle,
+2. preserve the pinned OpenMMO authoritative modules and protocol,
+3. map mutable state to app-private storage,
+4. start the embedded server from the Tauri Rust backend,
+5. return loopback endpoint + in-memory local auth token to the native bootstrap,
+6. connect the existing `OpenMmoAdapter` without a manually entered server URL/token,
+7. prove explicit stop and persistent restart,
+8. verify first with compile/unit Gates, then with an actual Android APK runtime Gate.
+
+Gate 0 is complete. Do not reopen executable-vs-core architecture investigation unless new executable evidence contradicts this decision.
