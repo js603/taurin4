@@ -9,6 +9,10 @@ edition = "2021"
 name = "taurin4_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+default = []
+embedded-openmmo = ["dep:onlinerpg-server", "dep:tokio"]
+
 [build-dependencies]
 tauri-build = { version = "2.6.3", features = [] }
 
@@ -19,3 +23,5 @@ tauri-plugin-websocket = "2.4.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 taurin4-game-server-core = { path = "../crates/game-server-core" }
+onlinerpg-server = { path = "../openmmo/server", optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time"], optional = true }
