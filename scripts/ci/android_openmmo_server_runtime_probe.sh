@@ -14,15 +14,34 @@ adb wait-for-device
 
 cleanup() {
   adb forward --remove "tcp:${HOST_FORWARD_PORT}" >/dev/null 2>&1 || true
+
   if adb shell "test -f '$REMOTE_ROOT/server.pid'" >/dev/null 2>&1; then
     REMOTE_PID="$(adb shell "cat '$REMOTE_ROOT/server.pid'" 2>/dev/null | tr -d '\r' || true)"
     if [[ "$REMOTE_PID" =~ ^[0-9]+$ ]]; then
       adb shell "kill '$REMOTE_PID'" >/dev/null 2>&1 || true
+      for _ in $(seq 1 20); do
+        if ! adb shell "kill -0 '$REMOTE_PID'" >/dev/null 2>&1; then
+          break
+        fi
+        sleep 0.1
+      done
+      adb shell "kill -9 '$REMOTE_PID'" >/dev/null 2>&1 || true
     fi
   fi
-  if [[ -n "${ADB_SERVER_SHELL_PID:-}" ]]; then
-    wait "$ADB_SERVER_SHELL_PID" >/dev/null 2>&1 || true
+
+  # The attached `adb shell ... wait $pid` process is only a keepalive for the
+  # remote native server. Never block CI indefinitely while reaping it.
+  if [[ -n "${ADB_SERVER_SHELL_PID:-}" ]] && kill -0 "$ADB_SERVER_SHELL_PID" >/dev/null 2>&1; then
+    kill "$ADB_SERVER_SHELL_PID" >/dev/null 2>&1 || true
+    for _ in $(seq 1 20); do
+      if ! kill -0 "$ADB_SERVER_SHELL_PID" >/dev/null 2>&1; then
+        break
+      fi
+      sleep 0.1
+    done
+    kill -9 "$ADB_SERVER_SHELL_PID" >/dev/null 2>&1 || true
   fi
+
   adb pull "$REMOTE_ROOT/server.stdout.log" "$ARTIFACT_DIR/server.stdout.log" >/dev/null 2>&1 || true
   adb pull "$REMOTE_ROOT/server.stderr.log" "$ARTIFACT_DIR/server.stderr.log" >/dev/null 2>&1 || true
   adb shell "cat /proc/meminfo | head -n 20" > "$ARTIFACT_DIR/device-meminfo.txt" 2>/dev/null || true
