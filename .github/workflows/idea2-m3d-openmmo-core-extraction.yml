@@ -1,0 +1,121 @@
+name: idea2 M3-D OpenMMO Core Extraction
+
+on:
+  pull_request:
+    branches: ["idea2"]
+    paths:
+      - ".github/workflows/idea2-m3d-openmmo-core-extraction.yml"
+      - "scripts/ci/extract_openmmo_server_lib.py"
+      - "scripts/ci/openmmo_embedded_core_probe.rs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  extracted-authoritative-core:
+    name: Pinned OpenMMO library start stop restart
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout taurin4
+        uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+
+      - name: Resolve Android NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          if [ ! -d "$ANDROID_HOME/ndk" ] || [ -z "$(ls -A "$ANDROID_HOME/ndk" 2>/dev/null)" ]; then
+            NDK_PACKAGE="$(sdkmanager --list | awk '/^  ndk;[0-9]/{print $1}' | sort -V | tail -n 1)"
+            test -n "$NDK_PACKAGE"
+            sdkmanager "$NDK_PACKAGE"
+          fi
+          NDK_VERSION="$(ls -1 "$ANDROID_HOME/ndk" | sort -V | tail -n 1)"
+          echo "ANDROID_LLVM_TOOLCHAIN=$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_ENV"
+
+      - name: Checkout exact pinned OpenMMO
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init openmmo
+          git -C openmmo remote add origin https://github.com/Julian-adv/OpenMMO.git
+          git -C openmmo sparse-checkout init --cone
+          git -C openmmo sparse-checkout set \
+            .cargo \
+            agent-client \
+            server \
+            shared \
+            terrain \
+            tools \
+            data-src \
+            data \
+            client/public/models/objects
+          git -C openmmo fetch --depth=1 --filter=blob:none origin 950e081c178d920c10c51f2d31f60c1b3383c925
+          git -C openmmo checkout --detach FETCH_HEAD
+          test "$(git -C openmmo rev-parse HEAD)" = "950e081c178d920c10c51f2d31f60c1b3383c925"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: openmmo
+
+      - name: Generate reusable library boundary from pinned server main
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/ci/extract_openmmo_server_lib.py --openmmo openmmo
+          test -f openmmo/server/src/lib.rs
+          grep -q 'pub async fn run_embedded_server' openmmo/server/src/lib.rs
+          grep -q 'external_shutdown' openmmo/server/src/lib.rs
+          grep -q 'EmbeddedServerReady' openmmo/server/src/lib.rs
+          mkdir -p openmmo/server/examples
+          cp scripts/ci/openmmo_embedded_core_probe.rs openmmo/server/examples/embedded_core_probe.rs
+
+      - name: Check extracted authoritative library on host
+        working-directory: openmmo
+        run: cargo check -p onlinerpg-server --lib --locked
+
+      - name: Execute extracted core start stop persistence restart proof
+        working-directory: openmmo
+        shell: bash
+        run: |
+          set -euo pipefail
+          export OPENMMO_EMBEDDED_PROBE_ROOT="$RUNNER_TEMP/openmmo-embedded-core-state"
+          cargo run -p onlinerpg-server --example embedded_core_probe --locked 2>&1 | tee "$GITHUB_WORKSPACE/embedded-core-probe.log"
+          grep -q 'M3-D Slice 1B embedded authoritative OpenMMO core probe: PASS' "$GITHUB_WORKSPACE/embedded-core-probe.log"
+          test -s "$OPENMMO_EMBEDDED_PROBE_ROOT/state/game_data.db"
+          test -s "$OPENMMO_EMBEDDED_PROBE_ROOT/state/npc_token"
+          ls -lah "$OPENMMO_EMBEDDED_PROBE_ROOT/state" | tee "$GITHUB_WORKSPACE/embedded-core-state-files.txt"
+
+      - name: Configure Android ARM64 linker
+        shell: bash
+        run: |
+          set -euo pipefail
+          API=26
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$ANDROID_LLVM_TOOLCHAIN/aarch64-linux-android${API}-clang" >> "$GITHUB_ENV"
+          echo "CC_aarch64_linux_android=$ANDROID_LLVM_TOOLCHAIN/aarch64-linux-android${API}-clang" >> "$GITHUB_ENV"
+          echo "AR_aarch64_linux_android=$ANDROID_LLVM_TOOLCHAIN/llvm-ar" >> "$GITHUB_ENV"
+          test -x "$ANDROID_LLVM_TOOLCHAIN/aarch64-linux-android${API}-clang"
+
+      - name: Check extracted authoritative library for Android ARM64
+        working-directory: openmmo
+        run: cargo check -p onlinerpg-server --lib --target aarch64-linux-android --locked
+
+      - name: Upload extraction evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: idea2-m3d-openmmo-core-extraction
+          path: |
+            embedded-core-probe.log
+            embedded-core-state-files.txt
+          if-no-files-found: warn
+          retention-days: 14
