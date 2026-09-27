@@ -1,3 +1,6 @@
+mod openmmo_embedded;
+
+use openmmo_embedded::{OpenMmoEmbeddedController, OpenMmoEmbeddedSnapshot};
 use serde::Serialize;
 use std::env;
 use tauri::State;
@@ -21,6 +24,27 @@ fn host_stop(host: State<'_, HostController>) -> Result<HostSnapshot, String> {
     host.stop().map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+fn openmmo_embedded_status(
+    embedded: State<'_, OpenMmoEmbeddedController>,
+) -> OpenMmoEmbeddedSnapshot {
+    embedded.snapshot()
+}
+
+#[tauri::command]
+fn openmmo_embedded_prepare(
+    app: tauri::AppHandle,
+    embedded: State<'_, OpenMmoEmbeddedController>,
+) -> Result<OpenMmoEmbeddedSnapshot, String> {
+    embedded.prepare(&app)
+}
+
+#[tauri::command]
+fn openmmo_embedded_stop(
+    embedded: State<'_, OpenMmoEmbeddedController>,
+) -> OpenMmoEmbeddedSnapshot {
+    embedded.stop()
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,12 +78,16 @@ fn openmmo_local_launch_config() -> Option<OpenMmoLocalLaunchConfig> {
 pub fn run() {
     tauri::Builder::default()
         .manage(HostController::new())
+        .manage(OpenMmoEmbeddedController::new())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_websocket::init())
         .invoke_handler(tauri::generate_handler![
             host_status,
             host_start,
             host_stop,
+            openmmo_embedded_status,
+            openmmo_embedded_prepare,
+            openmmo_embedded_stop,
             openmmo_local_launch_config
         ])
         .run(tauri::generate_context!())
