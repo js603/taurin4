@@ -9,6 +9,8 @@ on:
       - "src/openmmo/nativeLaunch.ts"
       - "src/features/game/ui/OpenMmoBootstrap.tsx"
       - "scripts/play-openmmo-windows.ps1"
+      - "scripts/prepare-openmmo-embedded.py"
+      - "scripts/ci/extract_openmmo_server_lib.py"
       - "package.json"
       - ".github/workflows/idea2-windows-playable.yml"
   pull_request:
@@ -19,6 +21,8 @@ on:
       - "src/openmmo/nativeLaunch.ts"
       - "src/features/game/ui/OpenMmoBootstrap.tsx"
       - "scripts/play-openmmo-windows.ps1"
+      - "scripts/prepare-openmmo-embedded.py"
+      - "scripts/ci/extract_openmmo_server_lib.py"
       - "package.json"
       - ".github/workflows/idea2-windows-playable.yml"
   workflow_dispatch:
@@ -34,7 +38,7 @@ jobs:
   windows-playable:
     name: Windows playable entry
     runs-on: windows-2022
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v5
@@ -50,6 +54,9 @@ jobs:
 
       - name: Frontend quality gate
         run: npm run check
+
+      - name: Prepare exact pinned OpenMMO build input
+        run: npm run openmmo:embedded:prepare
 
       - name: Check Tauri Rust bridge
         run: cargo check --manifest-path src-tauri/Cargo.toml
