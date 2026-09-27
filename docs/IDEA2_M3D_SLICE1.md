@@ -1,6 +1,6 @@
 # M3-D Slice 1 — Embedded OpenMMO controller
 
-Status: **Slice 1A VERIFIED / Slice 1B NEXT**
+Status: **Slice 1A VERIFIED / Slice 1B IMPLEMENTED-NOT-VERIFIED**
 
 Date: 2026-09-27 (Asia/Seoul)
 
@@ -66,6 +66,10 @@ For PR head `0d7905c85f8bdc10d87ba90fe0598ab9fd9e2068`:
 
 Slice 1A therefore passes all required regressions.
 
+Recovery checkpoint:
+
+`checkpoint/idea2-m3d-slice1a-verified-20260927`
+
 Important boundary remains unchanged:
 
 - Slice 1A does **not** claim a fake/placeholder server is OpenMMO.
@@ -74,37 +78,81 @@ Important boundary remains unchanged:
 - no OpenMMO combat/world rules are duplicated into React or taurin4.
 - no JS-side token persistence is introduced.
 
-## Slice 1B — real authoritative core extraction
+## Slice 1B — real authoritative core extraction — IMPLEMENTED-NOT-VERIFIED
 
 Pinned `onlinerpg-server` is currently a binary-only crate; `server/src/main.rs` owns CLI parsing and authoritative server bootstrap together.
 
-Slice 1B must therefore extract the minimum reusable library boundary from the pinned source while preserving the authoritative modules unchanged.
+Slice 1B extracts only the process boundary while keeping all authoritative game modules as the exact pinned upstream source.
 
 Target contract:
 
 ```text
-OpenMmoServerConfig
-→ run_server / OpenMmoServerHandle.start()
+OpenMmoServerConfig / caller argv
+→ run_embedded_server()
 → authoritative OpenMMO GameState initialization
 → world/combat/monster/movement background tasks
-→ loopback WebSocket readiness
-→ memory-only token handoff
+→ loopback WebSocket readiness + in-memory NPC token
 → existing OpenMmoAdapter
-→ explicit shutdown
+→ caller-owned explicit shutdown
 → task drain + final persistence
+→ restart from same state
 ```
+
+Verification branch:
+
+`ci/idea2-m3d-openmmo-core-extraction-20260927`
+
+Temporary draft PR:
+
+`#11` — **open / do not merge**
+
+Current PR head:
+
+`c04d4feaf2104920a786d94d4a69b99d5e3c45cc`
+
+Implemented proof files:
+
+1. `scripts/ci/extract_openmmo_server_lib.py`
+   - operates only on exact pinned OpenMMO checkout
+   - generates `server/src/lib.rs` from upstream `server/src/main.rs`
+   - does not copy or reimplement gameplay modules
+   - `Args::parse()` becomes caller-supplied argv parsed by the same upstream clap `Args`
+   - OS signal becomes caller-provided oneshot shutdown receiver
+   - readiness reports actual loopback WebSocket/API socket addresses
+   - already-created NPC token is returned in memory
+   - tracing initialization uses restart-safe `try_init()`
+2. `scripts/ci/openmmo_embedded_core_probe.rs`
+   - starts the extracted authoritative core with ephemeral loopback ports
+   - requires real WebSocket HTTP 101
+   - requires generated `npc_token`
+   - explicitly requests shutdown
+   - requires successful graceful exit and `game_data.db`
+   - restarts against the same state root
+   - requires the NPC token to persist across restart
+3. `.github/workflows/idea2-m3d-openmmo-core-extraction.yml`
+   - exact pinned checkout
+   - host `cargo check --lib`
+   - executable start/stop/persistence/restart proof
+   - Android ARM64 `cargo check --lib`
+
+Initial verification runs for head `c04d4feaf2104920a786d94d4a69b99d5e3c45cc`:
+
+- M3-D OpenMMO Core Extraction `36318827513` — **QUEUED**
+- Pull Request Quality `36318827498` — **QUEUED**
+
+Strict no-polling rule applied after this checkpoint.
 
 Allowed extraction:
 
-- CLI `Args` → `OpenMmoServerConfig`
+- CLI `Args` → caller-owned config/argv
 - OS shutdown signal → caller-provided shutdown receiver / handle
 - listener readiness → explicit startup result
-- executable `main()` remains a thin wrapper around the same library runtime
+- tracing process-global initialization → idempotent in-process initialization
 
 Not allowed:
 
 - copying game rules into React or a taurin4 replacement server
-- setting `coreLinked=true` before the actual pinned authoritative core is running
+- setting `coreLinked=true` before the actual pinned authoritative core is running behind the Tauri controller
 - weakening OpenMMO combat, monster AI, persistence or protocol authority for mobile
 
-Slice 1B PASS requires executable proof that the extracted pinned server core can start, return a loopback endpoint/readiness, accept the existing OpenMMO protocol, stop explicitly, and persist state.
+Slice 1B PASS requires executable proof that the extracted pinned server core can start, return loopback readiness, accept a real WebSocket upgrade, stop explicitly, persist state, restart from that state, and still compile for Android ARM64.
