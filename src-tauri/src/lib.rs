@@ -1,6 +1,8 @@
 mod openmmo_embedded;
 
-use openmmo_embedded::{OpenMmoEmbeddedController, OpenMmoEmbeddedSnapshot};
+use openmmo_embedded::{
+    OpenMmoEmbeddedController, OpenMmoEmbeddedLaunchConfig, OpenMmoEmbeddedSnapshot,
+};
 use serde::Serialize;
 use std::env;
 use tauri::State;
@@ -40,9 +42,17 @@ fn openmmo_embedded_prepare(
 }
 
 #[tauri::command]
+fn openmmo_embedded_start(
+    app: tauri::AppHandle,
+    embedded: State<'_, OpenMmoEmbeddedController>,
+) -> Result<OpenMmoEmbeddedLaunchConfig, String> {
+    embedded.start(&app)
+}
+
+#[tauri::command]
 fn openmmo_embedded_stop(
     embedded: State<'_, OpenMmoEmbeddedController>,
-) -> OpenMmoEmbeddedSnapshot {
+) -> Result<OpenMmoEmbeddedSnapshot, String> {
     embedded.stop()
 }
 
@@ -87,6 +97,7 @@ pub fn run() {
             host_stop,
             openmmo_embedded_status,
             openmmo_embedded_prepare,
+            openmmo_embedded_start,
             openmmo_embedded_stop,
             openmmo_local_launch_config
         ])
