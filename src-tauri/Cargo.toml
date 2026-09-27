@@ -17,9 +17,9 @@ embedded-openmmo = ["dep:onlinerpg-server", "dep:tokio"]
 tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
-tauri = { version = "2.11.5", features = [] }
-tauri-plugin-store = "2"
-tauri-plugin-websocket = "2.4.3"
+tauri = { version = "=2.11.5", features = [] }
+tauri-plugin-store = "=2.4.5"
+tauri-plugin-websocket = "=2.4.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 taurin4-game-server-core = { path = "../crates/game-server-core" }
