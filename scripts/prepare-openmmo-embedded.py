@@ -2,9 +2,10 @@
 """Prepare the exact pinned OpenMMO source tree for taurin4 embedded builds.
 
 The OpenMMO checkout is build input, not a copied gameplay implementation. The
-script keeps the source outside git tracking (`/openmmo/` is ignored), pins it to
-the canonical commit, configures a sparse checkout, and generates only the
-reusable server library entrypoint proven by M3-D Slice 1B.
+script keeps the source inside the Tauri package boundary while outside git
+tracking (`/src-tauri/openmmo/` is ignored), pins it to the canonical commit,
+configures a sparse checkout, and generates only the reusable server library
+entrypoint proven by M3-D Slice 1B.
 
 Existing non-generated local changes in the checkout are never discarded.
 """
@@ -108,7 +109,7 @@ def ensure_checkout(repo_root: Path, openmmo: Path) -> None:
 
 def main() -> None:
     repo_root = Path(__file__).resolve().parents[1]
-    openmmo = repo_root / "openmmo"
+    openmmo = repo_root / "src-tauri" / "openmmo"
     ensure_checkout(repo_root, openmmo)
     print(f"OpenMMO embedded source ready at {PIN}: {openmmo}")
 
