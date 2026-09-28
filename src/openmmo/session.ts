@@ -1,4 +1,4 @@
-import type { GameCommand, GameState } from "../game/model";
+import type { GameCommand, GameState, SemanticDestinationKind } from "../game/model";
 import { createInitialGameState } from "../game/simulation";
 import type { GameSession } from "../game/session";
 import type { OpenMmoAdapter } from "./adapter";
@@ -68,6 +68,14 @@ type WorldUpdateWire = {
   }>;
 };
 
+type DungeonDefinition = {
+  id: string;
+  name: string;
+  position: { x: number; y: number; z: number };
+  floors: number;
+  boss: string;
+};
+
 function variantOf(message: OpenMmoServerMessage): string {
   if (typeof message === "string") return message;
   if (!message || typeof message !== "object") return "Unknown";
@@ -85,6 +93,41 @@ const OPENMMO_ABILITIES: readonly OpenMmoAbilityId[] = [
   "dagger_double_slash",
   "auscultation",
 ];
+
+// Exact gameplay coordinates mirrored from pinned OpenMMO
+// 950e081c178d920c10c51f2d31f60c1b3383c925/data-src/dungeons.csv.
+// A destination is exposed only after the authoritative server includes its id
+// in DungeonDiscoveries; this table does not grant discovery client-side.
+const OPENMMO_DUNGEONS: Record<string, DungeonDefinition> = {
+  old_crypt: {
+    id: "old_crypt",
+    name: "Old Crypt",
+    position: { x: -1450, y: 0.7, z: 4720 },
+    floors: 5,
+    boss: "Goblin Boss",
+  },
+  orc_warrens: {
+    id: "orc_warrens",
+    name: "Orc Warrens",
+    position: { x: -1616, y: 1.05, z: 4918 },
+    floors: 10,
+    boss: "Orc Boss",
+  },
+  ogre_stronghold: {
+    id: "ogre_stronghold",
+    name: "Ogre Stronghold",
+    position: { x: -1785.2, y: 1.4, z: 5072.3 },
+    floors: 15,
+    boss: "Ogre Boss",
+  },
+  skeleton_crypt: {
+    id: "skeleton_crypt",
+    name: "Skeleton Crypt",
+    position: { x: -1064, y: 0.95, z: 4248 },
+    floors: 20,
+    boss: "Skeleton Knight",
+  },
+};
 
 function normalizeInventory(inventory: OpenMmoInventory) {
   const equipped = Object.entries(inventory.equipped ?? {}).flatMap(
@@ -183,6 +226,7 @@ export class OpenMmoGameSession implements GameSession {
   private unsubscribeMessages: (() => void) | null = null;
   private currentPlayerId: number | null = null;
   private readonly recentlyDeadMonsters = new Map<string, string>();
+  private discoveredDungeonIds = new Set<string>();
   private worldEpoch = "";
   private worldGeneration = 0;
   private worldSequence = 0;
@@ -446,8 +490,17 @@ export class OpenMmoGameSession implements GameSession {
         if (update.reset) {
           next = {
             ...next,
-            semanticDestinations: [],
-            semanticTravel: null,
+            semanticDestinations: (next.semanticDestinations ?? []).filter(
+              (destination) => destination.kind === "dungeon",
+            ),
+            semanticTravel:
+              next.semanticTravel &&
+              next.semanticDestinations?.some(
+                (destination) =>
+                  destination.id === next.semanticTravel?.destinationId,
+              )
+                ? next.semanticTravel
+                : null,
           };
         }
         this.setState(this.withDestinationDistances(next));
@@ -461,6 +514,7 @@ export class OpenMmoGameSession implements GameSession {
         this.checkSemanticArrival();
         return;
       }
+
       case "JoinSuccess": {
         const player = payloadOf<{ player: PlayerWire }>(
           message,
@@ -485,6 +539,48 @@ export class OpenMmoGameSession implements GameSession {
             "focus",
           ),
         );
+        return;
+      }
+
+      case "DungeonDiscoveries": {
+        const payload = payloadOf<{ entrance_ids: string[] }>(message, variant);
+        const nextIds = new Set(payload.entrance_ids);
+        const newlyDiscovered = payload.entrance_ids.filter(
+          (id) => !this.discoveredDungeonIds.has(id) && OPENMMO_DUNGEONS[id],
+        );
+        this.discoveredDungeonIds = nextIds;
+
+        const transient = (this.state.semanticDestinations ?? []).filter(
+          (destination) => destination.kind !== "dungeon",
+        );
+        const discovered = payload.entrance_ids.flatMap((id) => {
+          const dungeon = OPENMMO_DUNGEONS[id];
+          if (!dungeon) return [];
+          return [
+            {
+              id: "dungeon:" + dungeon.id,
+              kind: "dungeon" as const,
+              label: dungeon.name,
+              position: dungeon.position,
+              floorLevel: 0,
+              distanceMeters: 0,
+              detail: dungeon.floors + "층 · " + dungeon.boss,
+            },
+          ];
+        });
+
+        let next = this.withDestinationDistances({
+          ...this.state,
+          semanticDestinations: [...transient, ...discovered],
+        });
+        for (const id of newlyDiscovered) {
+          next = addLog(
+            next,
+            "던전 발견: " + OPENMMO_DUNGEONS[id].name,
+            "focus",
+          );
+        }
+        this.setState(next);
         return;
       }
 
@@ -1085,7 +1181,8 @@ export class OpenMmoGameSession implements GameSession {
     return true;
   }
 
-  private arrivalRadius(kind: "monster" | "player" | "npc" | "loot") {
+  private arrivalRadius(kind: SemanticDestinationKind) {
+    if (kind === "dungeon") return 0;
     if (kind === "monster") return 2.5;
     if (kind === "player" || kind === "npc") return 1.5;
     return 0.8;
