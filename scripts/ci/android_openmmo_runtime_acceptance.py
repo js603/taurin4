@@ -220,6 +220,12 @@ def set_field(label: str, value: str):
         adb("shell", "input", "keyevent", "KEYCODE_DEL")
     adb("shell", "input", "text", value)
     time.sleep(0.3)
+    # The added Singleplayer section makes the LAN/Remote form taller. Keep
+    # each field edit independent by closing the soft keyboard before locating
+    # the next accessibility node; otherwise a covered field tap can leave the
+    # previous EditText focused and send the next value into the wrong field.
+    adb("shell", "input", "keyevent", "KEYCODE_BACK", check=False)
+    time.sleep(0.4)
 
 
 def screenshot(name: str):
