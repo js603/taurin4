@@ -250,7 +250,11 @@ def main():
     connect_to_lobby(args.server, args.token, "05-reconnect")
 
     reconnected = enter_cryptmira("06-reconnected")
-    state_equal(resumed, reconnected)
+    # Process death does not freeze the authoritative OpenMMO world. HP can
+    # legitimately change between force-stop and re-entry (including death and
+    # server-side recovery), so reconnect continuity is identity + durable
+    # authoritative state, not equality of a transient combat resource.
+    state_equal(resumed, reconnected, include_hp=False)
 
     reconnect_log, _ = read_log_since(server_log, reconnect_offset)
     if "entered game as character 'CryptMira'" not in reconnect_log:

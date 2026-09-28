@@ -1,4 +1,10 @@
-export type OpenMmoEmbeddedPhase = "idle" | "prepared" | "failed";
+export type OpenMmoEmbeddedPhase =
+  | "idle"
+  | "prepared"
+  | "starting"
+  | "running"
+  | "stopping"
+  | "failed";
 
 export interface OpenMmoEmbeddedPaths {
   rootDir: string;
@@ -13,8 +19,17 @@ export interface OpenMmoEmbeddedSnapshot {
   phase: OpenMmoEmbeddedPhase;
   pinnedCommit: string;
   coreLinked: boolean;
+  serverUrl: string | null;
+  apiUrl: string | null;
   paths: OpenMmoEmbeddedPaths | null;
   lastError: string | null;
+}
+
+export interface OpenMmoEmbeddedLaunchConfig {
+  serverUrl: string;
+  accountName: string;
+  npcToken: string;
+  autostart: boolean;
 }
 
 async function invokeEmbedded<T>(command: string): Promise<T> {
@@ -28,6 +43,10 @@ export function loadOpenMmoEmbeddedStatus(): Promise<OpenMmoEmbeddedSnapshot> {
 
 export function prepareOpenMmoEmbeddedHost(): Promise<OpenMmoEmbeddedSnapshot> {
   return invokeEmbedded<OpenMmoEmbeddedSnapshot>("openmmo_embedded_prepare");
+}
+
+export function startOpenMmoEmbeddedHost(): Promise<OpenMmoEmbeddedLaunchConfig> {
+  return invokeEmbedded<OpenMmoEmbeddedLaunchConfig>("openmmo_embedded_start");
 }
 
 export function stopOpenMmoEmbeddedHost(): Promise<OpenMmoEmbeddedSnapshot> {

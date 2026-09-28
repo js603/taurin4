@@ -774,6 +774,7 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
         OLD_CRYPT.y,
         OLD_CRYPT.z,
       );
+      let attackPump: ReturnType<typeof setInterval> | null = null;
 
       try {
         let character = auth.characters.find(
@@ -1085,19 +1086,38 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
         }
         expect(witnessedEncounter.title).toBe(initialTarget.label);
 
-        // An aggressive kobold may attack while the test is opening dungeon
-        // doors. That legitimately advances encounter -> combat. The witness
-        // above proves the Text/Card encounter happened before that transition.
+        // The WORLD ENCOUNTER witness is a UI gate, not a reason to delay real
+        // player input. Enter combat as soon as the witness exists and keep
+        // sending normal ATTACK commands while the aggressive kobold closes.
+        // OpenMMO remains authoritative: out-of-range and cooldown inputs are
+        // rejected by the server exactly as they are for a real player.
         const currentPhase = session.getSnapshot().phase;
         expect(["encounter", "combat"]).toContain(currentPhase);
-        if (currentPhase === "combat") {
+        if (currentPhase === "encounter") {
+          expect(session.getSnapshot().encounter?.entityId).toBe(targetId);
+          session.command({ type: "INVESTIGATE_ENCOUNTER" });
+        } else {
           expect(session.getSnapshot().combat?.enemy.id).toBe(targetId);
         }
+        expect(session.getSnapshot().phase).toBe("combat");
+        expect(session.getSnapshot().combat?.enemy.id).toBe(targetId);
+
+        const combatStart = observed.length;
+        attackPump = setInterval(() => {
+          const snapshot = session.getSnapshot();
+          if (
+            snapshot.player.hp > 0 &&
+            snapshot.phase === "combat" &&
+            snapshot.combat?.enemy.id === targetId
+          ) {
+            session.command({ type: "ATTACK" });
+          }
+        }, 350);
 
         // At the safe staging point, let the one in-range aggressive kobold
         // come to the player instead of walking the player back into the
-        // three-spawn cluster. This keeps the combat fully server-driven while
-        // removing unrelated multi-kobold survival RNG from a 1-kill gate.
+        // three-spawn cluster. The attack pump is already active, so the first
+        // legal server-authorized swing can land as soon as range permits.
         try {
           await waitForSession(
             session,
@@ -1223,53 +1243,8 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
           await delay(200);
         }
 
-        const inRange = currentDungeonMonster(session, targetSemanticId);
-        expect(inRange).toBeDefined();
-        if (!inRange) throw new Error("Kobold disappeared before combat");
-        expect(inRange.distanceMeters).toBeLessThanOrEqual(2.2);
-
-        const beforeCombatInput = session.getSnapshot();
-        if (beforeCombatInput.phase === "encounter") {
-          expect(beforeCombatInput.encounter?.entityId).toBe(targetId);
-          session.command({ type: "INVESTIGATE_ENCOUNTER" });
-        }
-        expect(session.getSnapshot().phase).toBe("combat");
-        expect(session.getSnapshot().combat?.enemy.id).toBe(targetId);
-
-        const combatStart = observed.length;
-        let killed = false;
-
-        // Drive input more frequently than the authoritative 1.38s player
-        // attack cadence. This does not change combat rules: OpenMMO rejects
-        // early commands and decides exactly which attacks are legal. It only
-        // prevents CI scheduling jitter from missing a legal attack window in
-        // the real 1v1 regression.
-        for (let attackInput = 0; attackInput < 40; attackInput += 1) {
-          if (
-            observed
-              .slice(combatStart)
-              .some((message) => {
-                const dead = wirePayload<{ monster_id: string }>(
-                  message,
-                  "MonsterDead",
-                );
-                return dead?.monster_id === targetId;
-              })
-          ) {
-            killed = true;
-            break;
-          }
-
-          if (session.getSnapshot().player.hp <= 0) {
-            throw new Error("Dungeon test character died before killing kobold");
-          }
-
-          session.command({ type: "ATTACK" });
-          await delay(350);
-        }
-
-        if (!killed) {
-          killed = observed
+        const monsterDeadObserved = () =>
+          observed
             .slice(combatStart)
             .some((message) => {
               const dead = wirePayload<{ monster_id: string }>(
@@ -1278,6 +1253,55 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
               );
               return dead?.monster_id === targetId;
             });
+
+        let killed = monsterDeadObserved();
+        const inRange = currentDungeonMonster(session, targetSemanticId);
+        if (!inRange && !killed) {
+          killed = Boolean(
+            await observeOptional<{ monster_id: string }>(
+              observed,
+              "MonsterDead",
+              (payload) => payload.monster_id === targetId,
+              { startIndex: combatStart, windowMs: 750 },
+            ),
+          );
+        }
+
+        // The attack pump is intentionally active during the authoritative
+        // approach. A legal swing can therefore kill the kobold before this
+        // checkpoint removes it from semanticDestinations. Treat that only as
+        // success when the real server emitted MonsterDead; disappearance
+        // without that authoritative event must still fail.
+        if (!killed) {
+          expect(inRange).toBeDefined();
+          if (!inRange) throw new Error("Kobold disappeared before combat");
+          expect(inRange.distanceMeters).toBeLessThanOrEqual(2.2);
+          expect(session.getSnapshot().phase).toBe("combat");
+          expect(session.getSnapshot().combat?.enemy.id).toBe(targetId);
+        }
+
+        // The pump above already drives input more frequently than the
+        // authoritative 1.38s player attack cadence. This monitor only waits
+        // for the real server to accept legal attacks and emit MonsterDead.
+        for (let combatWait = 0; !killed && combatWait < 40; combatWait += 1) {
+          if (monsterDeadObserved()) {
+            killed = true;
+            break;
+          }
+
+          if (session.getSnapshot().player.hp <= 0) {
+            throw new Error("Dungeon test character died before killing kobold");
+          }
+
+          await delay(350);
+        }
+
+        if (!killed) {
+          killed = monsterDeadObserved();
+        }
+        if (attackPump) {
+          clearInterval(attackPump);
+          attackPump = null;
         }
         expect(killed).toBe(true);
 
@@ -1409,6 +1433,7 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
           );
         }
       } finally {
+        if (attackPump) clearInterval(attackPump);
         wasm.dungeon_remove_passability(OLD_CRYPT.id);
         unsubscribeEncounterWitness();
         unsubscribeProbe();

@@ -24,3 +24,5 @@ private_keys/
 AuthKey_*.p8
 mcp_config.local.json
 public/openmmo-wasm/
+openmmo/
+src-tauri/openmmo/
