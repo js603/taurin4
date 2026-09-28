@@ -152,7 +152,7 @@ export function OpenMmoBootstrap({
     }
   }, [accountName, codecUrl, npcToken, serverUrl]);
 
-  const startStandalone = useCallback(async () => {
+  const startStandalone = async () => {
     if (!androidTauri || phase === "starting_embedded") return;
 
     setError(null);
@@ -179,7 +179,7 @@ export function OpenMmoBootstrap({
       setError(cause instanceof Error ? cause.message : String(cause));
       setPhase("error");
     }
-  }, [androidTauri, phase, start, stopEmbeddedHost]);
+  };
 
   useEffect(() => {
     return () => {
@@ -209,7 +209,7 @@ export function OpenMmoBootstrap({
     void start(nativeLaunchConfig);
   }, [nativeLaunchConfig, start]);
 
-  const reset = useCallback(async () => {
+  const reset = async () => {
     activeRuntime.current?.session.stop();
     activeRuntime.current?.adapter.disconnect();
     activeRuntime.current = null;
@@ -232,7 +232,7 @@ export function OpenMmoBootstrap({
     setNpcToken(nativeLaunchConfig?.npcToken ?? "");
     setError(null);
     setPhase("setup");
-  }, [defaultServerUrl, nativeLaunchConfig, params, stopEmbeddedHost]);
+  };
 
   if (phase === "game" && runtime) {
     return <GameScreen session={runtime.session} />;
