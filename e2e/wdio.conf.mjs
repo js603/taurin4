@@ -5,19 +5,22 @@ import { spawn } from "node:child_process";
 let tauriDriver;
 let shuttingDown = false;
 
+const application = process.env.TAURIN4_E2E_APP
+  ? path.resolve(process.env.TAURIN4_E2E_APP)
+  : path.resolve(process.cwd(), "../src-tauri/target/debug/taurin4.exe");
+
+const spec = process.env.TAURIN4_E2E_SPEC ?? "./specs/openmmo-playable.e2e.mjs";
+
 export const config = {
   host: "127.0.0.1",
   port: 4444,
-  specs: ["./specs/**/*.e2e.mjs"],
+  specs: [spec],
   maxInstances: 1,
   capabilities: [
     {
       maxInstances: 1,
       "tauri:options": {
-        application: path.resolve(
-          process.cwd(),
-          "../src-tauri/target/debug/taurin4.exe",
-        ),
+        application,
       },
     },
   ],
