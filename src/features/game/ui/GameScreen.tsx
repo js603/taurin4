@@ -10,6 +10,7 @@ import {
   LOCATIONS,
   type GameCommand,
   type Location,
+  type SemanticDestinationKind,
 } from "../../../game/model";
 import {
   createLocalGameSession,
@@ -63,10 +64,11 @@ function abilityLabel(id: string) {
     .join(" ");
 }
 
-function semanticKindLabel(kind: "monster" | "player" | "npc" | "loot") {
+function semanticKindLabel(kind: SemanticDestinationKind) {
   if (kind === "monster") return "MONSTER";
   if (kind === "player") return "PLAYER";
   if (kind === "npc") return "NPC";
+  if (kind === "dungeon") return "DUNGEON";
   return "LOOT";
 }
 
