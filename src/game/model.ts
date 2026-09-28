@@ -65,7 +65,12 @@ export interface TravelState {
   encounterTriggered: boolean;
 }
 
-export type SemanticDestinationKind = "monster" | "player" | "npc" | "loot";
+export type SemanticDestinationKind =
+  | "monster"
+  | "player"
+  | "npc"
+  | "loot"
+  | "dungeon";
 
 export interface SemanticDestination {
   id: string;
