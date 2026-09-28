@@ -1,5 +1,0 @@
-M3-D Slice 1C paused implementation head
-60a439ad916f81288fd58c39e4afab6dfb899f5f
-
-Recovery checkpoint branch:
-checkpoint/idea2-m3d-slice1c-paused-20260928
