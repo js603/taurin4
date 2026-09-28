@@ -1126,8 +1126,18 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
                 session,
                 targetSemanticId,
               );
+              const targetKilled = observed
+                .slice(combatStart)
+                .some((message) => {
+                  const dead = wirePayload<{ monster_id: string }>(
+                    message,
+                    "MonsterDead",
+                  );
+                  return dead?.monster_id === targetId;
+                });
               return Boolean(
-                session.getSnapshot().player.hp <= 0 ||
+                targetKilled ||
+                  session.getSnapshot().player.hp <= 0 ||
                   (target && target.distanceMeters <= 2.2),
               );
             },
@@ -1138,7 +1148,16 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
           // not close the distance in time.
         }
 
-        if (session.getSnapshot().player.hp <= 0) {
+        const targetAlreadyKilled = observed
+          .slice(combatStart)
+          .some((message) => {
+            const dead = wirePayload<{ monster_id: string }>(
+              message,
+              "MonsterDead",
+            );
+            return dead?.monster_id === targetId;
+          });
+        if (session.getSnapshot().player.hp <= 0 && !targetAlreadyKilled) {
           throw new Error(
             "Dungeon test character died before isolated kobold combat",
           );
