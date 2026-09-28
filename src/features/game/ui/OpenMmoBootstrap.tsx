@@ -24,8 +24,6 @@ type BootstrapPhase =
   | "game"
   | "error";
 
-type AndroidConnectionMode = "chooser" | "standalone" | "external";
-
 function waitForConnected(runtime: OpenMmoRuntime, timeoutMs = 8_000) {
   if (runtime.adapter.getSnapshot().phase === "connected") {
     return Promise.resolve();
@@ -86,9 +84,6 @@ export function OpenMmoBootstrap({
   const [phase, setPhase] = useState<BootstrapPhase>("setup");
   const [error, setError] = useState<string | null>(null);
   const [runtime, setRuntime] = useState<OpenMmoRuntime | null>(null);
-  const [androidMode, setAndroidMode] = useState<AndroidConnectionMode>(
-    androidTauri ? "chooser" : "external",
-  );
   const [embeddedLaunchConfig, setEmbeddedLaunchConfig] =
     useState<OpenMmoEmbeddedLaunchConfig | null>(null);
   const activeRuntime = useRef<OpenMmoRuntime | null>(null);
@@ -160,7 +155,6 @@ export function OpenMmoBootstrap({
   const startStandalone = useCallback(async () => {
     if (!androidTauri || phase === "starting_embedded") return;
 
-    setAndroidMode("standalone");
     setError(null);
     setPhase("starting_embedded");
 
@@ -238,14 +232,7 @@ export function OpenMmoBootstrap({
     setNpcToken(nativeLaunchConfig?.npcToken ?? "");
     setError(null);
     setPhase("setup");
-    if (androidTauri) setAndroidMode("chooser");
-  }, [
-    androidTauri,
-    defaultServerUrl,
-    nativeLaunchConfig,
-    params,
-    stopEmbeddedHost,
-  ]);
+  }, [defaultServerUrl, nativeLaunchConfig, params, stopEmbeddedHost]);
 
   if (phase === "game" && runtime) {
     return <GameScreen session={runtime.session} />;
@@ -282,54 +269,8 @@ export function OpenMmoBootstrap({
     );
   }
 
-  if (androidTauri && androidMode !== "external") {
-    const starting = phase === "starting_embedded";
-
-    return (
-      <main className="runtime-shell">
-        <header className="runtime-header">
-          <div>
-            <p className="eyebrow">REAL OPENMMO · ANDROID</p>
-            <h1>Android OpenMMO</h1>
-          </div>
-        </header>
-
-        <section className="runtime-panel">
-          <p className="runtime-panel__copy">
-            Singleplayer는 이 기기 안에서 원본 OpenMMO 권위 서버 코어를 자동으로 시작하고 로컬로 연결한다. 서버 주소나 인증 token 입력은 필요하지 않으며 token은 브라우저 저장소나 URL에 저장하지 않는다.
-          </p>
-
-          <div className="runtime-actions">
-            <button
-              type="button"
-              className="game-button game-button--primary"
-              disabled={starting}
-              onClick={() => void startStandalone()}
-            >
-              {starting ? "STARTING LOCAL WORLD" : "Singleplayer"}
-            </button>
-            {!starting ? (
-              <button
-                type="button"
-                className="text-button"
-                onClick={() => {
-                  setError(null);
-                  setPhase("setup");
-                  setAndroidMode("external");
-                }}
-              >
-                LAN / Remote
-              </button>
-            ) : null}
-          </div>
-
-          {error ? <p className="runtime-error">{error}</p> : null}
-        </section>
-      </main>
-    );
-  }
-
   const working =
+    phase === "starting_embedded" ||
     phase === "loading_codec" ||
     phase === "connecting" ||
     phase === "authenticating";
@@ -345,30 +286,38 @@ export function OpenMmoBootstrap({
               : "Local Play Connection"}
           </h1>
         </div>
-        {androidTauri ? (
-          <button
-            type="button"
-            className="text-button"
-            disabled={working}
-            onClick={() => {
-              setError(null);
-              setPhase("setup");
-              setAndroidMode("chooser");
-            }}
-          >
-            PLAY MODE
-          </button>
-        ) : (
+        {!androidTauri ? (
           <a className="runtime-link" href={window.location.pathname}>
             LOCAL MODE
           </a>
-        )}
+        ) : null}
       </header>
 
       <section className="runtime-panel">
+        {androidTauri ? (
+          <>
+            <p className="runtime-panel__copy">
+              Singleplayer는 이 기기 안에서 원본 OpenMMO 권위 서버 코어를 자동으로 시작하고 로컬로 연결한다. 서버 주소나 인증 token 입력은 필요하지 않으며 token은 브라우저 저장소나 URL에 저장하지 않는다.
+            </p>
+            <div className="runtime-actions">
+              <button
+                type="button"
+                className="game-button game-button--primary"
+                disabled={working}
+                onClick={() => void startStandalone()}
+              >
+                {phase === "starting_embedded"
+                  ? "STARTING LOCAL WORLD"
+                  : "Singleplayer"}
+              </button>
+            </div>
+            <p className="eyebrow">LAN / REMOTE</p>
+          </>
+        ) : null}
+
         <p className="runtime-panel__copy">
           {androidTauri
-            ? "LAN / Remote 모드는 Tauri Rust WebSocket transport로 외부 OpenMMO 서버에 연결한다. 인증 token은 브라우저 저장소나 URL에 저장하지 않는다."
+            ? "외부 서버 플레이는 기존 Tauri Rust WebSocket transport를 그대로 사용한다. 같은 Wi-Fi의 PC 서버 또는 원격 서버 주소를 입력할 수 있으며 인증 token은 브라우저 저장소나 URL에 저장하지 않는다."
             : "실제 pinned OpenMMO 서버에 연결한다. Windows 로컬 플레이 런처를 사용하면 서버와 인증 정보가 자동으로 연결되며 NPC token은 브라우저 저장소나 URL에 저장하지 않는다."}
         </p>
 
