@@ -10,6 +10,7 @@ import {
   LOCATIONS,
   type GameCommand,
   type Location,
+  type SemanticDestinationKind,
 } from "../../../game/model";
 import {
   createLocalGameSession,
@@ -63,10 +64,11 @@ function abilityLabel(id: string) {
     .join(" ");
 }
 
-function semanticKindLabel(kind: "monster" | "player" | "npc" | "loot") {
+function semanticKindLabel(kind: SemanticDestinationKind) {
   if (kind === "monster") return "MONSTER";
   if (kind === "player") return "PLAYER";
   if (kind === "npc") return "NPC";
+  if (kind === "dungeon") return "DUNGEON";
   return "LOOT";
 }
 
@@ -224,7 +226,9 @@ export function GameScreen({
                   ? state.semanticTravel
                     ? state.semanticTravel.label +
                       " 쪽으로 이동 중이다. 좌표 대신 의미 있는 대상만 표시한다."
-                    : "원본 OpenMMO 서버의 권위 상태를 Text/Card 이벤트로 표현하고 있다."
+                    : (state.semanticDestinations?.length ?? 0) > 0
+                      ? "서버가 발견한 목적지가 도착했다. 카드를 선택하면 원본 OpenMMO 월드에서 이동과 사건 진행이 시작된다."
+                      : "서버의 월드 이벤트와 발견 가능한 목적지를 기다리고 있다."
                   : currentLocation.description}
           </p>
 
