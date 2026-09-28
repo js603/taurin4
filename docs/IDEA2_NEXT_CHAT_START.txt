@@ -1,0 +1,1 @@
+docs/IDEA2_NEXT_CHAT_HANDOFF_20260928.md 기준으로 PR #12의 M3-D Slice 1C를 계속 진행해줘. 먼저 run 36361234459 / job 108738707917의 실패 step만 확인해.
