@@ -14,15 +14,21 @@ default = []
 embedded-openmmo = ["dep:onlinerpg-server", "dep:tokio"]
 
 [build-dependencies]
-tauri-build = { version = "2.6.3", features = [] }
+# Keep the build helper on the exact line paired with Tauri 2.11.6. Its
+# published caret range otherwise resolves to tauri-build 2.7.x in fresh CI.
+tauri-build = { version = "=2.6.3", features = [] }
 
 [dependencies]
 tauri = { version = "=2.11.6", features = [] }
-# Tauri 2.11.6 declares these with caret-compatible ranges. Pin the matching
-# runtime line explicitly so a lockfile-free CI resolution cannot select the
-# API-incompatible 2.12 runtime release.
+# Tauri 2.11.6 publishes its internal dependencies with caret-compatible
+# ranges. A lockfile-free resolution therefore mixes 2.11.6 with newer
+# 2.12/2.10/2.7 internals, which are API-incompatible. Constrain the exact
+# internal line shipped by the tauri-v2.11.6 release.
 tauri-runtime = "=2.11.3"
 tauri-runtime-wry = { version = "=2.11.4", default-features = false }
+tauri-macros = "=2.6.3"
+tauri-codegen = { version = "=2.6.3", default-features = false }
+tauri-utils = "=2.9.3"
 tauri-plugin-store = "=2.4.5"
 tauri-plugin-websocket = "=2.4.3"
 serde = { version = "1", features = ["derive"] }
