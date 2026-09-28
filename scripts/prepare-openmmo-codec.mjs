@@ -11,18 +11,16 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoDir = path.resolve(scriptDir, "..");
 const sourceDir = process.env.OPENMMO_SOURCE_DIR
   ? path.resolve(process.env.OPENMMO_SOURCE_DIR)
-  : null;
-
-if (!sourceDir) {
-  throw new Error(
-    "OPENMMO_SOURCE_DIR is required. Point it to a separate pinned OpenMMO checkout.",
-  );
-}
+  : path.join(repoDir, "src-tauri", "openmmo");
 
 const sharedDir = path.join(sourceDir, "shared");
 const cargoToml = path.join(sharedDir, "Cargo.toml");
 if (!existsSync(cargoToml)) {
-  throw new Error("OpenMMO shared/Cargo.toml was not found: " + cargoToml);
+  throw new Error(
+    "OpenMMO shared/Cargo.toml was not found: " +
+      cargoToml +
+      ". Run openmmo:embedded:prepare first or set OPENMMO_SOURCE_DIR.",
+  );
 }
 
 let actualCommit = "unknown";
@@ -33,7 +31,7 @@ try {
     { encoding: "utf8" },
   ).trim();
 } catch {
-  throw new Error("OPENMMO_SOURCE_DIR must be a Git checkout");
+  throw new Error("OpenMMO codec source must be a Git checkout");
 }
 
 if (actualCommit !== PINNED_OPENMMO_COMMIT) {
