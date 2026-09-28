@@ -29,7 +29,7 @@ jobs:
         run: cargo test --manifest-path crates/game-server-core/Cargo.toml
 
   windows:
-    name: Windows client + host compile
+    name: Windows standalone debug executable
     needs: shared-core
     runs-on: windows-2022
     steps:
@@ -38,50 +38,62 @@ jobs:
         with:
           node-version: 22
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Web quality gate
         run: npm run check
-      - name: Compile Tauri Windows app with embedded host core
-        run: npm run tauri -- build --debug --no-bundle
-      - name: Stage M1 Windows LAN test package
+      - name: Build Tauri Windows app with embedded authoritative OpenMMO
+        run: npm run tauri:build -- --debug --no-bundle
+      - name: Verify Windows executable contains embedded authoritative core
         shell: pwsh
         run: |
           $source = "src-tauri/target/debug/taurin4.exe"
-          $dest = "artifacts/idea2-m1-windows"
-
           if (-not (Test-Path -Path $source -PathType Leaf)) {
             throw "Windows debug executable was not produced: $source"
           }
-
+          $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $source))
+          $text = [System.Text.Encoding]::ASCII.GetString($bytes)
+          if (-not $text.Contains('The server is shutting down. Please reconnect shortly.')) {
+            throw "Windows executable does not contain the authoritative OpenMMO core marker."
+          }
+          if (-not (Test-Path "dist/openmmo-wasm/onlinerpg_shared.js")) {
+            throw "Pinned browser codec JavaScript is missing from the packaged frontend."
+          }
+          if (-not (Test-Path "dist/openmmo-wasm/onlinerpg_shared_bg.wasm")) {
+            throw "Pinned browser codec WASM is missing from the packaged frontend."
+          }
+      - name: Stage Windows standalone package
+        shell: pwsh
+        run: |
+          $source = "src-tauri/target/debug/taurin4.exe"
+          $dest = "artifacts/idea2-windows-standalone"
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
           Copy-Item -Path $source -Destination "$dest/taurin4.exe"
-
           @(
-            "idea2 M1 Windows LAN Test"
+            "taurin4 idea2 Standalone (Windows x64)"
             ""
-            "Use this exact package on both Windows PCs."
-            "PC A: start LAN Host."
-            "PC B: enter PC A's LAN IPv4 address and connect."
-            "Allow taurin4.exe through Windows Defender Firewall on Private networks."
-            ""
-            "Full procedure:"
-            "docs/IDEA2_M1_PC_LAN_TEST.md"
-          ) | Set-Content -Path "$dest/README_M1_LAN_TEST.txt" -Encoding utf8
-
+            "Run taurin4.exe and select Singleplayer."
+            "The pinned authoritative OpenMMO core runs inside this process."
+            "No separate OpenMMO server, server URL, or auth token is required for Singleplayer."
+          ) | Set-Content -Path "$dest/README_STANDALONE.txt" -Encoding utf8
           $hash = Get-FileHash -Path "$dest/taurin4.exe" -Algorithm SHA256
           "$($hash.Hash.ToLowerInvariant())  taurin4.exe" |
             Set-Content -Path "$dest/SHA256SUMS.txt" -Encoding ascii
-      - name: Upload M1 Windows LAN test package
+      - name: Upload Windows standalone package
         uses: actions/upload-artifact@v4
         with:
-          name: idea2-m1-windows-x64-test
-          path: artifacts/idea2-m1-windows/
+          name: idea2-windows-standalone-debug
+          path: artifacts/idea2-windows-standalone/
           if-no-files-found: error
           retention-days: 14
 
   android:
-    name: Android client + host APK
+    name: Android standalone APK
     needs: shared-core
     runs-on: ubuntu-latest
     steps:
@@ -98,7 +110,10 @@ jobs:
           packages: platform-tools
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android,wasm32-unknown-unknown
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
       - name: Resolve Android NDK
         shell: bash
         run: |
@@ -114,13 +129,24 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Initialize Android project
-        run: npm run tauri -- android init --ci
-      - name: Build Android debug APK with embedded host core
-        run: npm run tauri -- android build --debug --apk --ci
+        run: npm run android:init -- --ci
+      - name: Build Android standalone debug APK
+        run: npm run android:build:debug -- --ci
+      - name: Verify Android APK contains authoritative embedded core
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
+          test -n "$APK"
+          CHECK_DIR="$RUNNER_TEMP/taurin4-android-core-check"
+          mkdir -p "$CHECK_DIR"
+          unzip -o "$APK" 'lib/arm64-v8a/libtaurin4_lib.so' -d "$CHECK_DIR" >/dev/null
+          strings "$CHECK_DIR/lib/arm64-v8a/libtaurin4_lib.so" |
+            grep -Fq 'The server is shutting down. Please reconnect shortly.'
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
-          name: idea2-android-host-debug-apk
+          name: idea2-android-standalone-debug-apk
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
           if-no-files-found: error
           retention-days: 14

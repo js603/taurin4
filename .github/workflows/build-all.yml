@@ -49,11 +49,10 @@ jobs:
           path: dist/
           if-no-files-found: error
           retention-days: 14
+
   windows:
     name: Windows x64
     needs: quality
-    # WiX v3 requires the VBScript Windows optional feature. Keep the runner
-    # pinned until windows-latest guarantees that feature for MSI builds.
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v5
@@ -61,6 +60,11 @@ jobs:
         with:
           node-version: 22
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
       - name: Verify WiX prerequisites
         shell: pwsh
         run: |
@@ -72,32 +76,44 @@ jobs:
           }
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Build NSIS setup EXE
-        run: npm run tauri -- build -vv --bundles nsis
-      - name: Build MSI
-        run: npm run tauri -- build -vv --bundles msi
+      - name: Build NSIS setup EXE with embedded OpenMMO
+        run: npm run tauri:build -- --bundles nsis
+      - name: Build MSI with embedded OpenMMO
+        run: npm run tauri:build -- --bundles msi
+      - name: Verify packaged Windows core and codec
+        shell: pwsh
+        run: |
+          $portableExe = "src-tauri/target/release/taurin4.exe"
+          if (-not (Test-Path -Path $portableExe -PathType Leaf)) {
+            throw "Portable executable was not produced: $portableExe"
+          }
+          $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $portableExe))
+          $text = [System.Text.Encoding]::ASCII.GetString($bytes)
+          if (-not $text.Contains('The server is shutting down. Please reconnect shortly.')) {
+            throw "Windows executable does not contain the embedded authoritative OpenMMO core."
+          }
+          if (-not (Test-Path "dist/openmmo-wasm/onlinerpg_shared.js")) {
+            throw "Pinned browser codec JavaScript is missing."
+          }
+          if (-not (Test-Path "dist/openmmo-wasm/onlinerpg_shared_bg.wasm")) {
+            throw "Pinned browser codec WASM is missing."
+          }
       - name: Stage Windows portable package
         shell: pwsh
         run: |
           $portableExe = "src-tauri/target/release/taurin4.exe"
           $portableDir = "artifacts/windows-portable"
-          if (-not (Test-Path -Path $portableExe -PathType Leaf)) {
-            throw "Portable executable was not produced: $portableExe"
-          }
-
           New-Item -ItemType Directory -Force -Path $portableDir | Out-Null
           Copy-Item -Path $portableExe -Destination "$portableDir/taurin4.exe"
-
           @(
             "taurin4 Portable (Windows x64)"
             ""
-            "Run taurin4.exe directly. Installation is not required."
-            "The app stores its data in the current Windows user's app-data directory."
-            "Moving this folder to another PC does not move the saved app data."
+            "Run taurin4.exe directly and select Singleplayer."
+            "The pinned authoritative OpenMMO core is embedded in this executable."
+            "No separate server, server URL, or auth token is required for Singleplayer."
             "Microsoft Edge WebView2 Runtime is required. It is normally included with Windows 10/11."
             "This build is unsigned, so Windows SmartScreen may show a warning on first launch."
           ) | Set-Content -Path "$portableDir/README_PORTABLE.txt" -Encoding utf8
-
           $hash = Get-FileHash -Path "$portableDir/taurin4.exe" -Algorithm SHA256
           "$($hash.Hash.ToLowerInvariant())  taurin4.exe" |
             Set-Content -Path "$portableDir/SHA256SUMS.txt" -Encoding ascii
@@ -147,12 +163,13 @@ jobs:
           java-version: "17"
       - uses: android-actions/setup-android@v4
         with:
-          # setup-android's historical default also requests the removed
-          # legacy `tools` package. Tauri only needs current cmdline tools.
           packages: platform-tools
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android,wasm32-unknown-unknown
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
       - name: Resolve Android NDK
         shell: bash
         run: |
@@ -172,9 +189,20 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Initialize Android project
-        run: npm run tauri -- android init --ci
-      - name: Build installable debug APK
-        run: npm run tauri -- android build --debug --apk --ci
+        run: npm run android:init -- --ci
+      - name: Build installable standalone debug APK
+        run: npm run android:build:debug -- --ci
+      - name: Verify Android debug APK embeds authoritative OpenMMO
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
+          test -n "$APK"
+          CHECK_DIR="$RUNNER_TEMP/taurin4-android-core-check"
+          mkdir -p "$CHECK_DIR"
+          unzip -o "$APK" 'lib/arm64-v8a/libtaurin4_lib.so' -d "$CHECK_DIR" >/dev/null
+          strings "$CHECK_DIR/lib/arm64-v8a/libtaurin4_lib.so" |
+            grep -Fq 'The server is shutting down. Please reconnect shortly.'
       - name: Stage debug APK
         run: |
           python3 scripts/ci/stage_artifacts.py \
@@ -198,9 +226,9 @@ jobs:
       - name: Configure Android release signing
         if: env.ANDROID_SIGNING_ENABLED == 'true'
         run: bash scripts/ci/setup_android_signing.sh
-      - name: Build signed release APK + AAB
+      - name: Build signed standalone release APK + AAB
         if: env.ANDROID_SIGNING_ENABLED == 'true'
-        run: npm run tauri -- android build --apk --aab --ci
+        run: npm run android:build:release -- --ci
       - name: Stage Android release artifacts
         if: env.ANDROID_SIGNING_ENABLED == 'true'
         run: |
@@ -223,8 +251,6 @@ jobs:
     runs-on: macos-latest
     env:
       IOS_SIGNING_ENABLED: ${{ vars.IOS_SIGNING_ENABLED }}
-      # Tauri requires a syntactically valid team during project generation,
-      # even for --no-sign. Signed builds still require the real secret below.
       APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM || '0000000000' }}
     steps:
       - uses: actions/checkout@v5

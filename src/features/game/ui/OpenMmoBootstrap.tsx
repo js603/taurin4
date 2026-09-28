@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { isAndroidTauriRuntime } from "../../../app/platformRuntime";
+import {
+  isAndroidTauriRuntime,
+  isTauriRuntime,
+} from "../../../app/platformRuntime";
 import { GameScreen } from "./GameScreen";
 import { OpenMmoCharacterLobby } from "./OpenMmoCharacterLobby";
 import { loadOpenMmoBrowserCodec } from "../../../openmmo/browserCodec";
@@ -63,6 +66,7 @@ export function OpenMmoBootstrap({
   nativeLaunchConfig?: OpenMmoNativeLaunchConfig | null;
 } = {}) {
   const params = new URLSearchParams(window.location.search);
+  const nativeTauri = isTauriRuntime();
   const androidTauri = isAndroidTauriRuntime();
   const defaultServerUrl =
     nativeLaunchConfig?.serverUrl ??
@@ -153,7 +157,7 @@ export function OpenMmoBootstrap({
   }, [accountName, codecUrl, npcToken, serverUrl]);
 
   const startStandalone = async () => {
-    if (!androidTauri || phase === "starting_embedded") return;
+    if (!nativeTauri || phase === "starting_embedded") return;
 
     setError(null);
     setPhase("starting_embedded");
@@ -257,7 +261,7 @@ export function OpenMmoBootstrap({
 
         {embeddedLaunchConfig ? (
           <p className="runtime-panel__copy">
-            ANDROID STANDALONE · EMBEDDED AUTHORITATIVE CORE
+            STANDALONE · EMBEDDED AUTHORITATIVE CORE
           </p>
         ) : null}
 
@@ -286,7 +290,7 @@ export function OpenMmoBootstrap({
               : "Local Play Connection"}
           </h1>
         </div>
-        {!androidTauri ? (
+        {!nativeTauri ? (
           <a className="runtime-link" href={window.location.pathname}>
             LOCAL MODE
           </a>
@@ -294,7 +298,7 @@ export function OpenMmoBootstrap({
       </header>
 
       <section className="runtime-panel">
-        {androidTauri ? (
+        {nativeTauri ? (
           <>
             <p className="runtime-panel__copy">
               Singleplayer는 이 기기 안에서 원본 OpenMMO 권위 서버 코어를 자동으로 시작하고 로컬로 연결한다. 서버 주소나 인증 token 입력은 필요하지 않으며 token은 브라우저 저장소나 URL에 저장하지 않는다.
@@ -316,9 +320,9 @@ export function OpenMmoBootstrap({
         ) : null}
 
         <p className="runtime-panel__copy">
-          {androidTauri
-            ? "외부 서버 플레이는 기존 Tauri Rust WebSocket transport를 그대로 사용한다. 같은 Wi-Fi의 PC 서버 또는 원격 서버 주소를 입력할 수 있으며 인증 token은 브라우저 저장소나 URL에 저장하지 않는다."
-            : "실제 pinned OpenMMO 서버에 연결한다. Windows 로컬 플레이 런처를 사용하면 서버와 인증 정보가 자동으로 연결되며 NPC token은 브라우저 저장소나 URL에 저장하지 않는다."}
+          {nativeTauri
+            ? "외부 서버 플레이는 기존 Tauri Rust WebSocket transport를 그대로 사용한다. 같은 LAN의 서버 또는 원격 서버 주소를 입력할 수 있으며 인증 token은 브라우저 저장소나 URL에 저장하지 않는다."
+            : "실제 pinned OpenMMO 서버에 연결한다. 인증 token은 브라우저 저장소나 URL에 저장하지 않는다."}
         </p>
 
         {nativeLaunchConfig ? (
@@ -329,7 +333,7 @@ export function OpenMmoBootstrap({
 
         <div className="runtime-fields">
           <label>
-            <span>{androidTauri ? "SERVER WEBSOCKET · LAN / REMOTE" : "SERVER WEBSOCKET"}</span>
+            <span>{nativeTauri ? "SERVER WEBSOCKET · LAN / REMOTE" : "SERVER WEBSOCKET"}</span>
             <input
               aria-label="OpenMMO server websocket"
               value={serverUrl}

@@ -86,33 +86,23 @@ jobs:
             src-tauri/openmmo
             src-tauri
 
-      - name: Build pinned browser codec from embedded source
-        run: npm run openmmo:codec
+      - name: Initialize Android project
+        run: npm run android:init -- --ci
 
-      - name: Verify exact source and browser codec pins
+      - name: Build x86_64 standalone Android APK through canonical package script
+        run: npm run android:build:debug -- --ci --target x86_64
+
+      - name: Verify exact source, codec, and standalone APK linkage
         shell: bash
         run: |
           set -euo pipefail
           test "$(git -C src-tauri/openmmo rev-parse HEAD)" = "950e081c178d920c10c51f2d31f60c1b3383c925"
           grep -q 'source_commit=950e081c178d920c10c51f2d31f60c1b3383c925' public/openmmo-wasm/PINNED_OPENMMO.txt
-          test -f public/openmmo-wasm/onlinerpg_shared.js
-          test -f public/openmmo-wasm/onlinerpg_shared_bg.wasm
-
-      - name: Initialize Android project
-        run: npm run tauri -- android init --ci
-
-      - name: Build x86_64 standalone Android APK
-        run: npm run tauri -- android build --debug --apk --ci --features embedded-openmmo --target x86_64
-
-      - name: Inspect standalone APK linkage
-        shell: bash
-        run: |
-          set -euo pipefail
-          APK="$(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
-          test -n "$APK"
           test -f dist/openmmo-wasm/onlinerpg_shared.js
           test -f dist/openmmo-wasm/onlinerpg_shared_bg.wasm
 
+          APK="$(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
+          test -n "$APK"
           TMP_APK_CHECK="$RUNNER_TEMP/taurin4-standalone-apk-check"
           mkdir -p "$TMP_APK_CHECK"
           unzip -o "$APK" 'lib/x86_64/libtaurin4_lib.so' -d "$TMP_APK_CHECK" >/dev/null

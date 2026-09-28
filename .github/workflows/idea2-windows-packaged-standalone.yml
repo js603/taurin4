@@ -1,0 +1,139 @@
+name: idea2 Windows Packaged Standalone E2E
+
+on:
+  pull_request:
+    branches: ["idea2"]
+    paths:
+      - ".github/workflows/idea2-windows-packaged-standalone.yml"
+      - "e2e/**"
+      - "src-tauri/**"
+      - "src/App.tsx"
+      - "src/app/platformRuntime.ts"
+      - "src/openmmo/**"
+      - "src/features/game/ui/OpenMmo*.tsx"
+      - "src/features/game/ui/GameScreen.tsx"
+      - "scripts/prepare-openmmo-embedded.py"
+      - "scripts/prepare-openmmo-codec.mjs"
+      - "scripts/ci/extract_openmmo_server_lib.py"
+      - "package.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: idea2-windows-packaged-standalone-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-packaged-standalone:
+    name: Installed Windows EXE standalone user flow
+    runs-on: windows-2022
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout taurin4
+        uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Install WebDriverIO acceptance dependencies
+        working-directory: e2e
+        run: npm install --no-audit --no-fund
+
+      - name: Quality gate
+        run: npm run check
+
+      - name: Build installable NSIS EXE with embedded authoritative OpenMMO
+        run: npm run tauri:build -- --bundles nsis
+
+      - name: Verify packaged executable and codec linkage
+        shell: pwsh
+        run: |
+          $exe = "src-tauri/target/release/taurin4.exe"
+          if (-not (Test-Path -Path $exe -PathType Leaf)) {
+            throw "Release executable was not produced: $exe"
+          }
+
+          $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $exe))
+          $text = [System.Text.Encoding]::ASCII.GetString($bytes)
+          if (-not $text.Contains('The server is shutting down. Please reconnect shortly.')) {
+            throw "Release executable does not contain the authoritative OpenMMO core."
+          }
+          if (-not (Test-Path "dist/openmmo-wasm/onlinerpg_shared.js")) {
+            throw "Pinned browser codec JavaScript is missing."
+          }
+          if (-not (Test-Path "dist/openmmo-wasm/onlinerpg_shared_bg.wasm")) {
+            throw "Pinned browser codec WASM is missing."
+          }
+
+          $installer = Get-ChildItem "src-tauri/target/release/bundle/nsis" -Filter "*-setup.exe" -File | Select-Object -First 1
+          if ($null -eq $installer) {
+            throw "NSIS setup EXE was not produced."
+          }
+          "TAURIN4_NSIS_INSTALLER=$($installer.FullName)" >> $env:GITHUB_ENV
+
+      - name: Install NSIS package exactly like an end user
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath $env:TAURIN4_NSIS_INSTALLER -ArgumentList "/S" -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "NSIS installer failed with exit code $($process.ExitCode)"
+          }
+
+          $candidates = @(
+            (Join-Path $env:LOCALAPPDATA "taurin4\taurin4.exe"),
+            (Join-Path $env:LOCALAPPDATA "Programs\taurin4\taurin4.exe"),
+            (Join-Path $env:ProgramFiles "taurin4\taurin4.exe")
+          )
+
+          $installed = $candidates | Where-Object { Test-Path -Path $_ -PathType Leaf } | Select-Object -First 1
+          if (-not $installed) {
+            $installed = Get-ChildItem $env:LOCALAPPDATA -Filter "taurin4.exe" -File -Recurse -ErrorAction SilentlyContinue |
+              Select-Object -ExpandProperty FullName -First 1
+          }
+          if (-not $installed) {
+            throw "Installed taurin4.exe could not be located after NSIS installation."
+          }
+
+          Write-Host "Installed executable: $installed"
+          "TAURIN4_E2E_APP=$installed" >> $env:GITHUB_ENV
+          "TAURIN4_E2E_SPEC=./specs/standalone-packaged.e2e.mjs" >> $env:GITHUB_ENV
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --locked
+
+      - name: Install matching Edge WebDriver
+        shell: pwsh
+        run: |
+          cargo install --git https://github.com/chippers/msedgedriver-tool
+          & "$HOME\.cargo\bin\msedgedriver-tool.exe"
+          $PWD.Path >> $env:GITHUB_PATH
+
+      - name: Run installed EXE standalone acceptance
+        working-directory: e2e
+        run: npm test
+
+      - name: Upload packaged standalone evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: idea2-windows-packaged-standalone-e2e
+          path: |
+            e2e/artifacts-packaged-standalone/**
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: warn
+          retention-days: 14

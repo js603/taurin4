@@ -10,9 +10,10 @@ import {
 
 export default function App() {
   const explicitMode = resolveAppRuntimeMode(window.location.search);
+  const nativeTauri = isTauriRuntime();
   const androidTauri = isAndroidTauriRuntime();
   const shouldProbeNative =
-    explicitMode !== "openmmo" && isTauriRuntime() && !androidTauri;
+    explicitMode !== "openmmo" && nativeTauri && !androidTauri;
   const [nativeLaunchConfig, setNativeLaunchConfig] = useState<
     OpenMmoNativeLaunchConfig | null | undefined
   >(shouldProbeNative ? undefined : null);
@@ -47,7 +48,7 @@ export default function App() {
     );
   }
 
-  if (nativeLaunchConfig?.autostart) {
+  if (nativeTauri) {
     return <OpenMmoBootstrap nativeLaunchConfig={nativeLaunchConfig} />;
   }
 

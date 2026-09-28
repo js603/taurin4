@@ -32,9 +32,9 @@ concurrency:
 
 jobs:
   android-openmmo:
-    name: Android OpenMMO client APK
+    name: Android OpenMMO standalone APK
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v5
@@ -54,7 +54,11 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android,wasm32-unknown-unknown
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
 
       - name: Resolve Android NDK
         shell: bash
@@ -76,22 +80,26 @@ jobs:
       - name: Frontend and transport quality
         run: npm run check
 
-      - name: Verify websocket plugin wiring
+      - name: Initialize Android project
+        run: npm run android:init -- --ci
+
+      - name: Build installable standalone Android debug APK
+        run: npm run android:build:debug -- --ci
+
+      - name: Verify APK contains authoritative embedded core
         shell: bash
         run: |
           set -euo pipefail
-          grep -q 'tauri-plugin-websocket' src-tauri/Cargo.toml
-          grep -q 'tauri_plugin_websocket::init()' src-tauri/src/lib.rs
-          grep -q '"websocket:default"' src-tauri/capabilities/default.json
-          grep -q '@tauri-apps/plugin-websocket' package.json
-          grep -q 'TauriPluginOpenMmoTransport' src/openmmo/runtime.ts
-          grep -q 'isAndroidTauriRuntime' src/App.tsx
+          APK="$(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
+          test -n "$APK"
+          test -f dist/openmmo-wasm/onlinerpg_shared.js
+          test -f dist/openmmo-wasm/onlinerpg_shared_bg.wasm
 
-      - name: Initialize Android project
-        run: npm run tauri -- android init --ci
-
-      - name: Build installable Android debug APK
-        run: npm run tauri -- android build --debug --apk --ci
+          CHECK_DIR="$RUNNER_TEMP/taurin4-android-core-check"
+          mkdir -p "$CHECK_DIR"
+          unzip -o "$APK" 'lib/arm64-v8a/libtaurin4_lib.so' -d "$CHECK_DIR" >/dev/null
+          strings "$CHECK_DIR/lib/arm64-v8a/libtaurin4_lib.so" |
+            grep -Fq 'The server is shutting down. Please reconnect shortly.'
 
       - name: Stage Android OpenMMO APK
         run: |
@@ -102,7 +110,7 @@ jobs:
       - name: Upload Android OpenMMO APK
         uses: actions/upload-artifact@v4
         with:
-          name: idea2-android-openmmo-debug-apk
+          name: idea2-android-standalone-debug-apk
           path: artifacts/android-openmmo-debug/
           if-no-files-found: error
           retention-days: 14
