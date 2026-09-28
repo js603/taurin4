@@ -44,9 +44,23 @@ describe("taurin4 real OpenMMO Windows acceptance", () => {
     await enterButton.click();
 
     await waitForText("OPENMMO · AUTHORITATIVE WORLD", 30000);
+    await waitForText("DUNGEON", 15000);
+    await waitForText("Old Crypt", 15000);
     await browser.saveScreenshot(
-      path.join(artifactsDir, "02-game-screen.png"),
+      path.join(artifactsDir, "02-game-screen-with-dungeon-card.png"),
     );
+
+    const playableText = await bodyText();
+    if (
+      playableText.includes(
+        "원본 OpenMMO 서버의 권위 상태를 Text/Card 이벤트로 표현하고 있다.",
+      ) &&
+      !playableText.includes("Old Crypt")
+    ) {
+      throw new Error(
+        "GameScreen regressed to the non-playable fallback without an authoritative dungeon card",
+      );
+    }
 
     await browser.waitUntil(
       async () => {
