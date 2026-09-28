@@ -6,19 +6,19 @@
 > Active branch: `idea2`
 > Updated: **2026-09-28 (Asia/Seoul)**
 >
-> Detailed historical evidence remains in Git history and `docs/archive/IDEA2_MASTER_RECORD_PRE_M3C_COMPLETE_20260926.md`.
-> M3-D details: `docs/IDEA2_M3D_GATE0_FEASIBILITY.md` and `docs/IDEA2_M3D_SLICE1.md`.
+> Historical evidence remains in Git history and `docs/archive/IDEA2_MASTER_RECORD_PRE_M3C_COMPLETE_20260926.md`.
+> M3-D details: `docs/IDEA2_M3D_GATE0_FEASIBILITY.md`, `docs/IDEA2_M3D_SLICE1.md`, and `docs/IDEA2_M3D_ANDROID_STANDALONE_ACCEPTANCE_20260928.md`.
 
 ---
 
 ## 1. Project intent
 
-`taurin4 / idea2` is a Text-first / Card / TUI realtime RPG/MMO client that uses the real OpenMMO authoritative world/server rather than reproducing its gameplay rules in React.
+`taurin4 / idea2` is a Text-first / Card / TUI realtime RPG/MMO client using the real OpenMMO authoritative world/server rather than reproducing gameplay rules in React.
 
 ```text
 OpenMMO authoritative world
         ↓
-Semantic Game Events
+Semantic Game Events / GameSession
         ↓
 Attention Director
         ↓
@@ -34,6 +34,8 @@ Fixed rules:
 - `OpenMmoGameSession / OpenMmoAdapter / GameScreen` are shared across Windows and Android.
 - Exact OpenMMO pin: `950e081c178d920c10c51f2d31f60c1b3383c925`.
 - JS-side auth token remains memory-only; never URL/localStorage/sessionStorage.
+- Android standalone mutable state uses app-private storage.
+- Existing LAN/remote OpenMMO connection mode remains supported.
 - Large desktop runtime data remains on the mounted **G:** drive where applicable.
 
 ---
@@ -45,7 +47,7 @@ Fixed rules:
 3. Slow/stuck verification is corrected, never silently skipped.
 4. No unbounded CI polling.
 5. One cycle = workflow read → judgment → action → result report.
-6. Temporary verification PRs are closed **without merge**.
+6. Temporary verification PRs are not merged with the PR merge action. If canonical is fast-forwarded to the verified head first, GitHub may classify the later-closed PR as merged because its commits are already contained in base; record that distinction explicitly.
 7. Status vocabulary: `VERIFIED`, `IMPLEMENTED-CI-VERIFIED`, `IMPLEMENTED-NOT-VERIFIED`, `BLOCKED`, `DEFERRED-WITH-PLAN`.
 8. Material milestones update this record.
 
@@ -66,6 +68,7 @@ Fixed rules:
 - M3-D Slice 1A — native embedded controller/storage boundary — **VERIFIED**
 - M3-D Slice 1B — real pinned authoritative core extraction — **VERIFIED**
 - M3-D Slice 1C — actual Tauri linkage + feature-linked Android APK — **VERIFIED / COMPLETE**
+- M3-D Android standalone user-flow acceptance — **VERIFIED / COMPLETE**
 
 Recovery checkpoints:
 
@@ -76,19 +79,20 @@ Recovery checkpoints:
 - `checkpoint/idea2-m3d-gate0-verified-20260927`
 - `checkpoint/idea2-m3d-slice1a-verified-20260927`
 - `checkpoint/idea2-m3d-slice1b-verified-20260927`
-- `checkpoint/idea2-m3d-slice1c-verified-20260928` — created after final documentation update
+- `checkpoint/idea2-m3d-slice1c-verified-20260928`
+- `checkpoint/idea2-m3d-standalone-verified-20260928` — final standalone acceptance checkpoint
 
 ---
 
-## 4. M3-C verified Android baseline
+## 4. M3-C external-server Android baseline — VERIFIED
 
-The external/reachable-server Android path already proved:
+The external/reachable-server Android path proves:
 
 ```text
 APK
 → Tauri WebSocket transport
 → pinned real OpenMMO
-→ auth / Character Lobby / CryptMira
+→ auth / Character Lobby
 → EnterGame / old_crypt
 → MONSTER / WORLD ENCOUNTER
 → authoritative combat / kill / REWARD
@@ -98,146 +102,108 @@ APK
 → persisted-state rehydration
 ```
 
-This path must remain green while standalone embedded-server behavior is introduced.
+This path remains a required regression baseline even after standalone support.
 
 ---
 
-## 5. M3-D Gate 0 — VERIFIED / DECISION B
+## 5. M3-D architecture — VERIFIED / Decision B
 
-Executable evidence proved that the original pinned OpenMMO server:
-
-- compiles for Android ARM64,
-- builds as Android native ELF,
-- executes inside Android userspace,
-- binds loopback WebSocket/REST ports,
-- returns real WebSocket HTTP 101,
-- creates SQLite/filesystem state on Android.
-
-Final feasibility run: `36303619258` — SUCCESS.
-
-Decision B:
-
-**Embed/extract the same authoritative OpenMMO server core inside the Tauri Rust process while preserving the WebSocket protocol boundary.**
-
----
-
-## 6. M3-D Slice 1A — VERIFIED
-
-Implemented and verified:
-
-- `OpenMmoEmbeddedController`
-- Tauri app-private OpenMMO state/data layout
-- explicit native `status / prepare / stop`
-- typed TS bridge
-- persistent paths survive stop
-- placeholder/prepared state never claims real core linkage
-
-PR #10 closed without merge.
-
-Checkpoint: `checkpoint/idea2-m3d-slice1a-verified-20260927`.
-
----
-
-## 7. M3-D Slice 1B — VERIFIED
-
-The exact pinned `onlinerpg-server` was transformed into a reusable library boundary at build/test time without reimplementing gameplay modules.
-
-Verified path:
+The same pinned authoritative OpenMMO core is embedded in-process behind Tauri/Rust while preserving the WebSocket protocol boundary.
 
 ```text
-caller-owned config
-→ run_embedded_server()
-→ original GameState + authoritative ticks
-→ loopback readiness + in-memory NPC token
-→ real WebSocket HTTP 101
-→ explicit shutdown
-→ original drain + final persistence
-→ restart from same state/token
+Android/Windows taurin4
+→ Tauri Rust backend
+→ OpenMmoEmbeddedController
+→ exact pinned OpenMMO authoritative core
+→ loopback WebSocket
+→ existing OpenMmoAdapter / OpenMmoGameSession
+→ Text/Card GameScreen
 ```
 
-Final verification:
+Gate 0 proved Android compile/execution/socket/SQLite feasibility. Slice 1A established lifecycle/storage ownership. Slice 1B extracted the original authoritative server into a reusable library entrypoint. Slice 1C linked that core into Tauri and produced a feature-linked Android APK.
 
-- head `aa520df43bdacd1452e275a539a2b6d37017bd57`
-- Quality `36319065969` — SUCCESS
-- Core Extraction `36319065965` — SUCCESS
-- job `108619250201` — SUCCESS
-- Android ARM64 extracted library check — SUCCESS
-
-PR #11 closed without merge.
-
-Checkpoint: `checkpoint/idea2-m3d-slice1b-verified-20260927`.
-
----
-
-## 8. M3-D Slice 1C — VERIFIED / COMPLETE
-
-Final verified temporary-PR head:
+Slice 1C final verified temporary-PR head:
 
 `8e75722660302591c2c7cd3af5a0c43a86c98a12`
 
-Temporary PR #12:
-
-**CLOSED / merged=false / never merged**.
-
-Validated files were promoted directly to canonical `idea2` with promotion commit:
-
-`696c953d35916d3f69083a1f3f23ea6e7f03e09f`
-
-Because the temporary branch and `idea2` had diverged, the branch itself was not fast-forwarded or force-merged. The exact verified blob versions of the 11 changed files were applied on top of the current `idea2` tree, preserving canonical-branch work.
-
-Verified authoritative path:
-
-```text
-Tauri OpenMmoEmbeddedController.start()
-→ exact pinned OpenMMO build input
-→ extracted run_embedded_server()
-→ app-private persistent state/data
-→ ephemeral loopback readiness
-→ native-memory NPC token
-→ coreLinked=true only after real readiness
-→ existing OpenMmoAdapter protocol path
-→ explicit graceful stop
-→ persisted restart using same state/token
-```
-
-Final required workflow evidence on head `8e75722660302591c2c7cd3af5a0c43a86c98a12`:
-
-- Pull Request Quality `36370376213` — SUCCESS
-- Windows Playable Entry `36370376394` — SUCCESS
-- Android OpenMMO Client `36370376254` — SUCCESS
-- OpenMMO Adapter Integration `36370376225` — SUCCESS
-- M3-D OpenMMO Tauri Link `36370376217` — SUCCESS
-- Android OpenMMO Runtime E2E `36370376209` — SUCCESS
-- Android OpenMMO Lifecycle E2E `36370376267` — SUCCESS
-- Windows Human Acceptance E2E `36370376261` — SUCCESS
-
-Dedicated M3-D job `108765260098` passed:
-
-- actual embedded controller start/readiness/stop/restart
-- Android ARM64 feature-linked library check
-- Android project initialization
-- actual debug APK build with `embedded-openmmo`
-- native ARM64 library extraction/inspection from the APK
-
-Real Adapter job `108765260195` also passed against the pinned server, including the real dungeon/combat regression.
-
-The last adapter race fix changed only test semantics: an approach-time kobold disappearance is accepted only when the authoritative server emitted matching `MonsterDead`; unexplained disappearance remains failure.
-
-Slice 1C PASS criteria are all satisfied:
-
-1. real embedded core start — VERIFIED
-2. real readiness before `coreLinked=true` — VERIFIED
-3. graceful stop/persistence — VERIFIED
-4. restart from persistent state/token — VERIFIED
-5. Android ARM64 feature-linked compile — VERIFIED
-6. installable feature-linked APK packaging — VERIFIED
-7. Windows/Android/real-adapter regressions — VERIFIED
-
-Important boundary: this proves linkage, packaging and automated runtime regressions. It does **not** yet prove the complete Android standalone end-user flow from app launch through Singleplayer auto-start and relaunch.
+Its verified implementation was promoted to canonical `idea2` without replacing OpenMMO authority.
 
 ---
 
-## 9. Pinned old_crypt facts
+## 6. M3-D Android standalone user-flow — VERIFIED / COMPLETE
+
+Final verified implementation head:
+
+`44669b89d0ddb863ea19f6865fbf73ffa344f1fa`
+
+Verified real end-user path:
+
+```text
+actual Android APK launch
+→ Singleplayer
+→ embedded authoritative OpenMMO auto-start
+→ no host/server URL/token input
+→ automatic loopback auth/bootstrap
+→ Character Lobby
+→ character/state creation
+→ safe embedded stop + upstream persistence
+→ app force-stop/relaunch
+→ Singleplayer restart
+→ persisted character restored
+→ EnterGame
+→ OpenMMO World
+→ SERVER AUTHORITATIVE gameplay state
+```
+
+Standalone workflow:
+
+- `idea2 M3-D Android Standalone E2E` run `36382704727` — SUCCESS
+- job `108801570224` — SUCCESS
+
+Final-head regression matrix — all SUCCESS:
+
+- Pull Request Quality `36382705005`
+- Windows Playable Entry `36382704760`
+- Android OpenMMO Client `36382704720`
+- OpenMMO Adapter Integration `36382704686`
+- Android OpenMMO Runtime E2E `36382704872`
+- Windows Human Acceptance E2E `36382704747`
+- M3-D OpenMMO Tauri Link `36382704778`
+- M3-D Android Standalone E2E `36382704727`
+- Android OpenMMO Lifecycle E2E `36382704657`
+
+The external/reachable-server Android runtime job `108801570976` also passed on the same final head.
+
+The final correction was test-harness-only: the Android soft keyboard obscured the second external-connection field after the new Singleplayer section expanded the screen. The acceptance driver now dismisses the IME between field entries. Product network/auth/gameplay behavior was unchanged.
+
+### PR #13 / promotion semantics
+
+Verification branch:
+
+`ci/idea2-m3d-android-standalone-20260928`
+
+PR #13 was a temporary draft verification PR. After all nine workflows passed, canonical `idea2` was moved by a **non-force fast-forward** from `f5ad5f570fed63a760bf24107bf6d9df9c412944` to the exact verified head `44669b89d0ddb863ea19f6865fbf73ffa344f1fa`.
+
+No PR merge action and no merge commit were used. When PR #13 was subsequently closed, GitHub reported `merged=true` because the base already contained the head. Treat this as GitHub containment semantics, not as a project merge-commit operation.
+
+Detailed evidence: `docs/IDEA2_M3D_ANDROID_STANDALONE_ACCEPTANCE_20260928.md`.
+
+---
+
+## 7. Security / authority boundaries
+
+- Exact OpenMMO pin stays fixed unless an explicit migration Gate changes it.
+- OpenMMO remains authoritative.
+- No combat/monster/dungeon/inventory/persistence authority is recreated in taurin4.
+- token is not placed in URL, localStorage or sessionStorage.
+- standalone token is handed through the native launch config and kept memory-only on the JS side.
+- Android persistent authoritative data lives in app-private storage.
+- LAN/remote entry remains available and tested.
+- `LocalGameSession` remains available.
+
+---
+
+## 8. Pinned old_crypt facts
 
 - id `old_crypt`
 - entrance `(-1450, 0.7, 4720)`
@@ -247,35 +213,30 @@ Important boundary: this proves linkage, packaging and automated runtime regress
 - player attack cadence about `1380ms`, impact about `540ms`
 - XP event has optional `monster_id`
 
-Real fixtures must not change OpenMMO HP, damage, AI, spawn count, cooldown or server authority.
+Real fixtures must not alter OpenMMO HP, damage, AI, spawn count, cooldown or server authority.
 
 ---
 
-## 10. Next exact action — Android standalone user-flow acceptance
+## 9. Next exact action — playable OpenMMO surface expansion
 
-Start the next Gate from canonical `idea2`.
+The infrastructure question is closed: PC/Android can use the real pinned OpenMMO, Android can host it standalone inside Tauri, persistence works, and external-server compatibility remains green.
 
-Required end-user path:
+The next Gate is therefore **not more standalone plumbing**. It is to determine how much of actual OpenMMO gameplay is currently exposed through the Text/Card/TUI presentation and expand one coherent player-facing slice.
 
-```text
-actual Android APK launch
-→ Singleplayer
-→ embedded authoritative OpenMMO auto-start
-→ no server URL/token user input
-→ automatic local connection/auth
-→ Character Lobby
-→ EnterGame / gameplay
-→ safe shutdown
-→ relaunch
-→ persisted authoritative state
-```
+Immediate sequence:
 
-The immediate work is to inspect the existing Android/Tauri startup path and wire the verified `OpenMmoEmbeddedController.start()` into the Singleplayer bootstrap without removing the existing external-server path.
+1. execute/audit the current standalone playable path beyond lobby/basic combat,
+2. compare reachable TUI actions/states against the pinned OpenMMO gameplay surface,
+3. identify missing high-value systems already available through authoritative protocol/events,
+4. select one coherent vertical slice,
+5. implement presentation/input adaptation only through `GameSession` / semantic events,
+6. verify on Windows and Android standalone,
+7. keep Android LAN/remote and real-adapter regressions green.
 
-PASS requires executable/runtime evidence. APK compilation alone is insufficient.
+Do not begin by recreating OpenMMO systems in React.
 
 ---
 
-## 11. New-chat bootstrap
+## 10. New-chat bootstrap
 
-> Continue `js603/taurin4` on branch `idea2`. Read `docs/IDEA2_MASTER_RECORD.md`, `docs/IDEA2_M3D_SLICE1.md`, and `docs/IDEA2_NEXT_CHAT_HANDOFF_20260928.md` first. M3-C is VERIFIED/COMPLETE. M3-D Gate 0 is VERIFIED with Decision B. Slice 1A, 1B and 1C are VERIFIED. PR #12 is closed without merge. Slice 1C's verified files were promoted directly to `idea2` at `696c953d35916d3f69083a1f3f23ea6e7f03e09f`. The next Gate is actual Android standalone user-flow acceptance: app launch → Singleplayer → embedded authoritative OpenMMO auto-start → automatic local auth/lobby/gameplay → shutdown → relaunch persistence. Preserve exact OpenMMO pin, upstream authority, external-server compatibility and memory-only JS token policy.
+> Continue `js603/taurin4` on branch `idea2`. Read `docs/IDEA2_MASTER_RECORD.md`, `docs/IDEA2_M3D_ANDROID_STANDALONE_ACCEPTANCE_20260928.md`, and `docs/IDEA2_NEXT_CHAT_HANDOFF_20260928.md` first. M3-C is VERIFIED/COMPLETE. M3-D Gate 0 and Slices 1A/1B/1C are VERIFIED. Android standalone user-flow acceptance is VERIFIED/COMPLETE at implementation head `44669b89d0ddb863ea19f6865fbf73ffa344f1fa`; all nine final-head PR workflows passed. Do not redo standalone infrastructure verification. Start the playable OpenMMO surface audit and choose the next coherent Text/Card/TUI gameplay slice while preserving exact upstream authority, standalone persistence, external-server compatibility and memory-only JS token policy.
