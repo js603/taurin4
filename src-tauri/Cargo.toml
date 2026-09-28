@@ -18,6 +18,11 @@ tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
 tauri = { version = "=2.11.6", features = [] }
+# Tauri 2.11.6 declares these with caret-compatible ranges. Pin the matching
+# runtime line explicitly so a lockfile-free CI resolution cannot select the
+# API-incompatible 2.12 runtime release.
+tauri-runtime = "=2.11.3"
+tauri-runtime-wry = { version = "=2.11.4", default-features = false }
 tauri-plugin-store = "=2.4.5"
 tauri-plugin-websocket = "=2.4.3"
 serde = { version = "1", features = ["derive"] }
