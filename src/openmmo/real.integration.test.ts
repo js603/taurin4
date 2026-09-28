@@ -1243,30 +1243,48 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
           await delay(200);
         }
 
-        const inRange = currentDungeonMonster(session, targetSemanticId);
-        expect(inRange).toBeDefined();
-        if (!inRange) throw new Error("Kobold disappeared before combat");
-        expect(inRange.distanceMeters).toBeLessThanOrEqual(2.2);
-        expect(session.getSnapshot().phase).toBe("combat");
-        expect(session.getSnapshot().combat?.enemy.id).toBe(targetId);
+        const monsterDeadObserved = () =>
+          observed
+            .slice(combatStart)
+            .some((message) => {
+              const dead = wirePayload<{ monster_id: string }>(
+                message,
+                "MonsterDead",
+              );
+              return dead?.monster_id === targetId;
+            });
 
-        let killed = false;
+        let killed = monsterDeadObserved();
+        const inRange = currentDungeonMonster(session, targetSemanticId);
+        if (!inRange && !killed) {
+          killed = Boolean(
+            await observeOptional<{ monster_id: string }>(
+              observed,
+              "MonsterDead",
+              (payload) => payload.monster_id === targetId,
+              { startIndex: combatStart, windowMs: 750 },
+            ),
+          );
+        }
+
+        // The attack pump is intentionally active during the authoritative
+        // approach. A legal swing can therefore kill the kobold before this
+        // checkpoint removes it from semanticDestinations. Treat that only as
+        // success when the real server emitted MonsterDead; disappearance
+        // without that authoritative event must still fail.
+        if (!killed) {
+          expect(inRange).toBeDefined();
+          if (!inRange) throw new Error("Kobold disappeared before combat");
+          expect(inRange.distanceMeters).toBeLessThanOrEqual(2.2);
+          expect(session.getSnapshot().phase).toBe("combat");
+          expect(session.getSnapshot().combat?.enemy.id).toBe(targetId);
+        }
 
         // The pump above already drives input more frequently than the
         // authoritative 1.38s player attack cadence. This monitor only waits
         // for the real server to accept legal attacks and emit MonsterDead.
-        for (let combatWait = 0; combatWait < 40; combatWait += 1) {
-          if (
-            observed
-              .slice(combatStart)
-              .some((message) => {
-                const dead = wirePayload<{ monster_id: string }>(
-                  message,
-                  "MonsterDead",
-                );
-                return dead?.monster_id === targetId;
-              })
-          ) {
+        for (let combatWait = 0; !killed && combatWait < 40; combatWait += 1) {
+          if (monsterDeadObserved()) {
             killed = true;
             break;
           }
@@ -1279,15 +1297,7 @@ describe.skipIf(!enabled)("OpenMmoAdapter real pinned integration", () => {
         }
 
         if (!killed) {
-          killed = observed
-            .slice(combatStart)
-            .some((message) => {
-              const dead = wirePayload<{ monster_id: string }>(
-                message,
-                "MonsterDead",
-              );
-              return dead?.monster_id === targetId;
-            });
+          killed = monsterDeadObserved();
         }
         if (attackPump) {
           clearInterval(attackPump);
