@@ -1,12 +1,12 @@
 # M3-D Slice 1 — Embedded OpenMMO controller
 
-Status: **Slice 1A VERIFIED / Slice 1B VERIFIED / Slice 1C IMPLEMENTED-NOT-VERIFIED**
+Status: **Slice 1A VERIFIED / Slice 1B VERIFIED / Slice 1C VERIFIED**
 
-Date: 2026-09-27 (Asia/Seoul)
+Updated: 2026-09-28 (Asia/Seoul)
 
 Pinned OpenMMO: `950e081c178d920c10c51f2d31f60c1b3383c925`
 
-Architecture decision: embed the exact pinned authoritative OpenMMO server core in the Tauri Rust process while preserving the existing WebSocket protocol boundary. OpenMMO gameplay rules are not duplicated into React or a taurin4 replacement server.
+Architecture decision: embed the exact pinned authoritative OpenMMO server core in the Tauri Rust process while preserving the existing WebSocket protocol boundary. OpenMMO owns authoritative movement, combat, monster, reward, inventory, persistence and world-state rules; those rules are not duplicated in React/Tauri.
 
 ## Slice 1A — VERIFIED
 
@@ -27,19 +27,19 @@ Recovery checkpoint:
 
 ## Slice 1B — VERIFIED
 
-The exact pinned binary-only OpenMMO server was transformed at build/test time into a reusable library entrypoint without copying gameplay rules.
+The exact pinned OpenMMO server was transformed at build/test time into a reusable library entrypoint without copying gameplay rules.
 
 Verified authoritative path:
 
 ```text
-caller config / argv
+caller config
 → run_embedded_server()
 → original OpenMMO GameState/bootstrap
 → original world/combat/monster/movement tasks
 → loopback WebSocket readiness + in-memory NPC token
 → explicit caller-owned shutdown
-→ original task drain + final persistence
-→ restart from same state
+→ original drain + final persistence
+→ restart from same state/token
 ```
 
 Verified head:
@@ -48,31 +48,17 @@ Verified head:
 
 Final evidence:
 
-- Pull Request Quality `36319065969` — **SUCCESS**
-- Core Extraction `36319065965` — **SUCCESS**
-- job `108619250201` — **SUCCESS**
+- Pull Request Quality `36319065969` — SUCCESS
+- Core Extraction `36319065965` — SUCCESS
+- job `108619250201` — SUCCESS
 - host OpenMMO library check — SUCCESS
-- real HTTP 101 WebSocket against extracted authoritative core — SUCCESS
-- explicit graceful shutdown — SUCCESS
+- real HTTP 101 WebSocket — SUCCESS
+- graceful shutdown — SUCCESS
 - persisted `game_data.db` + `npc_token` — SUCCESS
-- second start using same state root/token — SUCCESS
+- restart using same state root/token — SUCCESS
 - Android ARM64 library check — SUCCESS
 
-Evidence artifact:
-
-- `idea2-m3d-openmmo-core-extraction`
-- artifact `10931169956`
-- digest `sha256:4fa648be208c71959d3d62d9d9a84c57c6ec8ca22d3708c244ec5627eeaa15e6`
-
-Proof files promoted to `idea2`:
-
-- `.github/workflows/idea2-m3d-openmmo-core-extraction.yml`
-- `scripts/ci/extract_openmmo_server_lib.py`
-- `scripts/ci/openmmo_embedded_core_probe.rs`
-
-Promotion commit:
-
-`eab16845599eff1a79335970218e53944c4473b9`
+Evidence artifact: `idea2-m3d-openmmo-core-extraction`, artifact `10931169956`.
 
 Verification PR #11: **CLOSED / merged=false**.
 
@@ -80,9 +66,9 @@ Recovery checkpoint:
 
 `checkpoint/idea2-m3d-slice1b-verified-20260927`
 
-## Slice 1C — actual Tauri linkage — IMPLEMENTED-NOT-VERIFIED
+## Slice 1C — actual Tauri linkage — VERIFIED
 
-Goal:
+Verified path:
 
 ```text
 Tauri OpenMmoEmbeddedController.start()
@@ -100,94 +86,110 @@ Verification branch:
 
 `ci/idea2-m3d-openmmo-tauri-link-20260927`
 
-Temporary draft PR:
+Final verified PR head:
 
-`#12` — **open / do not merge**
+`8e75722660302591c2c7cd3af5a0c43a86c98a12`
 
-Current verification head:
+Temporary verification PR #12: **CLOSED / merged=false / never merged**.
 
-`13cc97d217a488563e2e88cc19c683b9a8dcddf8`
+Direct promotion to `idea2`:
 
-### Implemented
+`696c953d35916d3f69083a1f3f23ea6e7f03e09f`
+
+The promotion did not fast-forward the temporary PR branch because `idea2` had diverged. Instead, the exact verified blob versions of the 11 changed files were applied on top of the current `idea2` tree, preserving the canonical branch's newer commits.
+
+### Verified implementation
 
 1. `scripts/prepare-openmmo-embedded.py`
-   - creates/reuses a repo-local ignored `openmmo/` build-input checkout
-   - verifies origin `Julian-adv/OpenMMO`
-   - sparse-checks only the required upstream paths
-   - fetches/checks out exact commit `950e081c178d920c10c51f2d31f60c1b3383c925`
+   - creates/reuses ignored `src-tauri/openmmo/` build input
+   - verifies `Julian-adv/OpenMMO`
+   - checks out exact commit `950e081c178d920c10c51f2d31f60c1b3383c925`
+   - invokes the already verified Slice 1B extraction transform
    - refuses to discard unexpected local changes
-   - invokes the already VERIFIED Slice 1B extraction transform
-   - verifies `run_embedded_server` / readiness symbols and exact pin
-   - corrected before verification so a newly initialized unborn HEAD cannot fail `rev-parse`
-2. `.gitignore`
-   - ignores `/openmmo/`; upstream source remains build input rather than copied game code
-3. `package.json`
-   - adds `openmmo:embedded:prepare`
-   - Tauri/Android/iOS build commands prepare the exact source before Cargo metadata/build
-4. `src-tauri/Cargo.toml`
-   - optional `onlinerpg-server` path dependency against the generated exact-pin checkout
-   - feature `embedded-openmmo`
-   - default feature set remains empty, preserving existing external-server builds
-5. `src-tauri/src/openmmo_embedded.rs`
-   - phases expanded to `idle / prepared / starting / running / stopping / failed`
-   - feature-enabled worker owns a dedicated Rust thread + Tokio runtime
-   - starts exact `onlinerpg_server::run_embedded_server`
-   - uses loopback ephemeral WebSocket/API ports
-   - maps mutable paths to Tauri app-private storage
-   - keeps NPC token in native memory and returns it only in start launch config
-   - sets `coreLinked=true` **only after actual upstream readiness is received**
-   - explicit stop sends the upstream shutdown signal and waits for graceful persistence completion
-   - restart test requires the same persisted NPC token and `game_data.db`
-   - non-feature build continues to report that the embedded core is not linked
-6. `src-tauri/src/lib.rs`
-   - adds `openmmo_embedded_start`
-   - stop now reports errors if authoritative shutdown fails
-   - existing environment-based external OpenMMO launch bridge remains intact
-7. `src/openmmo/embeddedHost.ts`
-   - typed start launch config and expanded lifecycle state
-8. `.github/workflows/idea2-windows-playable.yml`
-   - prepares exact OpenMMO build input before direct Tauri Cargo check
-9. `.github/workflows/idea2-m3d-openmmo-tauri-link.yml`
-   - exact-pin source verification
-   - real Tauri controller start/stop/restart unit Gate using actual authoritative core
+2. `src-tauri/Cargo.toml`
+   - optional exact-pin `onlinerpg-server` path dependency
+   - `embedded-openmmo` feature
+   - Tauri 2.11.6 internal crate family constrained to compatible versions for lockfile-free CI
+3. `src-tauri/src/openmmo_embedded.rs`
+   - dedicated Rust thread + Tokio runtime owns the embedded authoritative core
+   - app-private persistent paths
+   - loopback ephemeral WebSocket/API ports
+   - NPC token held in native memory
+   - `coreLinked=true` only after real upstream readiness
+   - graceful shutdown waits for upstream persistence completion
+   - restart reuses persisted token/database
+4. `src-tauri/src/lib.rs` / `src/openmmo/embeddedHost.ts`
+   - native start/status/stop bridge with typed frontend launch config
+5. Android build Gate
    - Android ARM64 feature-linked Cargo check
-   - actual Android debug APK build with `--features embedded-openmmo --target aarch64`
-   - APK native library inspection requiring an upstream authoritative-server shutdown string
+   - real Tauri Android project initialization
+   - actual debug APK build using `--features embedded-openmmo --target aarch64`
+   - APK native library inspection for authoritative OpenMMO marker
+6. Existing external/reachable-server paths remain regression-protected.
+
+### Final verification evidence
+
+Final head `8e75722660302591c2c7cd3af5a0c43a86c98a12`:
+
+- Pull Request Quality `36370376213` — SUCCESS
+- Windows Playable Entry `36370376394` — SUCCESS
+- Android OpenMMO Client `36370376254` — SUCCESS
+- OpenMMO Adapter Integration `36370376225` — SUCCESS
+- M3-D OpenMMO Tauri Link `36370376217` — SUCCESS
+- Android OpenMMO Runtime E2E `36370376209` — SUCCESS
+- Android OpenMMO Lifecycle E2E `36370376267` — SUCCESS
+- Windows Human Acceptance E2E `36370376261` — SUCCESS
+
+M3-D job `108765260098` specifically passed all required executable steps:
+
+- Step 14 — actual Tauri controller against real pinned authoritative core — SUCCESS
+- Step 15 — Android ARM64 linker configuration — SUCCESS
+- Step 16 — feature-linked Tauri library Android ARM64 check — SUCCESS
+- Step 17 — Android project initialization — SUCCESS
+- Step 18 — actual Android APK build with authoritative core linked — SUCCESS
+- Step 19 — feature-linked APK inspection — SUCCESS
+
+The real adapter regression job `108765260195` also passed the real pinned OpenMMO server build, auth/movement/inventory flow, `old_crypt` traversal, authoritative kobold combat, browser codec preparation and taurin4 build.
+
+### Final race correction
+
+The last failing Adapter Integration run showed the authoritative server had already killed kobold `m1` while the attack pump was active during approach, but the test still required the monster to remain in semantic destinations at the next checkpoint. The test was corrected to accept early disappearance only when the real server emitted the matching `MonsterDead` event. Disappearance without `MonsterDead` remains a failure. No OpenMMO gameplay rule was weakened or replaced.
 
 ### Security / compatibility boundaries
 
 - JS token persistence remains forbidden.
-- token is not put in a URL, localStorage or sessionStorage.
-- external/reachable-server M3-C path remains the default while Slice 1C is unverified.
-- `embedded-openmmo` is feature-gated.
-- `coreLinked=true` means actual upstream readiness was received; it is never a compile-time or placeholder flag.
-- no combat/monster/dungeon/inventory rules were recreated in taurin4.
+- token is not placed in URL, localStorage or sessionStorage.
+- external/reachable-server path remains available.
+- `coreLinked=true` is tied to real readiness only.
+- no combat/monster/dungeon/inventory authority is recreated in taurin4.
 
-### Initial Slice 1C verification runs
+## Slice 1C PASS — COMPLETE
 
-Latest head `13cc97d217a488563e2e88cc19c683b9a8dcddf8`:
+All Slice 1C completion criteria are satisfied:
 
-- M3-D OpenMMO Tauri Link `36322534990` — **IN PROGRESS**
-- Pull Request Quality `36322534965` — **IN PROGRESS**
-- Windows Playable Entry `36322534951` — **QUEUED**
-- OpenMMO Adapter Integration `36322534945` — **PENDING**
-- Android OpenMMO Lifecycle E2E `36322534969` — **QUEUED**
-- Android OpenMMO Runtime E2E `36322534964` — **QUEUED**
-- Windows Human Acceptance E2E `36322535013` — **PENDING**
-- Android OpenMMO Client `36322534963` — **PENDING**
+1. real `OpenMmoEmbeddedController` start — VERIFIED
+2. upstream readiness before `coreLinked=true` — VERIFIED
+3. graceful stop/persistence — VERIFIED
+4. restart with persistent app-private state/token — VERIFIED
+5. Android ARM64 feature-linked compile — VERIFIED
+6. actual feature-linked Android APK — VERIFIED
+7. Windows / Android / real-adapter regressions — VERIFIED
 
-Strict no-polling rule applies after this checkpoint.
+## Next Gate — Android standalone user-flow acceptance
 
-## Slice 1C PASS
+The next work starts from the promoted `idea2` implementation and must prove the actual end-user flow:
 
-Slice 1C becomes VERIFIED only when executable evidence proves:
+```text
+Android app launch
+→ Singleplayer
+→ embedded authoritative OpenMMO auto-start
+→ no server URL/token input
+→ automatic local OpenMmoAdapter connection/auth
+→ Character Lobby
+→ EnterGame / gameplay
+→ safe shutdown
+→ app relaunch
+→ persisted authoritative state
+```
 
-1. `OpenMmoEmbeddedController` starts the actual pinned core and reaches readiness,
-2. `coreLinked=true` only while that actual core is running,
-3. explicit controller stop completes upstream graceful shutdown/persistence,
-4. restart reuses persistent state/token,
-5. feature-linked Tauri compiles for Android ARM64,
-6. an installable Android APK is built with the authoritative core linked,
-7. existing external-server Windows/Android regressions remain green.
-
-After Slice 1C, the next Gate is the actual **Android standalone UI acceptance**: app launch → Singleplayer → embedded server auto-start → OpenMmoAdapter → lobby/gameplay → safe shutdown/restart, with no PC/server input required.
+Do not call Android standalone gameplay VERIFIED merely because compile/APK packaging already passed. The next Gate requires actual runtime/user-flow acceptance evidence.
