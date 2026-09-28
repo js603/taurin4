@@ -5,18 +5,26 @@ import { OpenMmoCharacterLobby } from "./OpenMmoCharacterLobby";
 import { loadOpenMmoBrowserCodec } from "../../../openmmo/browserCodec";
 import type { OpenMmoNativeLaunchConfig } from "../../../openmmo/nativeLaunch";
 import {
+  startOpenMmoEmbeddedHost,
+  stopOpenMmoEmbeddedHost,
+  type OpenMmoEmbeddedLaunchConfig,
+} from "../../../openmmo/embeddedHost";
+import {
   createOpenMmoRuntime,
   type OpenMmoRuntime,
 } from "../../../openmmo/runtime";
 
 type BootstrapPhase =
   | "setup"
+  | "starting_embedded"
   | "loading_codec"
   | "connecting"
   | "authenticating"
   | "lobby"
   | "game"
   | "error";
+
+type AndroidConnectionMode = "chooser" | "standalone" | "external";
 
 function waitForConnected(runtime: OpenMmoRuntime, timeoutMs = 8_000) {
   if (runtime.adapter.getSnapshot().phase === "connected") {
@@ -78,8 +86,25 @@ export function OpenMmoBootstrap({
   const [phase, setPhase] = useState<BootstrapPhase>("setup");
   const [error, setError] = useState<string | null>(null);
   const [runtime, setRuntime] = useState<OpenMmoRuntime | null>(null);
+  const [androidMode, setAndroidMode] = useState<AndroidConnectionMode>(
+    androidTauri ? "chooser" : "external",
+  );
+  const [embeddedLaunchConfig, setEmbeddedLaunchConfig] =
+    useState<OpenMmoEmbeddedLaunchConfig | null>(null);
   const activeRuntime = useRef<OpenMmoRuntime | null>(null);
+  const embeddedHostOwned = useRef(false);
   const nativeAutostartConsumed = useRef(false);
+
+  const stopEmbeddedHost = useCallback(async () => {
+    if (!embeddedHostOwned.current) return;
+
+    try {
+      await stopOpenMmoEmbeddedHost();
+    } finally {
+      embeddedHostOwned.current = false;
+      setEmbeddedLaunchConfig(null);
+    }
+  }, []);
 
   const start = useCallback(async (
     launchConfig?: Pick<
@@ -120,6 +145,7 @@ export function OpenMmoBootstrap({
       }
 
       setPhase("lobby");
+      return true;
     } catch (cause) {
       nextRuntime?.session.stop();
       nextRuntime?.adapter.disconnect();
@@ -127,14 +153,50 @@ export function OpenMmoBootstrap({
       setRuntime(null);
       setError(cause instanceof Error ? cause.message : String(cause));
       setPhase("error");
+      return false;
     }
   }, [accountName, codecUrl, npcToken, serverUrl]);
+
+  const startStandalone = useCallback(async () => {
+    if (!androidTauri || phase === "starting_embedded") return;
+
+    setAndroidMode("standalone");
+    setError(null);
+    setPhase("starting_embedded");
+
+    try {
+      const launch = await startOpenMmoEmbeddedHost();
+      embeddedHostOwned.current = true;
+      setEmbeddedLaunchConfig(launch);
+      setServerUrl(launch.serverUrl);
+      setAccountName(launch.accountName);
+      setNpcToken(launch.npcToken);
+
+      const started = await start(launch);
+      if (!started) {
+        await stopEmbeddedHost();
+      }
+    } catch (cause) {
+      try {
+        await stopEmbeddedHost();
+      } catch {
+        // Preserve the original startup error below.
+      }
+      setError(cause instanceof Error ? cause.message : String(cause));
+      setPhase("error");
+    }
+  }, [androidTauri, phase, start, stopEmbeddedHost]);
 
   useEffect(() => {
     return () => {
       activeRuntime.current?.session.stop();
       activeRuntime.current?.adapter.disconnect();
       activeRuntime.current = null;
+
+      if (embeddedHostOwned.current) {
+        embeddedHostOwned.current = false;
+        void stopOpenMmoEmbeddedHost().catch(() => undefined);
+      }
     };
   }, []);
 
@@ -153,11 +215,20 @@ export function OpenMmoBootstrap({
     void start(nativeLaunchConfig);
   }, [nativeLaunchConfig, start]);
 
-  const reset = () => {
+  const reset = useCallback(async () => {
     activeRuntime.current?.session.stop();
     activeRuntime.current?.adapter.disconnect();
     activeRuntime.current = null;
     setRuntime(null);
+
+    try {
+      await stopEmbeddedHost();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      setPhase("error");
+      return;
+    }
+
     setServerUrl(defaultServerUrl);
     setAccountName(
       nativeLaunchConfig?.accountName ??
@@ -167,7 +238,14 @@ export function OpenMmoBootstrap({
     setNpcToken(nativeLaunchConfig?.npcToken ?? "");
     setError(null);
     setPhase("setup");
-  };
+    if (androidTauri) setAndroidMode("chooser");
+  }, [
+    androidTauri,
+    defaultServerUrl,
+    nativeLaunchConfig,
+    params,
+    stopEmbeddedHost,
+  ]);
 
   if (phase === "game" && runtime) {
     return <GameScreen session={runtime.session} />;
@@ -181,15 +259,72 @@ export function OpenMmoBootstrap({
             <p className="eyebrow">REAL OPENMMO RUNTIME</p>
             <h1>Character Lobby</h1>
           </div>
-          <button type="button" className="text-button" onClick={reset}>
+          <button
+            type="button"
+            className="text-button"
+            onClick={() => void reset()}
+          >
             연결 종료
           </button>
         </header>
+
+        {embeddedLaunchConfig ? (
+          <p className="runtime-panel__copy">
+            ANDROID STANDALONE · EMBEDDED AUTHORITATIVE CORE
+          </p>
+        ) : null}
 
         <OpenMmoCharacterLobby
           adapter={runtime.adapter}
           onEntered={() => setPhase("game")}
         />
+      </main>
+    );
+  }
+
+  if (androidTauri && androidMode !== "external") {
+    const starting = phase === "starting_embedded";
+
+    return (
+      <main className="runtime-shell">
+        <header className="runtime-header">
+          <div>
+            <p className="eyebrow">REAL OPENMMO · ANDROID</p>
+            <h1>Android OpenMMO</h1>
+          </div>
+        </header>
+
+        <section className="runtime-panel">
+          <p className="runtime-panel__copy">
+            Singleplayer는 이 기기 안에서 원본 OpenMMO 권위 서버 코어를 자동으로 시작하고 로컬로 연결한다. 서버 주소나 인증 token 입력은 필요하지 않으며 token은 브라우저 저장소나 URL에 저장하지 않는다.
+          </p>
+
+          <div className="runtime-actions">
+            <button
+              type="button"
+              className="game-button game-button--primary"
+              disabled={starting}
+              onClick={() => void startStandalone()}
+            >
+              {starting ? "STARTING LOCAL WORLD" : "Singleplayer"}
+            </button>
+            {!starting ? (
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => {
+                  setError(null);
+                  setPhase("setup");
+                  setAndroidMode("external");
+                }}
+              >
+                LAN / Remote
+              </button>
+            ) : null}
+          </div>
+
+          {error ? <p className="runtime-error">{error}</p> : null}
+        </section>
       </main>
     );
   }
@@ -210,17 +345,30 @@ export function OpenMmoBootstrap({
               : "Local Play Connection"}
           </h1>
         </div>
-        {!androidTauri ? (
+        {androidTauri ? (
+          <button
+            type="button"
+            className="text-button"
+            disabled={working}
+            onClick={() => {
+              setError(null);
+              setPhase("setup");
+              setAndroidMode("chooser");
+            }}
+          >
+            PLAY MODE
+          </button>
+        ) : (
           <a className="runtime-link" href={window.location.pathname}>
             LOCAL MODE
           </a>
-        ) : null}
+        )}
       </header>
 
       <section className="runtime-panel">
         <p className="runtime-panel__copy">
           {androidTauri
-            ? "Android에서는 Tauri Rust WebSocket transport로 실제 OpenMMO 서버에 연결한다. 같은 Wi-Fi의 PC 서버 또는 원격 서버 주소를 입력하며 인증 token은 브라우저 저장소나 URL에 저장하지 않는다."
+            ? "LAN / Remote 모드는 Tauri Rust WebSocket transport로 외부 OpenMMO 서버에 연결한다. 인증 token은 브라우저 저장소나 URL에 저장하지 않는다."
             : "실제 pinned OpenMMO 서버에 연결한다. Windows 로컬 플레이 런처를 사용하면 서버와 인증 정보가 자동으로 연결되며 NPC token은 브라우저 저장소나 URL에 저장하지 않는다."}
         </p>
 
@@ -302,7 +450,7 @@ export function OpenMmoBootstrap({
           </button>
 
           {phase === "error" ? (
-            <button type="button" className="text-button" onClick={reset}>
+            <button type="button" className="text-button" onClick={() => void reset()}>
               다시 연결
             </button>
           ) : null}
