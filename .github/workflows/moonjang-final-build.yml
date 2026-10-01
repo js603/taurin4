@@ -45,11 +45,16 @@ jobs:
           print('restored',count,'files')
           PY
           cd moonjang-production
+          mkdir -p src server cloudflare/src
           cat ci-parts/app.*.part > src/App.tsx
           cat ci-parts/styles.*.part > src/styles.css
           cat ci-parts/localserver.*.part > server/local_sqlite_server.py
           cat ci-parts/worker.*.part > cloudflare/src/index.ts
           chmod +x server/local_sqlite_server.py server/smoke_test.py
+          test -s src/App.tsx
+          test -s src/styles.css
+          test -s server/local_sqlite_server.py
+          test -s cloudflare/src/index.ts
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -113,16 +118,18 @@ jobs:
               b=g(x['url']);p=pathlib.Path(x['path']);p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(base64.b64decode(b['content']))
           PY
           cd moonjang-production
+          mkdir -p src server cloudflare/src
           cat ci-parts/app.*.part > src/App.tsx
           cat ci-parts/styles.*.part > src/styles.css
           cat ci-parts/localserver.*.part > server/local_sqlite_server.py
           cat ci-parts/worker.*.part > cloudflare/src/index.ts
+          test -s src/App.tsx
+          test -s cloudflare/src/index.ts
       - uses: actions/setup-node@v5
         with: { node-version: 22 }
       - uses: actions/setup-java@v5
         with: { distribution: temurin, java-version: "17" }
       - uses: android-actions/setup-android@v4
-        with: { packages: platform-tools }
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
@@ -164,8 +171,6 @@ jobs:
   ios:
     needs: quality
     runs-on: macos-latest
-    env:
-      APPLE_DEVELOPMENT_TEAM: "0000000000"
     steps:
       - uses: actions/checkout@v5
       - name: Restore Moonjang source
@@ -184,10 +189,13 @@ jobs:
               b=g(x['url']);p=pathlib.Path(x['path']);p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(base64.b64decode(b['content']))
           PY
           cd moonjang-production
+          mkdir -p src server cloudflare/src
           cat ci-parts/app.*.part > src/App.tsx
           cat ci-parts/styles.*.part > src/styles.css
           cat ci-parts/localserver.*.part > server/local_sqlite_server.py
           cat ci-parts/worker.*.part > cloudflare/src/index.ts
+          test -s src/App.tsx
+          test -s cloudflare/src/index.ts
       - uses: actions/setup-node@v5
         with: { node-version: 22 }
       - uses: dtolnay/rust-toolchain@stable
