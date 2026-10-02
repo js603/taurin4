@@ -5,6 +5,8 @@ on:
     branches: ["moonjang-ga-mobile"]
     paths:
       - ".github/workflows/moonjang-standalone-arm64.yml"
+      - ".github/scripts/restore-moonjang-standalone.sh"
+      - ".github/standalone-collection-fix.patch.b64"
   workflow_dispatch:
 
 permissions:
@@ -55,7 +57,7 @@ jobs:
           mkdir -p artifacts/android-arm64
           APK="$(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
           test -s "$APK"
-          cp "$APK" artifacts/android-arm64/moonjang-ga-1.0.1-standalone-arm64.apk
+          cp "$APK" artifacts/android-arm64/moonjang-ga-1.0.2-standalone-arm64.apk
           sha256sum artifacts/android-arm64/*.apk > artifacts/android-arm64/SHA256SUMS.txt
           du -h artifacts/android-arm64/*
       - uses: actions/upload-artifact@v4
