@@ -1,0 +1,99 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Collection, DiscoverPayload, Insights, NotificationItem, Post, Profile, Session } from "./domain";
+import { api } from "./shared/api";
+import { DRAFT_KEY, persistApiBase, persistSession, restoreRuntime } from "./shared/state";
+import { localDb } from "./shared/localDb";
+import { PostCard } from "./components/PostCard";
+import { Empty } from "./components/Empty";
+
+type Tab = "today"|"discover"|"write"|"library"|"me";
+type Overlay = {kind:"post"; post:Post}|{kind:"profile"; handle:string}|{kind:"collection"; id:string}|{kind:"notifications"}|{kind:"settings"}|null;
+
+const sleep = (ms:number) => new Promise(r => setTimeout(r, ms));
+const INTERNAL_TEST = import.meta.env.VITE_INTERNAL_TEST === "true";
+
+export default function App() {
+  const [booting, setBooting] = useState(true);
+  const [session, setSession] = useState<Session|null>(null);
+  const [tab, setTab] = useState<Tab>("today");
+  const [overlay, setOverlay] = useState<Overlay>(null);
+  const [feed, setFeed] = useState<Post[]>([]);
+  const [discover, setDiscover] = useState<DiscoverPayload|null>(null);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [insights, setInsights] = useState<Insights|null>(null);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [error, setError] = useState("");
+  const [toast, setToast] = useState("");
+
+  const notify = (message:string) => { setToast(message); window.setTimeout(()=>setToast(""), 2200); };
+
+  const refreshCore = useCallback(async () => {
+    if (!session) return;
+    const [f, d, c, i, n] = await Promise.all([api.feed(), api.discover(), api.collections(), api.insights(), api.notifications()]);
+    setFeed(f.items); setDiscover(d); setCollections(c.items); setInsights(i); setNotifications(n.items);
+  }, [session]);
+
+  useEffect(() => {
+    restoreRuntime().then(async ({session: saved}) => {
+      if (saved) {
+        api.configure(api.getBase(), saved.token);
+        try { await api.me(); setSession(saved); } catch { await persistSession(null); }
+      }
+      setBooting(false);
+    }).catch(e => { setError(String(e)); setBooting(false); });
+  }, []);
+
+  useEffect(() => { if (session) refreshCore().catch(e => setError(e.message)); }, [session, refreshCore]);
+
+  async function collect(post:Post) {
+    try {
+      const result = await api.toggleCollect(post.id);
+      setFeed(v => v.map(p => p.id === post.id ? {...p,collected:result.collected} : p));
+      notify(result.collected ? "서랍에 간직했습니다." : "서랍에서 꺼냈습니다.");
+      await api.event("collection", post.id);
+      const c = await api.collections(); setCollections(c.items);
+    } catch(e:any) { setError(e.message); }
+  }
+
+  if (booting) return <div className="center-screen"><div className="brand">문장가</div><p>문장을 펼치고 있습니다.</p></div>;
+  if (!session) return <Onboarding onReady={async s => { await persistSession(s); setSession(s); }} />;
+
+  return <div className="app">
+    <header className="topbar">
+      <button className="brand-button" onClick={() => {setTab("today");setOverlay(null)}}>문장가</button>
+      <div className="top-actions">
+        <button aria-label="알림" onClick={() => setOverlay({kind:"notifications"})}>알림{notifications.some(n=>!n.read) ? " ·" : ""}</button>
+        <button aria-label="설정" onClick={() => setOverlay({kind:"settings"})}>설정</button>
+      </div>
+    </header>
+
+    <main className="content">
+      {tab === "today" && <Today posts={feed} onCollect={collect} onOpen={post=>setOverlay({kind:"post",post})} onProfile={handle=>setOverlay({kind:"profile",handle})} />}
+      {tab === "discover" && <Discover data={discover} onOpen={post=>setOverlay({kind:"post",post})} onProfile={handle=>setOverlay({kind:"profile",handle})} onCollection={id=>setOverlay({kind:"collection",id})} onCollect={collect} />}
+      {tab === "write" && <Writer onPublished={async post=>{ setFeed(v=>[post,...v]); setTab("today"); notify("문장이 남겨졌습니다."); await refreshCore(); }} />}
+      {tab === "library" && <Library collections={collections} onRefresh={async()=>setCollections((await api.collections()).items)} onOpen={post=>setOverlay({kind:"post",post})} onProfile={handle=>setOverlay({kind:"profile",handle})} />}
+      {tab === "me" && <Me session={session} insights={insights} onOpen={post=>setOverlay({kind:"post",post})} />}
+    </main>
+
+    <nav className="bottom-nav" aria-label="주요 메뉴">
+      {([['today','오늘'],['discover','발견'],['write','쓰기'],['library','서랍'],['me','나']] as [Tab,string][]).map(([key,label]) =>
+        <button key={key} className={tab===key?'selected':''} onClick={()=>{setTab(key);setOverlay(null)}}>{label}</button>)}
+    </nav>
+
+    {overlay?.kind === "post" && <PostDetail post={overlay.post} currentUserId={session.user.id} onClose={()=>setOverlay(null)} onCollect={collect} onProfile={handle=>setOverlay({kind:"profile",handle})} onChanged={refreshCore} />}
+    {overlay?.kind === "collection" && <PublicCollectionView id={overlay.id} onClose={()=>setOverlay(null)} onOpen={post=>setOverlay({kind:"post",post})} onCollect={collect} onProfile={handle=>setOverlay({kind:"profile",handle})} />}
+    {overlay?.kind === "profile" && <ProfileView handle={overlay.handle} onClose={()=>setOverlay(null)} onOpen={post=>setOverlay({kind:"post",post})} />}
+    {overlay?.kind === "notifications" && <Notifications items={notifications} onClose={()=>setOverlay(null)} />}
+    {overlay?.kind === "settings" && <Settings onClose={()=>setOverlay(null)} onSignOut={async()=>{await persistSession(null);setSession(null)}} />}
+
+    {error && <div className="error-banner" role="alert"><span>{error}</span><button onClick={()=>setError("")}>닫기</button></div>}
+    {toast && <div className="toast" role="status">{toast}</div>}
+  </div>;
+}
+
+function Onboarding({onReady}:{onReady:(s:Session)=>void}) {
+  const [penName,setPenName]=useState(""); const [handle,setHandle]=useState(""); const [apiBase,setApiBase]=useState(api.getBase()); const [busy,setBusy]=useState(false); const [error,setError]=useState("");
+  async function submit(e:React.FormEvent) { e.preventDefault(); setBusy(true); setError(""); try { if(INTERNAL_TEST){await persistApiBase(apiBase.trim()); await api.health();} const s=await api.createAnonymous(handle.trim().toLowerCase(),penName.trim()); onReady(s); } catch(e:any){setError(e.message)} finally{setBusy(false)} }
+  return <div className="onboarding"><div className="onboarding-copy"><div className="brand big">문장가</div><h1>좋은 문장을 남기고,<br/>발견하고, 간직하는 곳.</h1><p>직업도 경력도 묻지 않습니다. 먼저 당신이 불리고 싶은 이름만 남겨주세요.</p></div>
+    <form className="onboarding-form" onSubmit={submit}>
+      <label>필명<input required minLength={2} maxLength={30} value={penName} onChange={e=>setPenName(e.target.value)} placeholder="예: 서윤" /></label>

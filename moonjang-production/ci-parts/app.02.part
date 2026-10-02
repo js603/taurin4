@@ -1,0 +1,39 @@
+    <input className="topic-input" value={topics} onChange={e=>setTopics(e.target.value)} placeholder="주제 최대 3개 · 쉼표로 구분"/>
+    <label className="visibility-field">공개 범위<select value={visibility} onChange={e=>setVisibility(e.target.value as 'public'|'unlisted'|'private')}><option value="public">모두에게</option><option value="unlisted">링크를 아는 사람에게</option><option value="private">나만 보기</option></select></label>
+    <p className="draft-state">입력한 내용은 기기 SQLite와 서버 Draft에 자동 저장됩니다.</p>
+  </section>;
+}
+
+function Library({collections,onRefresh,onOpen,onProfile}:{collections:Collection[];onRefresh:()=>void;onOpen:(p:Post)=>void;onProfile:(h:string)=>void}) {
+  const [selected,setSelected]=useState<Collection|null>(null); const [title,setTitle]=useState(""); const [visibility,setVisibility]=useState<'private'|'public'>('private');
+  async function create(){if(!title.trim())return;await api.createCollection(title.trim(),"",visibility);setTitle('');setVisibility('private');onRefresh()}
+  async function open(c:Collection){const r=await api.collection(c.id);setSelected(r.collection)}
+  if(selected) return <section><button className="back" onClick={()=>setSelected(null)}>← 나의 서랍</button><div className="section-heading"><h1>{selected.title}</h1><p>{selected.description||'오래 두고 싶은 문장들.'}</p></div>{selected.items?.map(p=><PostCard key={p.id} post={p} onOpen={onOpen} onProfile={onProfile}/> )}</section>;
+  return <section><div className="section-heading"><p className="date">나의 서랍</p><h1>오래 두고 싶은 문장들.</h1></div><div className="create-row"><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="새 서랍 이름"/><select value={visibility} onChange={e=>setVisibility(e.target.value as 'private'|'public')}><option value="private">나만 보기</option><option value="public">공개</option></select><button onClick={create}>만들기</button></div>
+    <div className="collection-list">{collections.map(c=><button key={c.id} onClick={()=>open(c)}><strong>{c.title}</strong><span>{c.itemCount}개의 문장 · {c.visibility==='public'?'공개':'나만 보기'}</span></button>)}</div>
+  </section>;
+}
+
+function Me({session,insights,onOpen}:{session:Session;insights:Insights|null;onOpen:(p:Post)=>void}) {
+  const [mine,setMine]=useState<{profile:Profile;posts:Post[]}|null>(null); useEffect(()=>{api.profile(session.user.handle).then(setMine)},[session.user.handle]);
+  return <section><div className="profile-header"><div className="avatar">{session.user.penName.slice(0,1)}</div><div><h1>{session.user.penName}</h1><p>@{session.user.handle}</p><p>{session.user.tagline||'오늘의 문장을 기록합니다.'}</p></div></div>
+    {insights&&<div className="insight-panel"><h2>나의 기록</h2><div className="metrics"><div><strong>{insights.postsThisMonth}</strong><span>이번 달 문장</span></div><div><strong>{insights.collections}</strong><span>간직됨</span></div><div><strong>{insights.crossReads}</strong><span>다른 글까지 읽음</span></div></div>{insights.narrative.map((n,i)=><p key={i}>{n}</p>)}</div>}
+    <div className="profile-posts"><h2>내가 남긴 문장</h2>{mine?.posts.map(p=><button key={p.id} onClick={()=>onOpen(p)}>{p.leadSentence||p.content}</button>)}</div>
+  </section>;
+}
+
+function PostDetail({post,currentUserId,onClose,onCollect,onProfile,onChanged}:{post:Post;currentUserId:string;onClose:()=>void;onCollect:(p:Post)=>void;onProfile:(h:string)=>void;onChanged:()=>Promise<void>}) {
+  const [detail,setDetail]=useState<{post:Post;comments:{id:string;author:Profile;content:string;createdAt:string}[]}|null>(null);
+  const [comment,setComment]=useState(""); const [message,setMessage]=useState(""); const [editing,setEditing]=useState(false); const [editTitle,setEditTitle]=useState(""); const [editContent,setEditContent]=useState("");
+  const completionRef=useRef<HTMLDivElement>(null); const completed=useRef(false);
+  const p=detail?.post||post; const mine=p.author.id===currentUserId;
+  useEffect(()=>{api.post(post.id).then(r=>{setDetail(r);setEditTitle(r.post.title||'');setEditContent(r.post.content)});api.event('open',post.id)},[post.id]);
+  useEffect(()=>{const el=completionRef.current;if(!el)return;const observer=new IntersectionObserver(entries=>{if(entries.some(x=>x.isIntersecting)&&!completed.current){completed.current=true;api.event('read_complete',p.id)}},{threshold:.6});observer.observe(el);return()=>observer.disconnect()},[p.id]);
+  async function send(){if(!comment.trim())return;const {comment:c}=await api.addComment(p.id,comment.trim());setDetail(d=>d?{...d,comments:[...d.comments,c]}:d);setComment('')}
+  async function report(){if(!window.confirm('이 글을 운영자에게 신고할까요?'))return;await api.report(p.id,'community_report');setMessage('신고를 접수했습니다.')}
+  async function block(){if(!window.confirm(`${p.author.penName}님의 글을 더 이상 보지 않을까요?`))return;await api.block(p.author.id);setMessage('이 문장가를 차단했습니다.');await onChanged();window.setTimeout(onClose,500)}
+  async function saveEdit(){if(editContent.trim().length<2)return;const r=await api.updatePost(p.id,{title:editTitle.trim()||null,content:editContent.trim()});setDetail(d=>d?{...d,post:r.post}:d);setEditing(false);setMessage('수정했습니다.');await onChanged()}
+  async function remove(){if(!window.confirm('이 글을 삭제할까요? 삭제 후에는 독자에게 보이지 않습니다.'))return;await api.deletePost(p.id);await onChanged();onClose()}
+  async function share(){const text=p.leadSentence||p.content.slice(0,240);const payload={title:p.title||`${p.author.penName}의 문장`,text:`${text}\n\n— ${p.author.penName}`};try{if(navigator.share){await navigator.share(payload)}else if(navigator.clipboard){await navigator.clipboard.writeText(payload.text);setMessage('문장을 복사했습니다.')}await api.event('share',p.id)}catch{/* 사용자가 공유 시트를 닫은 경우 */}}
+  return <div className="overlay"><div className="overlay-sheet"><button className="back" onClick={onClose}>← 돌아가기</button><article className="reading"><header><button className="author-link" onClick={()=>onProfile(p.author.handle)}>{p.author.penName}</button><span>{new Date(p.createdAt).toLocaleDateString('ko-KR')}</span></header>
+    {editing?<div className="edit-post"><input value={editTitle} onChange={e=>setEditTitle(e.target.value)} placeholder="제목"/><textarea value={editContent} onChange={e=>setEditContent(e.target.value)}/><div><button onClick={()=>setEditing(false)}>취소</button><button className="primary small" onClick={saveEdit}>수정 저장</button></div></div>:<>{p.title&&<h1>{p.title}</h1>}<div className="reading-body">{p.content.split('\n').map((x,i)=><p key={i}>{x||'\u00a0'}</p>)}</div></>}

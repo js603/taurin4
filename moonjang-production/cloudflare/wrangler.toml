@@ -1,0 +1,10 @@
+name = "moonjang-api"
+main = "src/index.ts"
+compatibility_date = "2026-09-27"
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "moonjang-production"
+database_id = "REPLACE_AFTER_D1_CREATE"
+migrations_dir = "migrations"

@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+import argparse, hashlib, json, os, re, secrets, sqlite3, sys, uuid
+from datetime import datetime, timedelta, timezone
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+ROOT = Path(__file__).resolve().parent
+HANDLE_RE = re.compile(r"^[a-z0-9_]{3,24}$")
+MUTATION_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+def now(): return datetime.now(timezone.utc).isoformat()
+def uid(): return str(uuid.uuid4())
+def token_hash(v: str): return hashlib.sha256(v.encode()).hexdigest()
+
+def connect(db_path: str):
+    c = sqlite3.connect(db_path, timeout=10, check_same_thread=False)
+    c.row_factory = sqlite3.Row
+    c.execute("PRAGMA foreign_keys=ON")
+    c.execute("PRAGMA busy_timeout=5000")
+    return c
+
+def init_db(db_path: str):
+    conn = connect(db_path)
+    conn.executescript((ROOT / "schema.sql").read_text(encoding="utf-8"))
+    # Legitimate editorial starter content, not synthetic user data.
+    if not conn.execute("SELECT 1 FROM users WHERE handle='moonjang' ").fetchone():
+        editor_id = uid(); t = now()
+        conn.execute("INSERT INTO users(id,handle,pen_name,tagline,role,created_at) VALUES(?,?,?,?,?,?)",(editor_id,"moonjang","문장가 편집부","좋은 문장이 오래 남도록 돕습니다.","editor",t))
+        starter = [
+            ("문장은 다 읽히지 않아도, 한 사람에게 오래 남을 수 있습니다.",["문장","기록"]),
+            ("오늘의 마음은 오늘의 문장으로만 남길 수 있습니다.",["일상","기록"]),
+            ("좋은 글을 찾는 일은 결국 좋은 사람을 발견하는 일이기도 합니다.",["발견","사람"]),
+        ]
+        for idx,(content,topics) in enumerate(starter):
+            pid=uid(); created=(datetime.now(timezone.utc)-timedelta(days=idx+2)).isoformat()
+            conn.execute("INSERT INTO posts(id,author_id,type,content,lead_sentence,visibility,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",(pid,editor_id,"sentence",content,None,"public",created,created))
+            for topic in topics: conn.execute("INSERT INTO post_topics(post_id,topic) VALUES(?,?)",(pid,topic))
+            if idx == 0: conn.execute("INSERT INTO editorial_features(post_id,label,featured_at) VALUES(?,?,?)",(pid,"오늘의 문장",created))
+    conn.commit(); conn.close()
+
+def profile_dict(row, following=False):
+    return {"id":row["id"],"handle":row["handle"],"penName":row["pen_name"],"tagline":row["tagline"],"role":row["role"],"following":bool(following)}
+
+def post_dict(conn,row,user_id=None):
+    author=conn.execute("SELECT * FROM users WHERE id=?",(row["author_id"],)).fetchone()
+    topics=[r[0] for r in conn.execute("SELECT topic FROM post_topics WHERE post_id=? ORDER BY topic",(row["id"],))]
+    collected=bool(user_id and conn.execute("SELECT 1 FROM collection_items ci JOIN collections c ON c.id=ci.collection_id WHERE c.owner_id=? AND ci.post_id=?",(user_id,row["id"])).fetchone())
+    collection_count=conn.execute("SELECT COUNT(*) FROM collection_items ci JOIN collections c ON c.id=ci.collection_id WHERE ci.post_id=? AND c.owner_id<>?",(row["id"],row["author_id"])).fetchone()[0]
+    comment_count=conn.execute("SELECT COUNT(*) FROM comments WHERE post_id=? AND deleted_at IS NULL",(row["id"],)).fetchone()[0]
+    age_days=max(0,(datetime.now(timezone.utc)-datetime.fromisoformat(row["created_at"])).days)
+    revisit=conn.execute("SELECT COUNT(DISTINCT user_id) FROM events WHERE post_id=? AND kind='revisit' AND user_id<>?",(row["id"],row["author_id"])).fetchone()[0]
+    reads=conn.execute("SELECT COUNT(DISTINCT user_id) FROM events WHERE post_id=? AND kind IN ('open','read_complete','revisit') AND user_id<>?",(row["id"],row["author_id"])).fetchone()[0]
+    return {"id":row["id"],"author":profile_dict(author),"type":row["type"],"title":row["title"],"content":row["content"],"leadSentence":row["lead_sentence"],"topics":topics,"createdAt":row["created_at"],"collected":collected,"collectionCount":collection_count,"commentCount":comment_count,"longRead":age_days>=2 and (collection_count>=1 or reads>=2),"revisited":revisit>=1,"visibility":row["visibility"]}
+
+def comment_dict(conn,row):
+    a=conn.execute("SELECT * FROM users WHERE id=?",(row["author_id"],)).fetchone()
+    return {"id":row["id"],"author":profile_dict(a),"content":row["content"],"createdAt":row["created_at"]}
+
+class Handler(BaseHTTPRequestHandler):
+    server_version="MoonjangLocal/1.0"
+    def log_message(self, fmt, *args):
+        if getattr(self.server,"quiet",False): return
+        super().log_message(fmt,*args)
+    def _cors(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Moonjang-Mutation-Id")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+    def json(self,status,payload):
+        ctx=getattr(self,"_mutation_ctx",None)
+        if ctx and self.command in MUTATION_METHODS and status < 500:
+            conn,user_id,mutation_id=ctx
+            conn.execute("INSERT OR REPLACE INTO mutation_receipts(user_id,mutation_id,status,response_json,created_at) VALUES(?,?,?,?,?)",(user_id,mutation_id,status,json.dumps(payload,ensure_ascii=False),now()))
+            conn.commit()
+        body=json.dumps(payload,ensure_ascii=False).encode()
+        self.send_response(status); self.send_header("Content-Type","application/json; charset=utf-8");self.send_header("Content-Length",str(len(body)));self._cors();self.end_headers();self.wfile.write(body)
+    def read_json(self):
+        n=int(self.headers.get("Content-Length","0") or 0)
+        if n>1_000_000: raise ValueError("요청이 너무 큽니다.")
+        return json.loads(self.rfile.read(n).decode() or "{}")
+    def auth(self,conn,required=True):
+        h=self.headers.get("Authorization","")
+        if not h.startswith("Bearer "):
+            if required: raise PermissionError("로그인이 필요합니다.")
+            return None
+        th=token_hash(h[7:])
+        row=conn.execute("SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?",(th,now())).fetchone()
+        if not row and required: raise PermissionError("세션이 만료되었습니다.")
+        return row
+    def blocked_ids(self,conn,user_id):
+        return [r[0] for r in conn.execute("SELECT blocked_id FROM blocks WHERE blocker_id=?",(user_id,))]
+    def ensure_default_collection(self,conn,user_id):
+        row=conn.execute("SELECT * FROM collections WHERE owner_id=? ORDER BY created_at LIMIT 1",(user_id,)).fetchone()
+        if row: return row
+        cid=uid();conn.execute("INSERT INTO collections(id,owner_id,title,description,visibility,created_at) VALUES(?,?,?,?,?,?)",(cid,user_id,"기본 서랍","오래 두고 싶은 문장들.","private",now()));return conn.execute("SELECT * FROM collections WHERE id=?",(cid,)).fetchone()
+    def notify(self,conn,user_id,kind,message):
+        conn.execute("INSERT INTO notifications(id,user_id,kind,message,created_at) VALUES(?,?,?,?,?)",(uid(),user_id,kind,message,now()))
+    def do_OPTIONS(self): self.send_response(204);self._cors();self.end_headers()
+    def do_GET(self): self.route("GET")
+    def do_POST(self): self.route("POST")
+    def do_PUT(self): self.route("PUT")
+    def do_PATCH(self): self.route("PATCH")
+    def do_DELETE(self): self.route("DELETE")
+    def route(self,method):
+        path=urlparse(self.path).path
+        conn=connect(self.server.db_path)
+        try:
+            if method=="GET" and path=="/health": return self.json(200,{"ok":True,"service":"moonjang-local"})

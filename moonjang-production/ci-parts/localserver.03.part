@@ -1,0 +1,55 @@
+                return self.json(200,{"collection":{"id":c["id"],"title":c["title"],"description":c["description"],"visibility":c["visibility"],"itemCount":len(rows),"items":[post_dict(conn,r,user_id) for r in rows]}})
+            m=re.fullmatch(r"/v1/collections/([^/]+)/items",path)
+            if m and method=="POST":
+                c=conn.execute("SELECT * FROM collections WHERE id=? AND owner_id=?",(m.group(1),user_id)).fetchone()
+                if not c:return self.json(404,{"error":"서랍을 찾을 수 없습니다."})
+                post_id=str(self.read_json().get("postId",''));conn.execute("INSERT OR IGNORE INTO collection_items(collection_id,post_id,created_at) VALUES(?,?,?)",(c["id"],post_id,now()));conn.commit();return self.json(200,{"ok":True})
+            if path=="/v1/drafts" and method=="PUT":
+                d=self.read_json();content=str(d.get("content",''));typ=d.get("type","sentence")
+                conn.execute("INSERT INTO drafts(user_id,type,content,updated_at) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET type=excluded.type,content=excluded.content,updated_at=excluded.updated_at",(user_id,typ,content,now()));conn.commit();return self.json(200,{"ok":True})
+            if path=="/v1/drafts" and method=="GET":
+                d=conn.execute("SELECT * FROM drafts WHERE user_id=?",(user_id,)).fetchone();return self.json(200,{"content":d["content"] if d else "","type":d["type"] if d else "sentence"})
+            if path=="/v1/notifications" and method=="GET":
+                rows=conn.execute("SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 80",(user_id,)).fetchall();return self.json(200,{"items":[{"id":r["id"],"kind":r["kind"],"message":r["message"],"createdAt":r["created_at"],"read":bool(r["read_at"])} for r in rows]})
+            if path=="/v1/insights" and method=="GET":
+                month=datetime.now(timezone.utc).strftime('%Y-%m-01T00:00:00+00:00');pc=conn.execute("SELECT COUNT(*) FROM posts WHERE author_id=? AND created_at>=? AND deleted_at IS NULL",(user_id,month)).fetchone()[0]
+                saves=conn.execute("SELECT COUNT(*) FROM collection_items ci JOIN collections c ON c.id=ci.collection_id JOIN posts p ON p.id=ci.post_id WHERE p.author_id=? AND c.owner_id<>?",(user_id,user_id)).fetchone()[0]
+                readers=conn.execute("SELECT COUNT(DISTINCT e.user_id) FROM events e JOIN posts p ON p.id=e.post_id WHERE p.author_id=? AND e.user_id<>? AND e.kind IN ('open','read_complete','revisit')",(user_id,user_id)).fetchone()[0]
+                cross=conn.execute("SELECT COUNT(*) FROM (SELECT e.user_id FROM events e JOIN posts p ON p.id=e.post_id WHERE p.author_id=? AND e.user_id<>? AND e.kind IN ('open','read_complete','revisit') GROUP BY e.user_id HAVING COUNT(DISTINCT p.id)>=2)",(user_id,user_id)).fetchone()[0]
+                top=conn.execute("SELECT p.*,COUNT(ci.post_id) c FROM posts p LEFT JOIN collection_items ci ON ci.post_id=p.id WHERE p.author_id=? AND p.deleted_at IS NULL GROUP BY p.id ORDER BY c DESC,p.created_at DESC LIMIT 1",(user_id,)).fetchone()
+                narrative=[]
+                if saves:narrative.append(f"당신의 문장들은 지금까지 {saves}번 누군가의 서랍에 간직되었습니다.")
+                if readers:narrative.append(f"{readers}명의 서로 다른 독자가 당신의 문장을 읽었습니다.")
+                if not narrative:narrative.append("첫 문장이 누군가에게 닿기 시작하면 이곳에 조용히 기록됩니다.")
+                return self.json(200,{"postsThisMonth":pc,"uniqueReaders":readers,"collections":saves,"crossReads":cross,"topPost":post_dict(conn,top,user_id) if top else None,"narrative":narrative})
+            if path=="/v1/search" and method=="GET":
+                q=(parse_qs(urlparse(self.path).query).get("q") or [""])[0].strip();like=f"%{q}%"
+                rows=conn.execute("SELECT DISTINCT p.* FROM posts p LEFT JOIN post_topics t ON t.post_id=p.id WHERE p.deleted_at IS NULL AND p.visibility='public' AND (p.content LIKE ? OR p.title LIKE ? OR t.topic LIKE ?) ORDER BY p.created_at DESC LIMIT 30",(like,like,like)).fetchall()
+                ps=conn.execute("SELECT * FROM users WHERE pen_name LIKE ? OR handle LIKE ? LIMIT 20",(like,like)).fetchall();return self.json(200,{"posts":[post_dict(conn,r,user_id) for r in rows],"profiles":[profile_dict(r) for r in ps]})
+            if path=="/v1/reports" and method=="POST":
+                d=self.read_json();pid=str(d.get("postId",''));reason=str(d.get("reason",'')).strip()[:500]
+                if not pid or not reason:return self.json(400,{"error":"신고 사유를 입력해주세요."})
+                conn.execute("INSERT INTO reports(id,reporter_id,post_id,reason,created_at) VALUES(?,?,?,?,?)",(uid(),user_id,pid,reason,now()));conn.commit();return self.json(201,{"ok":True})
+            m=re.fullmatch(r"/v1/blocks/([^/]+)",path)
+            if m and method=="POST":
+                bid=m.group(1);existing=conn.execute("SELECT 1 FROM blocks WHERE blocker_id=? AND blocked_id=?",(user_id,bid)).fetchone()
+                if existing:conn.execute("DELETE FROM blocks WHERE blocker_id=? AND blocked_id=?",(user_id,bid));blocked=False
+                else:conn.execute("INSERT INTO blocks(blocker_id,blocked_id,created_at) VALUES(?,?,?)",(user_id,bid,now()));blocked=True
+                conn.commit();return self.json(200,{"blocked":blocked})
+            if path=="/v1/events" and method=="POST":
+                d=self.read_json();kind=str(d.get("kind",''))[:40];pid=d.get("postId");allowed={"impression","open","read_complete","revisit","profile_open","collection","share"}
+                if kind not in allowed:return self.json(400,{"error":"지원하지 않는 이벤트입니다."})
+                if kind=="open" and pid:
+                    seen=conn.execute("SELECT 1 FROM events WHERE user_id=? AND post_id=? AND kind IN ('open','read_complete','revisit') LIMIT 1",(user_id,pid)).fetchone()
+                    kind="revisit" if seen else "open"
+                conn.execute("INSERT INTO events(user_id,post_id,kind,created_at) VALUES(?,?,?,?)",(user_id,pid,kind,now()));conn.commit();return self.json(201,{"ok":True})
+            return self.json(404,{"error":"경로를 찾을 수 없습니다."})
+        except PermissionError as e:return self.json(401,{"error":str(e)})
+        except (ValueError,json.JSONDecodeError,sqlite3.IntegrityError) as e:return self.json(400,{"error":str(e)})
+        except Exception as e:
+            print("ERROR",method,path,repr(e),file=sys.stderr);return self.json(500,{"error":"서버 오류가 발생했습니다."})
+        finally:conn.close()
+
+def main():
+    p=argparse.ArgumentParser();p.add_argument("--db",default=str(ROOT/"moonjang.db"));p.add_argument("--host",default="127.0.0.1");p.add_argument("--port",type=int,default=8787);p.add_argument("--quiet",action="store_true");a=p.parse_args();init_db(a.db);server=ThreadingHTTPServer((a.host,a.port),Handler);server.db_path=a.db;server.quiet=a.quiet;print(f"Moonjang local API: http://{a.host}:{a.port}");server.serve_forever()
+if __name__=="__main__":main()

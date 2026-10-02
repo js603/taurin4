@@ -1,0 +1,38 @@
+      <label>문장가 주소<div className="handle-input"><span>@</span><input required pattern="[a-z0-9_]{3,24}" value={handle} onChange={e=>setHandle(e.target.value.replace(/[^a-zA-Z0-9_]/g,''))} placeholder="seoyun" /></div></label>
+      {INTERNAL_TEST&&<label>내부 테스트 API 서버<input required value={apiBase} onChange={e=>setApiBase(e.target.value)} placeholder="http://192.168.0.10:8787"/><span className="field-help">같은 Wi‑Fi의 PC에서 SQLite 테스트 서버를 실행한 뒤 주소를 입력하세요.</span></label>}
+      {error && <p className="form-error">{error}</p>}
+      <button className="primary" disabled={busy}>{busy?"문을 여는 중":"시작하기"}</button>
+      <p className="fine">처음에는 익명 계정으로 시작합니다. 계정 연결 기능은 이후에도 선택할 수 있습니다.</p>
+    </form></div>;
+}
+
+function Today({posts,onCollect,onOpen,onProfile}:{posts:Post[];onCollect:(p:Post)=>void;onOpen:(p:Post)=>void;onProfile:(h:string)=>void}) {
+  return <section><div className="section-heading"><p className="date">오늘</p><h1>오늘 머물다 갈 문장들</h1></div>
+    {posts.length ? <div className="post-list">{posts.map((p,i)=><div key={p.id}>{i>0&&i%5===0&&<div className="editorial-break">조금 천천히 읽어도 괜찮습니다.</div>}<PostCard post={p} onCollect={onCollect} onOpen={onOpen} onProfile={onProfile}/></div>)}</div> : <Empty title="아직 오늘의 문장이 없습니다." body="첫 문장을 남겨보세요."/>}
+  </section>;
+}
+
+function Discover({data,onOpen,onProfile,onCollection,onCollect}:{data:DiscoverPayload|null;onOpen:(p:Post)=>void;onProfile:(h:string)=>void;onCollection:(id:string)=>void;onCollect:(p:Post)=>void}) {
+  const [q,setQ]=useState(""); const [result,setResult]=useState<{posts:Post[];profiles:Profile[]}|null>(null); const [searching,setSearching]=useState(false);
+  async function search(e:React.FormEvent){e.preventDefault(); if(!q.trim())return;setSearching(true);try{setResult(await api.search(q.trim()))}finally{setSearching(false)}}
+  if(!data) return <div className="skeleton-block"/>;
+  return <section><div className="section-heading"><p className="date">발견</p><h1>알지 못했던 문장을 만납니다.</h1></div>
+    <form className="search" onSubmit={search}><input value={q} onChange={e=>setQ(e.target.value)} placeholder="단어, 문장, 사람을 찾아보세요."/><button>{searching?"…":"찾기"}</button></form>
+    {result && <div className="search-results"><h2>검색 결과</h2>{result.profiles.map(p=><button className="writer-row" key={p.id} onClick={()=>onProfile(p.handle)}><strong>{p.penName}</strong><span>@{p.handle}</span></button>)}{result.posts.map(p=><PostCard key={p.id} post={p} onOpen={onOpen} onCollect={onCollect} onProfile={onProfile}/>)}</div>}
+    <DiscoverRail title="오래 읽힌 문장" posts={data.longRead} onOpen={onOpen}/>
+    <div className="writer-section"><h2>처음 만나는 문장가</h2>{data.newWriters.map(w=><button className="writer-row" key={w.id} onClick={()=>onProfile(w.handle)}><strong>{w.penName}</strong><span>{w.tagline || `@${w.handle}`}</span></button>)}</div>
+    <DiscoverRail title="편집부의 서랍" posts={data.editorial} onOpen={onOpen}/>
+    {data.publicCollections.length>0&&<div className="writer-section"><h2>공개 서랍</h2>{data.publicCollections.map(c=><button className="public-collection-row" key={c.id} onClick={()=>onCollection(c.id)}><strong>{c.title}</strong><span>{c.description||`${c.itemCount}개의 문장`}</span></button>)}</div>}
+    {data.random && <div className="random-card"><span>우연히 발견하기</span><button onClick={()=>onOpen(data.random!)}>{data.random.leadSentence||data.random.content}</button></div>}
+  </section>;
+}
+function DiscoverRail({title,posts,onOpen}:{title:string;posts:Post[];onOpen:(p:Post)=>void}){return <div className="discover-rail"><h2>{title}</h2><div className="rail">{posts.map(p=><button key={p.id} onClick={()=>onOpen(p)}><p>{p.leadSentence||p.content}</p><span>{p.author.penName}</span></button>)}</div></div>}
+
+function Writer({onPublished}:{onPublished:(p:Post)=>void}) {
+  const [type,setType]=useState<'sentence'|'article'>('sentence'); const [title,setTitle]=useState(""); const [leadSentence,setLeadSentence]=useState(""); const [content,setContent]=useState(""); const [topics,setTopics]=useState(""); const [visibility,setVisibility]=useState<'public'|'unlisted'|'private'>('public'); const [busy,setBusy]=useState(false); const hydrated=useRef(false);
+  useEffect(()=>{ Promise.all([localDb.get<{content:string;type:'sentence'|'article';title:string;topics:string;leadSentence?:string;visibility?:'public'|'unlisted'|'private'}>(DRAFT_KEY), api.draft().catch(()=>null)]).then(([local,remote])=>{const d=local?.content?local:remote?.content?{content:remote.content,type:remote.type as 'sentence'|'article',title:"",topics:"",leadSentence:"",visibility:'public' as const}:null;if(d){setContent(d.content);setType(d.type);setTitle(d.title||"");setTopics(d.topics||"");setLeadSentence(d.leadSentence||"");setVisibility(d.visibility||'public')}hydrated.current=true}) },[]);
+  useEffect(()=>{if(!hydrated.current)return; const id=window.setTimeout(()=>{const draft={content,type,title,topics,leadSentence,visibility};localDb.set(DRAFT_KEY,draft);api.saveDraft(content,type).catch(()=>{})},650);return()=>clearTimeout(id)},[content,type,title,topics,leadSentence,visibility]);
+  async function publish(){if(content.trim().length<2)return;setBusy(true);try{const lead=type==='article'?(leadSentence.trim()||content.trim().split(/\n+/)[0].slice(0,180)):undefined;const res=await api.createPost({type,title:title.trim()||undefined,content:content.trim(),leadSentence:lead,topics:topics.split(',').map(v=>v.trim()).filter(Boolean).slice(0,3),visibility});await localDb.remove(DRAFT_KEY);setContent('');setTitle('');setTopics('');setLeadSentence('');setVisibility('public');onPublished(res.post)}finally{setBusy(false)}}
+  return <section className="writer"><div className="writer-head"><div className="segmented"><button className={type==='sentence'?'active':''} onClick={()=>setType('sentence')}>문장</button><button className={type==='article'?'active':''} onClick={()=>setType('article')}>글</button></div><button className="primary small" disabled={busy||content.trim().length<2} onClick={publish}>남기기</button></div>
+    {type==='article'&&<><input className="title-input" value={title} onChange={e=>setTitle(e.target.value)} placeholder="제목은 없어도 괜찮습니다."/><input className="topic-input" value={leadSentence} onChange={e=>setLeadSentence(e.target.value)} maxLength={180} placeholder="발견 화면에 보여줄 대표 문장"/></>}
+    <textarea autoFocus className="editor" value={content} onChange={e=>setContent(e.target.value)} placeholder="오늘 남기고 싶은 문장이 있나요?" />

@@ -1,0 +1,16 @@
+{
+  "name": "moonjang-cloudflare-api",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit && wrangler d1 migrations apply moonjang-production --local",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261001.1",
+    "typescript": "5.9.2",
+    "wrangler": "4.146.0"
+  }
+}
