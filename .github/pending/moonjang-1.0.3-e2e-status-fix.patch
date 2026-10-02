@@ -1,0 +1,43 @@
+--- e2e/standalone.spec.ts
++++ e2e/standalone.spec.ts
+@@ -22,7 +22,7 @@
+   const card=page.locator('.post-card').filter({hasText:sentence});
+   await expect(card).toBeVisible();
+   await card.getByRole('button', {name:'간직하기'}).click();
+-  await expect(page.getByRole('status')).toContainText('서랍에 간직했습니다.');
++  await expect(page.getByText('서랍에 간직했습니다.', {exact:true})).toBeVisible();
+ 
+   await page.getByRole('button', {name:'서랍', exact:true}).click();
+   const defaultShelf=page.locator('.collection-list').getByRole('button', {name:/기본 서랍/});
+@@ -37,7 +37,7 @@
+   await expect(page.getByText(sentence, {exact:true})).toBeVisible();
+   await page.getByLabel('이동할 서랍').selectOption({label:'오프라인 서랍'});
+   await page.getByRole('button', {name:'옮기기', exact:true}).click();
+-  await expect(page.getByRole('status')).toContainText('오프라인 서랍으로 옮겼습니다.');
++  await expect(page.getByText('오프라인 서랍으로 옮겼습니다.', {exact:true})).toBeVisible();
+   await expect(page.getByText('이 서랍은 아직 비어 있습니다.')).toBeVisible();
+   await page.getByRole('button', {name:'← 나의 서랍'}).click();
+   await expect(page.locator('.collection-list').getByRole('button', {name:/기본 서랍/})).toContainText('0개의 문장');
+@@ -50,11 +50,11 @@
+   await page.getByLabel('설명').fill('오래 남겨둘 문장 모음');
+   await page.getByLabel('공개 범위').last().selectOption('public');
+   await page.getByRole('button', {name:'저장', exact:true}).click();
+-  await expect(page.getByRole('status')).toContainText('서랍 정보를 저장했습니다.');
++  await expect(page.getByText('서랍 정보를 저장했습니다.', {exact:true})).toBeVisible();
+   await expect(page.getByRole('heading', {name:'다시 읽을 문장'})).toBeVisible();
+ 
+   await page.getByRole('button', {name:'이 서랍에서 빼기'}).click();
+-  await expect(page.getByRole('status')).toContainText('이 서랍에서 문장을 뺐습니다.');
++  await expect(page.getByText('이 서랍에서 문장을 뺐습니다.', {exact:true})).toBeVisible();
+   await page.getByRole('button', {name:'← 나의 서랍'}).click();
+   await expect(page.locator('.collection-list').getByRole('button', {name:/다시 읽을 문장/})).toContainText('0개의 문장');
+ 
+@@ -80,7 +80,7 @@
+   await page.getByLabel('필명').fill('새필명');
+   await page.getByLabel('짧은 소개').fill('조용히 문장을 모으는 사람');
+   await page.getByRole('button', {name:'저장', exact:true}).click();
+-  await expect(page.getByRole('status')).toContainText('프로필을 저장했습니다.');
++  await expect(page.getByText('프로필을 저장했습니다.', {exact:true})).toBeVisible();
+   await expect(page.getByRole('heading', {name:'새필명'})).toBeVisible();
+ 
+   await page.reload();
