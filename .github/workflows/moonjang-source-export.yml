@@ -1,0 +1,57 @@
+name: Moonjang Production Source Export
+
+on:
+  push:
+    branches: ["moonjang-ga-mobile"]
+    paths:
+      - ".github/workflows/moonjang-source-export.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Restore production source tree
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64,json,os,pathlib,urllib.request
+          repo=os.environ['GITHUB_REPOSITORY']; tree=pathlib.Path('.github/moonjang-source-tree.txt').read_text().strip(); token=os.environ['GH_TOKEN']
+          h={'Authorization':f'Bearer {token}','Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}
+          def g(u):
+            r=urllib.request.Request(u,headers=h)
+            with urllib.request.urlopen(r) as f:return json.load(f)
+          d=g(f'https://api.github.com/repos/{repo}/git/trees/{tree}?recursive=1')
+          n=0
+          for x in d['tree']:
+            if x['type']=='blob' and x['path'].startswith('moonjang-production/'):
+              b=g(x['url']); p=pathlib.Path(x['path']); p.parent.mkdir(parents=True,exist_ok=True); p.write_bytes(base64.b64decode(b['content'])); n+=1
+          if n < 20: raise SystemExit(f'incomplete source: {n}')
+          print('restored',n,'files from',tree)
+          PY
+          cd moonjang-production
+          mkdir -p src server cloudflare/src
+          cat ci-parts/app.*.part > src/App.tsx
+          cat ci-parts/styles.*.part > src/styles.css
+          cat ci-parts/localserver.*.part > server/local_sqlite_server.py
+          cat ci-parts/worker.*.part > cloudflare/src/index.ts
+          rm -rf ci-parts
+          test -s src/App.tsx && test -s src/styles.css && test -s server/local_sqlite_server.py && test -s cloudflare/src/index.ts
+      - name: Package source
+        run: |
+          tar -czf moonjang-ga-1.0.0-offline-first-source.tar.gz moonjang-production
+          sha256sum moonjang-ga-1.0.0-offline-first-source.tar.gz > SOURCE_SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moonjang-production-source
+          path: |
+            moonjang-ga-1.0.0-offline-first-source.tar.gz
+            SOURCE_SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
