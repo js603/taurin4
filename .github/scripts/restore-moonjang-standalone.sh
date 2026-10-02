@@ -66,8 +66,11 @@ PY
 
 apply_optional_patch .github/standalone-e2e-fix.patch.gz.b64 /tmp/moonjang-e2e-fix.patch
 apply_optional_patch .github/standalone-ui-fix.patch.gz.b64 /tmp/moonjang-ui-fix.patch
+apply_optional_patch .github/standalone-collection-fix.patch.gz.b64 /tmp/moonjang-collection-fix.patch
 
 test -s moonjang-production/e2e/standalone.spec.ts
 grep -q 'local_posts' moonjang-production/src/shared/localDb.ts
 grep -q 'VITE_STANDALONE' moonjang-production/src/shared/api.ts
 grep -q 'contentRevision' moonjang-production/src/App.tsx
+grep -q 'localEnsureDefaultCollection' moonjang-production/src/shared/localDb.ts
+grep -q '기본 서랍' moonjang-production/e2e/standalone.spec.ts
