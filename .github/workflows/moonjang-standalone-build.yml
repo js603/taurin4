@@ -1,0 +1,208 @@
+name: Moonjang Standalone Mobile Build
+
+on:
+  push:
+    branches: ["moonjang-standalone-build"]
+    paths:
+      - ".github/workflows/moonjang-standalone-build.yml"
+      - ".github/moonjang-source-tree.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  VITE_INTERNAL_TEST: "false"
+  VITE_API_BASE: "http://127.0.0.1:9"
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Restore production source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64,json,os,pathlib,urllib.request
+          repo=os.environ['GITHUB_REPOSITORY']; tree=pathlib.Path('.github/moonjang-source-tree.txt').read_text().strip(); token=os.environ['GH_TOKEN']
+          h={'Authorization':f'Bearer {token}','Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}
+          def g(u):
+            r=urllib.request.Request(u,headers=h)
+            with urllib.request.urlopen(r) as f:return json.load(f)
+          d=g(f'https://api.github.com/repos/{repo}/git/trees/{tree}?recursive=1')
+          n=0
+          for x in d['tree']:
+            if x['type']=='blob' and x['path'].startswith('moonjang-production/'):
+              b=g(x['url']); p=pathlib.Path(x['path']); p.parent.mkdir(parents=True,exist_ok=True); p.write_bytes(base64.b64decode(b['content'])); n+=1
+          if n < 20: raise SystemExit(f'incomplete source: {n}')
+          print('restored',n,'files from',tree)
+          PY
+          cd moonjang-production
+          mkdir -p src server cloudflare/src
+          cat ci-parts/app.*.part > src/App.tsx
+          cat ci-parts/styles.*.part > src/styles.css
+          cat ci-parts/localserver.*.part > server/local_sqlite_server.py
+          cat ci-parts/worker.*.part > cloudflare/src/index.ts
+          chmod +x server/local_sqlite_server.py server/smoke_test.py
+          test -s src/App.tsx && test -s src/shared/localDb.ts && test -s cloudflare/src/index.ts
+          grep -q 'sqlite:moonjang-local.db' src/shared/localDb.ts
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - name: Install dependencies
+        working-directory: moonjang-production
+        run: npm install --no-audit --no-fund
+      - name: Lint, unit test, and production web build
+        working-directory: moonjang-production
+        run: npm run check
+      - name: Typecheck optional Cloudflare sync API
+        working-directory: moonjang-production/cloudflare
+        run: npm install --no-audit --no-fund && npm run typecheck
+      - name: Add standalone UI assertion
+        working-directory: moonjang-production
+        shell: bash
+        run: |
+          cat > e2e/standalone-ui.spec.ts <<'EOF'
+          import { test, expect } from '@playwright/test';
+          test('standalone starts without API server configuration', async ({page}) => {
+            const handle=`local_${Date.now().toString().slice(-8)}`;
+            await page.goto('/');
+            await expect(page.getByText('내부 테스트 API 서버')).toHaveCount(0);
+            await page.getByLabel('필명').fill('로컬문장가');
+            await page.getByLabel('문장가 주소').fill(handle);
+            await page.getByRole('button',{name:'시작하기'}).click();
+            await expect(page.getByText('오늘 머물다 갈 문장들')).toBeVisible();
+            await page.getByRole('button',{name:'쓰기',exact:true}).click();
+            await page.getByPlaceholder('오늘 남기고 싶은 문장이 있나요?').fill('서버 없이도 이 문장은 기기에 남는다.');
+            await page.getByRole('button',{name:'남기기',exact:true}).click();
+            await expect(page.getByText('서버 없이도 이 문장은 기기에 남는다.')).toBeVisible();
+            await page.getByRole('button',{name:'서랍',exact:true}).click();
+            await expect(page.getByText('오래 두고 싶은 문장들.')).toBeVisible();
+            await page.getByRole('button',{name:'나',exact:true}).click();
+            await expect(page.getByText('나의 기록')).toBeVisible();
+          });
+          EOF
+      - name: Install Playwright Chromium
+        working-directory: moonjang-production
+        run: npx playwright install --with-deps chromium
+      - name: Standalone browser E2E without API server
+        working-directory: moonjang-production
+        run: npm run e2e
+
+  android:
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Restore production source
+        env: { GH_TOKEN: "${{ github.token }}" }
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64,json,os,pathlib,urllib.request
+          repo=os.environ['GITHUB_REPOSITORY'];tree=pathlib.Path('.github/moonjang-source-tree.txt').read_text().strip();token=os.environ['GH_TOKEN'];h={'Authorization':f'Bearer {token}','Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}
+          def g(u):
+            r=urllib.request.Request(u,headers=h)
+            with urllib.request.urlopen(r) as f:return json.load(f)
+          d=g(f'https://api.github.com/repos/{repo}/git/trees/{tree}?recursive=1')
+          for x in d['tree']:
+            if x['type']=='blob' and x['path'].startswith('moonjang-production/'):
+              b=g(x['url']);p=pathlib.Path(x['path']);p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(base64.b64decode(b['content']))
+          PY
+          cd moonjang-production; mkdir -p src server cloudflare/src
+          cat ci-parts/app.*.part > src/App.tsx
+          cat ci-parts/styles.*.part > src/styles.css
+          cat ci-parts/localserver.*.part > server/local_sqlite_server.py
+          cat ci-parts/worker.*.part > cloudflare/src/index.ts
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: "17" }
+      - uses: android-actions/setup-android@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+      - name: Resolve Android NDK
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          P="$(sdkmanager --list | awk '/^  ndk;[0-9]/{print $1}' | sort -V | tail -n 1)"; test -n "$P"; sdkmanager "$P"
+          V="$(ls -1 "$ANDROID_HOME/ndk" | sort -V | tail -n 1)"; echo "NDK_HOME=$ANDROID_HOME/ndk/$V" >> "$GITHUB_ENV"
+      - name: Build standalone APK
+        working-directory: moonjang-production
+        run: |
+          npm install --no-audit --no-fund
+          npm run tauri -- icon src-tauri/icons/icon.png
+          npm run tauri -- android init --ci
+          python3 scripts/ci/patch_android_debug.py
+          npm run tauri -- android build --debug --apk --ci -vv
+      - name: Stage APK
+        working-directory: moonjang-production
+        run: |
+          mkdir -p artifacts/android
+          APK="$(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' | head -n 1)"; test -s "$APK"
+          cp "$APK" artifacts/android/moonjang-ga-1.0.1-standalone.apk
+          sha256sum artifacts/android/*.apk > artifacts/android/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moonjang-android-standalone
+          path: moonjang-production/artifacts/android/
+          if-no-files-found: error
+          retention-days: 30
+
+  ios:
+    needs: quality
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Restore production source
+        env: { GH_TOKEN: "${{ github.token }}" }
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64,json,os,pathlib,urllib.request
+          repo=os.environ['GITHUB_REPOSITORY'];tree=pathlib.Path('.github/moonjang-source-tree.txt').read_text().strip();token=os.environ['GH_TOKEN'];h={'Authorization':f'Bearer {token}','Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}
+          def g(u):
+            r=urllib.request.Request(u,headers=h)
+            with urllib.request.urlopen(r) as f:return json.load(f)
+          d=g(f'https://api.github.com/repos/{repo}/git/trees/{tree}?recursive=1')
+          for x in d['tree']:
+            if x['type']=='blob' and x['path'].startswith('moonjang-production/'):
+              b=g(x['url']);p=pathlib.Path(x['path']);p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(base64.b64decode(b['content']))
+          PY
+          cd moonjang-production; mkdir -p src server cloudflare/src
+          cat ci-parts/app.*.part > src/App.tsx
+          cat ci-parts/styles.*.part > src/styles.css
+          cat ci-parts/localserver.*.part > server/local_sqlite_server.py
+          cat ci-parts/worker.*.part > cloudflare/src/index.ts
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+      - name: Build standalone unsigned iOS package
+        working-directory: moonjang-production
+        run: |
+          npm install --no-audit --no-fund
+          brew install xcodegen cocoapods
+          npm run tauri -- icon src-tauri/icons/icon.png
+          npm run tauri -- ios init --ci -vv
+          npm run tauri -- ios build --no-sign --ci -vv
+      - name: Stage unsigned iOS archive
+        working-directory: moonjang-production
+        shell: bash
+        run: |
+          mkdir -p artifacts/ios
+          find src-tauri/gen/apple/build -type f -name '*.ipa' -exec cp {} artifacts/ios/moonjang-ga-1.0.1-standalone-unsigned.ipa \; || true
+          A="$(find src-tauri/gen/apple/build -type d -name '*.xcarchive' | head -n 1 || true)"
+          if [ -n "$A" ]; then ditto -c -k --sequesterRsrc --keepParent "$A" artifacts/ios/moonjang-ga-1.0.1-standalone-unsigned.xcarchive.zip; fi
+          if ! find artifacts/ios -type f | grep -Eq '\.(ipa|zip)$'; then echo 'No iOS package produced' >&2; exit 1; fi
+          shasum -a 256 artifacts/ios/* > artifacts/ios/SHA256SUMS.txt || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moonjang-ios-standalone-unsigned
+          path: moonjang-production/artifacts/ios/
+          if-no-files-found: error
+          retention-days: 30
