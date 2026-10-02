@@ -1,0 +1,66 @@
+name: Moonjang Standalone ARM64 APK
+
+on:
+  push:
+    branches: ["moonjang-ga-mobile"]
+    paths:
+      - ".github/workflows/moonjang-standalone-arm64.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  VITE_INTERNAL_TEST: "false"
+  VITE_STANDALONE: "true"
+  VITE_API_BASE: https://api.moonjang.invalid
+
+jobs:
+  android-arm64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Restore verified standalone source
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: bash .github/scripts/restore-moonjang-standalone.sh
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: "17" }
+      - uses: android-actions/setup-android@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - name: Resolve Android NDK
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          P="$(sdkmanager --list | awk '/^  ndk;[0-9]/{print $1}' | sort -V | tail -n 1)"
+          test -n "$P"
+          sdkmanager "$P"
+          V="$(ls -1 "$ANDROID_HOME/ndk" | sort -V | tail -n 1)"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$V" >> "$GITHUB_ENV"
+      - name: Build standalone ARM64 APK
+        working-directory: moonjang-production
+        run: |
+          npm install --no-audit --no-fund
+          npm run tauri -- icon src-tauri/icons/icon.png
+          npm run tauri -- android init --ci
+          python3 scripts/ci/patch_android_debug.py
+          npm run tauri -- android build --debug --apk --target aarch64 --ci -vv
+      - name: Stage ARM64 APK
+        working-directory: moonjang-production
+        shell: bash
+        run: |
+          mkdir -p artifacts/android-arm64
+          APK="$(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
+          test -s "$APK"
+          cp "$APK" artifacts/android-arm64/moonjang-ga-1.0.1-standalone-arm64.apk
+          sha256sum artifacts/android-arm64/*.apk > artifacts/android-arm64/SHA256SUMS.txt
+          du -h artifacts/android-arm64/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moonjang-android-standalone-arm64-apk
+          path: moonjang-production/artifacts/android-arm64/
+          if-no-files-found: error
+          retention-days: 30
