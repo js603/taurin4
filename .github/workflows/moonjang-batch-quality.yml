@@ -1,0 +1,99 @@
+name: Moonjang Pending Batch Quality
+
+on:
+  push:
+    branches: ["moonjang-ga-mobile"]
+    paths:
+      - ".github/pending/moonjang-1.0.3.part*.b64"
+      - ".github/workflows/moonjang-batch-quality.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  VITE_INTERNAL_TEST: "false"
+  VITE_STANDALONE: "true"
+  VITE_API_BASE: https://api.moonjang.invalid
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Restore verified 1.0.2 standalone source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/restore-moonjang-standalone.sh
+
+      - name: Apply pending 1.0.3 batch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/pending/moonjang-1.0.3.part*.b64 > /tmp/moonjang-1.0.3.patch.gz.b64
+          base64 -d /tmp/moonjang-1.0.3.patch.gz.b64 > /tmp/moonjang-1.0.3.patch.gz
+          echo 'f34dd8fdbabc3ee2ec7da2db81db163bc3370fbbe88b852e9a8f7a94849f6c29  /tmp/moonjang-1.0.3.patch.gz' | sha256sum -c -
+          gzip -t /tmp/moonjang-1.0.3.patch.gz
+          gzip -dc /tmp/moonjang-1.0.3.patch.gz > /tmp/moonjang-1.0.3.patch
+          (cd moonjang-production && patch -p0 < /tmp/moonjang-1.0.3.patch)
+          grep -q 'localDeleteCollection' moonjang-production/src/shared/localDb.ts
+          grep -q 'moveCollectionItem' moonjang-production/src/shared/api.ts
+          grep -q '360px mobile layout' moonjang-production/e2e/standalone.spec.ts
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install app dependencies
+        working-directory: moonjang-production
+        run: npm install --no-audit --no-fund
+
+      - name: Lint, unit test, standalone production build
+        working-directory: moonjang-production
+        run: npm run check
+
+      - name: Typecheck Cloudflare D1 API
+        working-directory: moonjang-production/cloudflare
+        run: npm install --no-audit --no-fund && npm run typecheck
+
+      - name: Python syntax and SQLite regression smoke
+        working-directory: moonjang-production
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile server/local_sqlite_server.py server/smoke_test.py
+          rm -f /tmp/moonjang-batch-smoke.db
+          python3 server/local_sqlite_server.py --db /tmp/moonjang-batch-smoke.db --port 8787 --quiet &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          for i in {1..80}; do curl -fsS http://127.0.0.1:8787/health >/dev/null && break || sleep .1; done
+          python3 server/smoke_test.py
+          kill $PID
+          wait $PID 2>/dev/null || true
+          trap - EXIT
+
+      - name: Install Playwright Chromium
+        working-directory: moonjang-production
+        run: npx playwright install --with-deps chromium
+
+      - name: Standalone E2E with no API server
+        working-directory: moonjang-production
+        run: npx playwright test e2e/standalone.spec.ts
+
+      - name: Verify standalone bundle and mobile overflow guard
+        working-directory: moonjang-production
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -R "내부 테스트 API 서버" dist --include='*.js' --include='*.html'; then
+            echo 'Internal API UI leaked into standalone bundle' >&2
+            exit 1
+          fi
+          grep -q 'overflow-x: hidden' src/styles.css
+          grep -q 'min-height: var(--touch)' src/styles.css
+          grep -q 'overflow-wrap: anywhere' src/styles.css
+
+      - name: Quality summary
+        run: |
+          echo 'Pending batch quality passed. No Android/iOS artifact was built.'
