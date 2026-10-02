@@ -1,0 +1,171 @@
+--- cloudflare/src/index.ts
++++ cloudflare/src/index.ts
+@@ -69,6 +69,8 @@
+   if(m&&method==='GET'){const c=await env.DB.prepare("SELECT * FROM collections WHERE id=? AND (owner_id=? OR visibility='public')").bind(m[1],uid).first<Row>();if(!c)return json({error:'서랍을 찾을 수 없습니다.'},404);const query=c.owner_id===uid?'SELECT p.* FROM collection_items ci JOIN posts p ON p.id=ci.post_id WHERE ci.collection_id=? AND p.deleted_at IS NULL ORDER BY ci.position,ci.created_at':"SELECT p.* FROM collection_items ci JOIN posts p ON p.id=ci.post_id WHERE ci.collection_id=? AND p.deleted_at IS NULL AND p.visibility='public' ORDER BY ci.position,ci.created_at";const rows=(await env.DB.prepare(query).bind(c.id).all<Row>()).results;const items=[];for(const r of rows)items.push(await postOut(env,r,uid));return json({collection:{id:c.id,title:c.title,description:c.description,visibility:c.visibility,itemCount:items.length,items}});}
+   m=path.match(/^\/v1\/collections\/([^/]+)\/items$/);
+   if(m&&method==='POST'){const c=await env.DB.prepare('SELECT * FROM collections WHERE id=? AND owner_id=?').bind(m[1],uid).first<Row>();if(!c)return json({error:'서랍을 찾을 수 없습니다.'},404);const d=await body(req);await env.DB.prepare('INSERT OR IGNORE INTO collection_items(collection_id,post_id,created_at) VALUES(?,?,?)').bind(c.id,String(d.postId||''),now()).run();return json({ok:true});}
++  m=path.match(/^\/v1\/collections\/([^/]+)\/move$/);
++  if(m&&method==='POST'){const source=await env.DB.prepare('SELECT * FROM collections WHERE id=? AND owner_id=?').bind(m[1],uid).first<Row>();const d=await body(req),toCollectionId=String(d.toCollectionId||''),postId=String(d.postId||'');const target=await env.DB.prepare('SELECT * FROM collections WHERE id=? AND owner_id=?').bind(toCollectionId,uid).first<Row>();if(!source||!target)return json({error:'서랍을 찾을 수 없습니다.'},404);if(source.id===target.id)return json({ok:true});const exists=await env.DB.prepare('SELECT 1 x FROM collection_items WHERE collection_id=? AND post_id=?').bind(source.id,postId).first();if(!exists)return json({error:'옮길 문장을 찾을 수 없습니다.'},404);await env.DB.batch([env.DB.prepare('INSERT OR IGNORE INTO collection_items(collection_id,post_id,created_at) VALUES(?,?,?)').bind(target.id,postId,now()),env.DB.prepare('DELETE FROM collection_items WHERE collection_id=? AND post_id=?').bind(source.id,postId)]);return json({ok:true});}
+   if(path==='/v1/drafts'&&method==='PUT'){const d=await body(req);await env.DB.prepare('INSERT INTO drafts(user_id,type,content,updated_at) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET type=excluded.type,content=excluded.content,updated_at=excluded.updated_at').bind(uid,d.type||'sentence',String(d.content||''),now()).run();return json({ok:true});}
+   if(path==='/v1/drafts'&&method==='GET'){const d=await env.DB.prepare('SELECT * FROM drafts WHERE user_id=?').bind(uid).first<Row>();return json({content:d?.content||'',type:d?.type||'sentence'});}
+   if(path==='/v1/notifications'&&method==='GET'){const rows=(await env.DB.prepare('SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 80').bind(uid).all<Row>()).results;return json({items:rows.map(r=>({id:r.id,kind:r.kind,message:r.message,createdAt:r.created_at,read:!!r.read_at}))});}
+--- e2e/standalone.spec.ts
++++ e2e/standalone.spec.ts
+@@ -49,6 +49,29 @@
+   await page.getByRole('button', {name:'만들기'}).click();
+   await expect(page.getByText('오프라인 서랍')).toBeVisible();
+ 
++  const sourceShelf=page.locator('.collection-list').getByRole('button', {name:/기본 서랍/});
++  await sourceShelf.click();
++  const sourcePost=page.locator('.post-card').filter({hasText:edited});
++  const moveRow=sourcePost.locator('xpath=following-sibling::*[contains(@class, "create-row")][1]');
++  await moveRow.getByLabel('이동할 서랍').selectOption({label:'오프라인 서랍'});
++  await moveRow.getByRole('button', {name:'다른 서랍으로 옮기기'}).click();
++  await expect(page.getByRole('status')).toContainText('오프라인 서랍으로 옮겼습니다.');
++  await expect(page.getByText('이 서랍은 아직 비어 있습니다.')).toBeVisible();
++  await page.getByRole('button', {name:'← 나의 서랍'}).click();
++  await expect(page.locator('.collection-list').getByRole('button', {name:/기본 서랍/})).toContainText('0개의 문장');
++  const movedShelf=page.locator('.collection-list').getByRole('button', {name:/오프라인 서랍/});
++  await expect(movedShelf).toContainText('1개의 문장');
++  await movedShelf.click();
++  await expect(page.getByText(edited, {exact:true})).toBeVisible();
++  await page.getByRole('button', {name:'← 나의 서랍'}).click();
++  await page.reload();
++  await page.getByRole('button', {name:'서랍', exact:true}).click();
++  const persistedMovedShelf=page.locator('.collection-list').getByRole('button', {name:/오프라인 서랍/});
++  await expect(persistedMovedShelf).toContainText('1개의 문장');
++  await persistedMovedShelf.click();
++  await expect(page.getByText(edited, {exact:true})).toBeVisible();
++  await page.getByRole('button', {name:'← 나의 서랍'}).click();
++
+   await page.getByRole('button', {name:'발견', exact:true}).click();
+   await page.getByPlaceholder('단어, 문장, 사람을 찾아보세요.').fill('수정됨');
+   await page.getByRole('button', {name:'찾기'}).click();
+--- server/local_sqlite_server.py
++++ server/local_sqlite_server.py
+@@ -235,6 +235,22 @@
+                 c=conn.execute("SELECT * FROM collections WHERE id=? AND owner_id=?",(m.group(1),user_id)).fetchone()
+                 if not c:return self.json(404,{"error":"서랍을 찾을 수 없습니다."})
+                 post_id=str(self.read_json().get("postId",''));conn.execute("INSERT OR IGNORE INTO collection_items(collection_id,post_id,created_at) VALUES(?,?,?)",(c["id"],post_id,now()));conn.commit();return self.json(200,{"ok":True})
++            m=re.fullmatch(r"/v1/collections/([^/]+)/move",path)
++            if m and method=="POST":
++                source=conn.execute("SELECT * FROM collections WHERE id=? AND owner_id=?",(m.group(1),user_id)).fetchone()
++                d=self.read_json();target_id=str(d.get("toCollectionId",''));post_id=str(d.get("postId",''))
++                target=conn.execute("SELECT * FROM collections WHERE id=? AND owner_id=?",(target_id,user_id)).fetchone()
++                if not source or not target:return self.json(404,{"error":"서랍을 찾을 수 없습니다."})
++                if source["id"]==target["id"]:return self.json(200,{"ok":True})
++                if not conn.execute("SELECT 1 FROM collection_items WHERE collection_id=? AND post_id=?",(source["id"],post_id)).fetchone():return self.json(404,{"error":"옮길 문장을 찾을 수 없습니다."})
++                conn.execute("BEGIN IMMEDIATE")
++                try:
++                    conn.execute("INSERT OR IGNORE INTO collection_items(collection_id,post_id,created_at) VALUES(?,?,?)",(target["id"],post_id,now()))
++                    conn.execute("DELETE FROM collection_items WHERE collection_id=? AND post_id=?",(source["id"],post_id))
++                    conn.commit()
++                except Exception:
++                    conn.rollback();raise
++                return self.json(200,{"ok":True})
+             if path=="/v1/drafts" and method=="PUT":
+                 d=self.read_json();content=str(d.get("content",''));typ=d.get("type","sentence")
+                 conn.execute("INSERT INTO drafts(user_id,type,content,updated_at) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET type=excluded.type,content=excluded.content,updated_at=excluded.updated_at",(user_id,typ,content,now()));conn.commit();return self.json(200,{"ok":True})
+--- server/smoke_test.py
++++ server/smoke_test.py
+@@ -39,6 +39,12 @@
+     _,search=req('/v1/search?q=SQLite',token=ta);assert any(p['id']==pid for p in search['posts'])
+     req('/v1/drafts','PUT',{'type':'sentence','content':'자동 저장 초안'},ta);assert req('/v1/drafts',token=ta)[1]['content']=='자동 저장 초안'
+     _,pub=req('/v1/collections','POST',{'title':'공개 테스트 서랍','description':'공개 큐레이션','visibility':'public'},tb);assert pub['collection']['visibility']=='public'
++    _,move_src=req('/v1/collections','POST',{'title':'이동 원본','description':'','visibility':'private'},tb)
++    _,move_dst=req('/v1/collections','POST',{'title':'이동 대상','description':'','visibility':'private'},tb)
++    req(f"/v1/collections/{move_src['collection']['id']}/items",'POST',{'postId':pid},tb)
++    req(f"/v1/collections/{move_src['collection']['id']}/move",'POST',{'postId':pid,'toCollectionId':move_dst['collection']['id']},tb)
++    _,move_src_view=req(f"/v1/collections/{move_src['collection']['id']}",token=tb);assert all(p['id']!=pid for p in move_src_view['collection']['items'])
++    _,move_dst_view=req(f"/v1/collections/{move_dst['collection']['id']}",token=tb);assert any(p['id']==pid for p in move_dst_view['collection']['items'])
+     _,alpha_pub=req('/v1/collections','POST',{'title':'알파 공개 서랍','description':'비공개 글은 노출 금지','visibility':'public'},ta)
+     req(f"/v1/collections/{alpha_pub['collection']['id']}/items",'POST',{'postId':private_id},ta)
+     _,view_alpha_pub=req(f"/v1/collections/{alpha_pub['collection']['id']}",token=tb);assert all(p['id']!=private_id for p in view_alpha_pub['collection']['items'])
+--- src/App.tsx
++++ src/App.tsx
+@@ -146,9 +146,27 @@
+ 
+ function Library({collections,onRefresh,onOpen,onProfile}:{collections:Collection[];onRefresh:()=>void;onOpen:(p:Post)=>void;onProfile:(h:string)=>void}) {
+   const [selected,setSelected]=useState<Collection|null>(null); const [title,setTitle]=useState(""); const [visibility,setVisibility]=useState<'private'|'public'>('private');
++  const [moveTargets,setMoveTargets]=useState<Record<string,string>>({}); const [message,setMessage]=useState(""); const [busyPost,setBusyPost]=useState<string|null>(null);
+   async function create(){if(!title.trim())return;await api.createCollection(title.trim(),"",visibility);setTitle('');setVisibility('private');onRefresh()}
+-  async function open(c:Collection){const r=await api.collection(c.id);setSelected(r.collection)}
+-  if(selected) return <section><button className="back" onClick={()=>setSelected(null)}>← 나의 서랍</button><div className="section-heading"><h1>{selected.title}</h1><p>{selected.description||'오래 두고 싶은 문장들.'}</p></div>{selected.items?.map(p=><PostCard key={p.id} post={p} onOpen={onOpen} onProfile={onProfile}/> )}</section>;
++  async function open(c:Collection){const r=await api.collection(c.id);setSelected(r.collection);setMessage('')}
++  async function move(post:Post){
++    if(!selected)return;
++    const candidates=collections.filter(c=>c.id!==selected.id);
++    const targetId=moveTargets[post.id]||candidates[0]?.id;
++    if(!targetId)return;
++    setBusyPost(post.id);setMessage('');
++    try{
++      await api.moveCollectionItem(selected.id,targetId,post.id);
++      const [updated,target]=await Promise.all([api.collection(selected.id),api.collection(targetId)]);
++      setSelected(updated.collection);
++      setMessage(`「${post.leadSentence||post.content.slice(0,24)}」을(를) ${target.collection.title}으로 옮겼습니다.`);
++      onRefresh();
++    }finally{setBusyPost(null)}
++  }
++  if(selected){
++    const candidates=collections.filter(c=>c.id!==selected.id);
++    return <section><button className="back" onClick={()=>setSelected(null)}>← 나의 서랍</button><div className="section-heading"><h1>{selected.title}</h1><p>{selected.description||'오래 두고 싶은 문장들.'}</p></div>{message&&<p role="status">{message}</p>}{selected.items?.length?selected.items.map(p=><div key={p.id}><PostCard post={p} onOpen={onOpen} onProfile={onProfile}/><div className="create-row"><select aria-label="이동할 서랍" value={moveTargets[p.id]||candidates[0]?.id||''} onChange={e=>setMoveTargets(v=>({...v,[p.id]:e.target.value}))} disabled={!candidates.length||busyPost===p.id}>{candidates.length?candidates.map(c=><option key={c.id} value={c.id}>{c.title}</option>):<option value="">다른 서랍이 없습니다</option>}</select><button disabled={!candidates.length||busyPost===p.id} onClick={()=>move(p)}>{busyPost===p.id?'옮기는 중':'다른 서랍으로 옮기기'}</button></div></div>):<Empty title="이 서랍은 아직 비어 있습니다." body="간직한 문장을 다른 서랍에서 옮겨올 수 있습니다."/>}</section>;
++  }
+   return <section><div className="section-heading"><p className="date">나의 서랍</p><h1>오래 두고 싶은 문장들.</h1></div><div className="create-row"><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="새 서랍 이름"/><select value={visibility} onChange={e=>setVisibility(e.target.value as 'private'|'public')}><option value="private">나만 보기</option><option value="public">공개</option></select><button onClick={create}>만들기</button></div>
+     <div className="collection-list">{collections.map(c=><button key={c.id} onClick={()=>open(c)}><strong>{c.title}</strong><span>{c.itemCount}개의 문장 · {c.visibility==='public'?'공개':'나만 보기'}</span></button>)}</div>
+   </section>;
+--- src/shared/api.ts
++++ src/shared/api.ts
+@@ -402,6 +402,23 @@
+     return {ok:true};
+   }
+ 
++  async moveCollectionItem(fromCollectionId:string,toCollectionId:string,postId:string) {
++    if(fromCollectionId===toCollectionId)return {ok:true};
++    const body={postId,toCollectionId};
++    if(this.online() && !this.localSession()){
++      try{return await this.raw<{ok:boolean}>(`/v1/collections/${fromCollectionId}/move`,{method:"POST",body:JSON.stringify(body)});}
++      catch(error){if(!isNetworkFailure(error)) throw error;}
++    }
++    if(!this.localSession()) await this.enqueue("POST",`/v1/collections/${fromCollectionId}/move`,body);
++    await localDb.localMoveCollectionItem(fromCollectionId,toCollectionId,postId);
++    const collections=await localDb.localCollections();
++    await localDb.cacheSet("collections",{items:collections});
++    for(const collection of collections){
++      await localDb.cacheSet(`collection:${collection.id}`,{collection});
++    }
++    return {ok:true};
++  }
++
+   async saveDraft(content: string, type = "sentence") {
+     await localDb.set("draftLocal",{content,type});
+     if(!this.online() || this.localSession()) return {ok:true};
+--- src/shared/localDb.ts
++++ src/shared/localDb.ts
+@@ -307,6 +307,27 @@
+     await conn.execute("DELETE FROM local_collection_items WHERE collection_id=$1 AND post_id=$2",[collectionId,postId]);
+   },
+ 
++  async localMoveCollectionItem(fromCollectionId:string,toCollectionId:string,postId:string) {
++    if(fromCollectionId===toCollectionId)return;
++    const conn=await db();
++    if(!conn){
++      const map=browserGet<Record<string,string[]>>("domain","collectionItems")??{};
++      map[toCollectionId]=Array.from(new Set([...(map[toCollectionId]??[]),postId]));
++      map[fromCollectionId]=(map[fromCollectionId]??[]).filter(id=>id!==postId);
++      browserSet("domain","collectionItems",map);
++      return;
++    }
++    await conn.execute("BEGIN IMMEDIATE");
++    try{
++      await conn.execute("INSERT OR IGNORE INTO local_collection_items(collection_id,post_id,created_at) VALUES($1,$2,$3)",[toCollectionId,postId,Date.now()]);
++      await conn.execute("DELETE FROM local_collection_items WHERE collection_id=$1 AND post_id=$2",[fromCollectionId,postId]);
++      await conn.execute("COMMIT");
++    }catch(error){
++      try{await conn.execute("ROLLBACK")}catch{}
++      throw error;
++    }
++  },
++
+   async localCollectionItems(collectionId:string): Promise<Post[]> {
+     const conn=await db();
+     if(!conn){const ids=(browserGet<Record<string,string[]>>("domain","collectionItems")??{})[collectionId]??[];const posts=await this.localPosts();return ids.map(id=>posts.find(p=>p.id===id)).filter(Boolean) as Post[];}
