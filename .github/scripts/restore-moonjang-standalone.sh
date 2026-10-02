@@ -34,8 +34,13 @@ cat moonjang-production/ci-parts/styles.*.part > moonjang-production/src/styles.
 cat moonjang-production/ci-parts/localserver.*.part > moonjang-production/server/local_sqlite_server.py
 cat moonjang-production/ci-parts/worker.*.part > moonjang-production/cloudflare/src/index.ts
 
-curl -fsSL "https://raw.githubusercontent.com/${REPO}/${STABLE_PATCH_COMMIT}/.github/standalone-v2.patch.gz.b64" \
-  | base64 -d | gzip -dc > /tmp/moonjang-standalone.patch
+curl -fsSL "https://raw.githubusercontent.com/${REPO}/${STABLE_PATCH_COMMIT}/.github/standalone-v2.patch.gz.b64" > /tmp/moonjang-standalone.patch.gz.b64
+python3 - /tmp/moonjang-standalone.patch.gz.b64 /tmp/moonjang-standalone.patch.gz <<'PY'
+import base64, pathlib, sys
+src, dst = map(pathlib.Path, sys.argv[1:3])
+dst.write_bytes(base64.b64decode(src.read_text()))
+PY
+gzip -dc /tmp/moonjang-standalone.patch.gz > /tmp/moonjang-standalone.patch
 (
   cd moonjang-production
   patch -p0 < /tmp/moonjang-standalone.patch
@@ -43,9 +48,15 @@ curl -fsSL "https://raw.githubusercontent.com/${REPO}/${STABLE_PATCH_COMMIT}/.gi
 
 apply_optional_patch() {
   local encoded="$1"
+  local decoded_gz="$2.gz"
   local decoded="$2"
   if [[ -s "$encoded" ]]; then
-    base64 -d "$encoded" | gzip -dc > "$decoded"
+    python3 - "$encoded" "$decoded_gz" <<'PY'
+import base64, pathlib, sys
+src, dst = map(pathlib.Path, sys.argv[1:3])
+dst.write_bytes(base64.b64decode(src.read_text()))
+PY
+    gzip -dc "$decoded_gz" > "$decoded"
     (
       cd moonjang-production
       patch -p0 < "$decoded"
