@@ -5,6 +5,7 @@ on:
     branches: ["moonjang-ga-mobile"]
     paths:
       - ".github/pending/moonjang-1.0.3.part*.b64"
+      - ".github/pending/moonjang-1.0.3-e2e-status-fix.patch"
       - ".github/workflows/moonjang-batch-quality.yml"
   workflow_dispatch:
 
@@ -37,6 +38,7 @@ jobs:
           gzip -t /tmp/moonjang-1.0.3.patch.gz
           gzip -dc /tmp/moonjang-1.0.3.patch.gz > /tmp/moonjang-1.0.3.patch
           (cd moonjang-production && patch -p0 < /tmp/moonjang-1.0.3.patch)
+          (cd moonjang-production && patch -p0 < ../.github/pending/moonjang-1.0.3-e2e-status-fix.patch)
           grep -q 'localDeleteCollection' moonjang-production/src/shared/localDb.ts
           grep -q 'moveCollectionItem' moonjang-production/src/shared/api.ts
           grep -q '360px mobile layout' moonjang-production/e2e/standalone.spec.ts
