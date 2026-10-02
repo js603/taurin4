@@ -41,14 +41,22 @@ curl -fsSL "https://raw.githubusercontent.com/${REPO}/${STABLE_PATCH_COMMIT}/.gi
   patch -p0 < /tmp/moonjang-standalone.patch
 )
 
-if [[ -s .github/standalone-e2e-fix.patch.gz.b64 ]]; then
-  base64 -d .github/standalone-e2e-fix.patch.gz.b64 | gzip -dc > /tmp/moonjang-e2e-fix.patch
-  (
-    cd moonjang-production
-    patch -p0 < /tmp/moonjang-e2e-fix.patch
-  )
-fi
+apply_optional_patch() {
+  local encoded="$1"
+  local decoded="$2"
+  if [[ -s "$encoded" ]]; then
+    base64 -d "$encoded" | gzip -dc > "$decoded"
+    (
+      cd moonjang-production
+      patch -p0 < "$decoded"
+    )
+  fi
+}
+
+apply_optional_patch .github/standalone-e2e-fix.patch.gz.b64 /tmp/moonjang-e2e-fix.patch
+apply_optional_patch .github/standalone-ui-fix.patch.gz.b64 /tmp/moonjang-ui-fix.patch
 
 test -s moonjang-production/e2e/standalone.spec.ts
 grep -q 'local_posts' moonjang-production/src/shared/localDb.ts
 grep -q 'VITE_STANDALONE' moonjang-production/src/shared/api.ts
+grep -q 'contentRevision' moonjang-production/src/App.tsx
