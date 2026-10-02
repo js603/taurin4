@@ -64,9 +64,25 @@ PY
   fi
 }
 
+apply_plain_patch() {
+  local encoded="$1"
+  local decoded="$2"
+  if [[ -s "$encoded" ]]; then
+    python3 - "$encoded" "$decoded" <<'PY'
+import base64, pathlib, sys
+src, dst = map(pathlib.Path, sys.argv[1:3])
+dst.write_bytes(base64.b64decode(src.read_text()))
+PY
+    (
+      cd moonjang-production
+      patch -p0 < "$decoded"
+    )
+  fi
+}
+
 apply_optional_patch .github/standalone-e2e-fix.patch.gz.b64 /tmp/moonjang-e2e-fix.patch
 apply_optional_patch .github/standalone-ui-fix.patch.gz.b64 /tmp/moonjang-ui-fix.patch
-apply_optional_patch .github/standalone-collection-fix.patch.gz.b64 /tmp/moonjang-collection-fix.patch
+apply_plain_patch .github/standalone-collection-fix.patch.b64 /tmp/moonjang-collection-fix.patch
 
 test -s moonjang-production/e2e/standalone.spec.ts
 grep -q 'local_posts' moonjang-production/src/shared/localDb.ts
