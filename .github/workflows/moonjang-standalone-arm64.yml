@@ -1,12 +1,6 @@
 name: Moonjang Standalone ARM64 APK
 
 on:
-  push:
-    branches: ["moonjang-ga-mobile"]
-    paths:
-      - ".github/workflows/moonjang-standalone-arm64.yml"
-      - ".github/scripts/restore-moonjang-standalone.sh"
-      - ".github/standalone-collection-fix.patch.b64"
   workflow_dispatch:
 
 permissions:
