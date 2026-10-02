@@ -1,0 +1,154 @@
+name: Moonjang Standalone Local-First Build v2
+
+on:
+  push:
+    branches: ["moonjang-ga-mobile"]
+    paths:
+      - ".github/workflows/moonjang-standalone-build-v2.yml"
+      - ".github/scripts/restore-moonjang-standalone.sh"
+      - ".github/standalone-e2e-fix.patch.gz.b64"
+      - ".github/moonjang-source-tree.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  VITE_INTERNAL_TEST: "false"
+  VITE_STANDALONE: "true"
+  VITE_API_BASE: https://api.moonjang.invalid
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Restore standalone source
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: bash .github/scripts/restore-moonjang-standalone.sh
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - name: Install dependencies
+        working-directory: moonjang-production
+        run: npm install --no-audit --no-fund
+      - name: Lint, unit test, standalone build
+        working-directory: moonjang-production
+        run: npm run check
+      - name: Install Playwright Chromium
+        working-directory: moonjang-production
+        run: npx playwright install --with-deps chromium
+      - name: Standalone E2E with no API server
+        working-directory: moonjang-production
+        run: npx playwright test e2e/standalone.spec.ts
+      - name: Verify internal API UI is absent
+        working-directory: moonjang-production
+        shell: bash
+        run: |
+          if grep -R "내부 테스트 API 서버" dist --include='*.js' --include='*.html'; then
+            echo 'Internal API UI leaked into standalone bundle' >&2
+            exit 1
+          fi
+
+  source:
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Restore standalone source
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: bash .github/scripts/restore-moonjang-standalone.sh
+      - name: Package source
+        run: tar --exclude=node_modules --exclude=dist --exclude=src-tauri/gen -czf moonjang-ga-1.0.1-standalone-source.tar.gz -C moonjang-production .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moonjang-standalone-source-v2
+          path: moonjang-ga-1.0.1-standalone-source.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+  android:
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Restore standalone source
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: bash .github/scripts/restore-moonjang-standalone.sh
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: "17" }
+      - uses: android-actions/setup-android@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+      - name: Resolve Android NDK
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          P="$(sdkmanager --list | awk '/^  ndk;[0-9]/{print $1}' | sort -V | tail -n 1)"
+          test -n "$P"
+          sdkmanager "$P"
+          V="$(ls -1 "$ANDROID_HOME/ndk" | sort -V | tail -n 1)"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$V" >> "$GITHUB_ENV"
+      - name: Build standalone APK
+        working-directory: moonjang-production
+        run: |
+          npm install --no-audit --no-fund
+          npm run tauri -- icon src-tauri/icons/icon.png
+          npm run tauri -- android init --ci
+          python3 scripts/ci/patch_android_debug.py
+          npm run tauri -- android build --debug --apk --ci -vv
+      - name: Stage APK
+        working-directory: moonjang-production
+        shell: bash
+        run: |
+          mkdir -p artifacts/android
+          APK="$(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
+          test -s "$APK"
+          cp "$APK" artifacts/android/moonjang-ga-1.0.1-standalone.apk
+          sha256sum artifacts/android/*.apk > artifacts/android/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moonjang-android-standalone-apk-v2
+          path: moonjang-production/artifacts/android/
+          if-no-files-found: error
+          retention-days: 30
+
+  ios:
+    needs: quality
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Restore standalone source
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: bash .github/scripts/restore-moonjang-standalone.sh
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+      - name: Build standalone unsigned iOS package
+        working-directory: moonjang-production
+        run: |
+          npm install --no-audit --no-fund
+          brew install xcodegen cocoapods
+          npm run tauri -- icon src-tauri/icons/icon.png
+          npm run tauri -- ios init --ci -vv
+          npm run tauri -- ios build --no-sign --ci -vv
+      - name: Stage iOS artifacts
+        working-directory: moonjang-production
+        shell: bash
+        run: |
+          mkdir -p artifacts/ios
+          find src-tauri/gen/apple/build -type f -name '*.ipa' -exec cp {} artifacts/ios/moonjang-ga-1.0.1-standalone-unsigned.ipa \; || true
+          A="$(find src-tauri/gen/apple/build -type d -name '*.xcarchive' | head -n 1 || true)"
+          if [ -n "$A" ]; then ditto -c -k --sequesterRsrc --keepParent "$A" artifacts/ios/moonjang-ga-1.0.1-standalone-unsigned.xcarchive.zip; fi
+          if ! find artifacts/ios -type f | grep -Eq '\.(ipa|zip)$'; then echo 'No iOS package produced' >&2; exit 1; fi
+          shasum -a 256 artifacts/ios/* > artifacts/ios/SHA256SUMS.txt || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moonjang-ios-standalone-unsigned-v2
+          path: moonjang-production/artifacts/ios/
+          if-no-files-found: error
+          retention-days: 30
