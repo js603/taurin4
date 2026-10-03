@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/pending/moonjang-1.0.3.part*.b64"
       - ".github/pending/moonjang-1.0.3-e2e-status-fix.patch"
+      - ".github/pending/moonjang-1.0.3-refresh-fix.patch"
       - ".github/workflows/moonjang-batch-quality.yml"
   workflow_dispatch:
 
@@ -39,8 +40,10 @@ jobs:
           gzip -dc /tmp/moonjang-1.0.3.patch.gz > /tmp/moonjang-1.0.3.patch
           (cd moonjang-production && patch -p0 < /tmp/moonjang-1.0.3.patch)
           (cd moonjang-production && patch -p0 < ../.github/pending/moonjang-1.0.3-e2e-status-fix.patch)
+          (cd moonjang-production && patch -p0 < ../.github/pending/moonjang-1.0.3-refresh-fix.patch)
           grep -q 'localDeleteCollection' moonjang-production/src/shared/localDb.ts
           grep -q 'moveCollectionItem' moonjang-production/src/shared/api.ts
+          grep -q 'onRefresh={refreshCore}' moonjang-production/src/App.tsx
           grep -q '360px mobile layout' moonjang-production/e2e/standalone.spec.ts
 
       - uses: actions/setup-node@v5
@@ -97,5 +100,4 @@ jobs:
           grep -q 'overflow-wrap: anywhere' src/styles.css
 
       - name: Quality summary
-        run: |
-          echo 'Pending batch quality passed. No Android/iOS artifact was built.'
+        run: echo 'Moonjang 1.0.3 pending batch quality passed.'
