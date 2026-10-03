@@ -1,0 +1,176 @@
+name: Moonjang 1.0.3 Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  VITE_INTERNAL_TEST: "false"
+  VITE_STANDALONE: "true"
+  VITE_API_BASE: https://api.moonjang.invalid
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Restore and apply 1.0.3
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          bash .github/scripts/restore-moonjang-standalone.sh
+          bash .github/scripts/apply-moonjang-1.0.3.sh
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - name: Install dependencies
+        working-directory: moonjang-production
+        run: npm install --no-audit --no-fund
+      - name: Lint unit and production build
+        working-directory: moonjang-production
+        run: npm run check
+      - name: D1 typecheck and migration
+        working-directory: moonjang-production/cloudflare
+        run: npm install --no-audit --no-fund && npm run typecheck
+      - name: SQLite regression smoke
+        working-directory: moonjang-production
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile server/local_sqlite_server.py server/smoke_test.py
+          rm -f /tmp/moonjang-103-smoke.db
+          python3 server/local_sqlite_server.py --db /tmp/moonjang-103-smoke.db --port 8787 --quiet &
+          PID=$!; trap 'kill $PID 2>/dev/null || true' EXIT
+          for i in {1..80}; do curl -fsS http://127.0.0.1:8787/health >/dev/null && break || sleep .1; done
+          python3 server/smoke_test.py
+          kill $PID; wait $PID 2>/dev/null || true; trap - EXIT
+      - name: Install Playwright Chromium
+        working-directory: moonjang-production
+        run: npx playwright install --with-deps chromium
+      - name: Standalone E2E
+        working-directory: moonjang-production
+        run: npx playwright test e2e/standalone.spec.ts
+      - name: Release guards
+        working-directory: moonjang-production
+        shell: bash
+        run: |
+          if grep -R "내부 테스트 API 서버" dist --include='*.js' --include='*.html'; then exit 1; fi
+          grep -Eq 'overflow-x:[[:space:]]*hidden' src/styles.css
+          grep -Eq 'overflow-wrap:[[:space:]]*anywhere' src/styles.css
+
+  source:
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Restore and apply 1.0.3
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          bash .github/scripts/restore-moonjang-standalone.sh
+          bash .github/scripts/apply-moonjang-1.0.3.sh
+      - name: Package source
+        run: tar --exclude=node_modules --exclude=dist --exclude=src-tauri/gen -czf moonjang-ga-1.0.3-standalone-source.tar.gz -C moonjang-production .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moonjang-1.0.3-source
+          path: moonjang-ga-1.0.3-standalone-source.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+  android-arm64:
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Restore and apply 1.0.3
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          bash .github/scripts/restore-moonjang-standalone.sh
+          bash .github/scripts/apply-moonjang-1.0.3.sh
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: "17" }
+      - uses: android-actions/setup-android@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: aarch64-linux-android }
+      - name: Resolve Android NDK
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          P="$(sdkmanager --list | awk '/^  ndk;[0-9]/{print $1}' | sort -V | tail -n 1)"
+          test -n "$P"; sdkmanager "$P"
+          V="$(ls -1 "$ANDROID_HOME/ndk" | sort -V | tail -n 1)"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$V" >> "$GITHUB_ENV"
+      - name: Build ARM64 APK
+        working-directory: moonjang-production
+        run: |
+          npm install --no-audit --no-fund
+          npm run tauri -- icon src-tauri/icons/icon.png
+          npm run tauri -- android init --ci
+          python3 scripts/ci/patch_android_debug.py
+          npm run tauri -- android build --debug --apk --target aarch64 --ci -vv
+      - name: Stage Android artifact
+        working-directory: moonjang-production
+        shell: bash
+        run: |
+          mkdir -p artifacts/android
+          APK="$(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
+          test -s "$APK"
+          cp "$APK" artifacts/android/moonjang-ga-1.0.3-standalone-arm64.apk
+          sha256sum artifacts/android/*.apk > artifacts/android/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moonjang-1.0.3-android-arm64
+          path: moonjang-production/artifacts/android/
+          if-no-files-found: error
+          retention-days: 30
+
+  ios:
+    needs: quality
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Restore and apply 1.0.3
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          bash .github/scripts/restore-moonjang-standalone.sh
+          bash .github/scripts/apply-moonjang-1.0.3.sh
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios }
+      - name: Build unsigned iOS package
+        working-directory: moonjang-production
+        run: |
+          npm install --no-audit --no-fund
+          brew install xcodegen cocoapods
+          npm run tauri -- icon src-tauri/icons/icon.png
+          npm run tauri -- ios init --ci -vv
+          npm run tauri -- ios build --no-sign --ci -vv
+      - name: Stage iOS artifacts
+        working-directory: moonjang-production
+        shell: bash
+        run: |
+          mkdir -p artifacts/ios Payload
+          IPA="$(find src-tauri/gen/apple/build -type f -name '*.ipa' | head -n 1 || true)"
+          if [ -n "$IPA" ]; then cp "$IPA" artifacts/ios/moonjang-ga-1.0.3-standalone-unsigned.ipa; fi
+          A="$(find src-tauri/gen/apple/build -type d -name '*.xcarchive' | head -n 1 || true)"
+          if [ -n "$A" ]; then
+            ditto -c -k --sequesterRsrc --keepParent "$A" artifacts/ios/moonjang-ga-1.0.3-standalone-unsigned.xcarchive.zip
+            if [ ! -s artifacts/ios/moonjang-ga-1.0.3-standalone-unsigned.ipa ]; then
+              APP="$(find "$A/Products/Applications" -maxdepth 1 -type d -name '*.app' | head -n 1 || true)"
+              test -n "$APP"
+              mkdir -p Payload
+              cp -R "$APP" Payload/
+              zip -qry artifacts/ios/moonjang-ga-1.0.3-standalone-unsigned.ipa Payload
+            fi
+          fi
+          test -s artifacts/ios/moonjang-ga-1.0.3-standalone-unsigned.ipa
+          shasum -a 256 artifacts/ios/* > artifacts/ios/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moonjang-1.0.3-ios-unsigned
+          path: moonjang-production/artifacts/ios/
+          if-no-files-found: error
+          retention-days: 30
