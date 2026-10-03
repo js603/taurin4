@@ -1,0 +1,47 @@
+name: Moonjang Batch Diagnostic
+
+on:
+  push:
+    branches: ["moonjang-ga-mobile"]
+    paths:
+      - ".github/workflows/moonjang-batch-diagnostic.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  VITE_INTERNAL_TEST: "false"
+  VITE_STANDALONE: "true"
+  VITE_API_BASE: https://api.moonjang.invalid
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Restore standalone source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/restore-moonjang-standalone.sh
+      - name: Apply 1.0.3 batch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/pending/moonjang-1.0.3.part*.b64 > /tmp/moonjang-1.0.3.patch.gz.b64
+          base64 -d /tmp/moonjang-1.0.3.patch.gz.b64 > /tmp/moonjang-1.0.3.patch.gz
+          gzip -dc /tmp/moonjang-1.0.3.patch.gz > /tmp/moonjang-1.0.3.patch
+          (cd moonjang-production && patch -p0 < /tmp/moonjang-1.0.3.patch)
+          (cd moonjang-production && patch -p0 < ../.github/pending/moonjang-1.0.3-e2e-status-fix.patch)
+      - name: Inspect collection state code
+        working-directory: moonjang-production
+        shell: bash
+        run: |
+          echo '--- api removeCollectionItem ---'
+          grep -n -A40 -B15 'removeCollectionItem' src/shared/api.ts || true
+          echo '--- api moveCollectionItem ---'
+          grep -n -A30 -B10 'moveCollectionItem' src/shared/api.ts || true
+          echo '--- localDb remove collection item ---'
+          grep -n -A35 -B10 'localRemoveCollectionItem' src/shared/localDb.ts || true
+          echo '--- test around failing line ---'
+          nl -ba e2e/standalone.spec.ts | sed -n '45,75p'
