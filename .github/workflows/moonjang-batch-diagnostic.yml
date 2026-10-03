@@ -33,15 +33,15 @@ jobs:
           gzip -dc /tmp/moonjang-1.0.3.patch.gz > /tmp/moonjang-1.0.3.patch
           (cd moonjang-production && patch -p0 < /tmp/moonjang-1.0.3.patch)
           (cd moonjang-production && patch -p0 < ../.github/pending/moonjang-1.0.3-e2e-status-fix.patch)
-      - name: Inspect collection and UI state code
+      - name: Inspect refresh wiring
         working-directory: moonjang-production
         shell: bash
         run: |
-          echo '--- api removeCollectionItem ---'
-          grep -n -A25 -B10 'removeCollectionItem' src/shared/api.ts || true
-          echo '--- collect button strings ---'
-          grep -R -n -A8 -B8 '간직하기\|간직됨' src || true
-          echo '--- PostCard component ---'
-          sed -n '1,220p' src/components/PostCard.tsx || true
-          echo '--- test around failing line ---'
-          nl -ba e2e/standalone.spec.ts | sed -n '45,75p'
+          echo '--- refresh functions ---'
+          grep -n -A35 -B10 'refreshAll\|refreshCollections\|contentRevision' src/App.tsx || true
+          echo '--- Library usage ---'
+          grep -n -A12 -B12 '<Library' src/App.tsx || true
+          echo '--- Library declaration ---'
+          grep -n -A28 -B5 'function Library' src/App.tsx || true
+          echo '--- feed usage ---'
+          grep -n -A20 -B10 'function Home\|function Today\|<PostCard' src/App.tsx || true
