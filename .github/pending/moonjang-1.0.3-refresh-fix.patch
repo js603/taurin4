@@ -1,0 +1,19 @@
+--- src/App.tsx
++++ src/App.tsx
+@@ -74,7 +74,7 @@
+       {tab === "today" && <Today posts={feed} onCollect={collect} onOpen={post=>setOverlay({kind:"post",post})} onProfile={handle=>setOverlay({kind:"profile",handle})} />}
+       {tab === "discover" && <Discover data={discover} onOpen={post=>setOverlay({kind:"post",post})} onProfile={handle=>setOverlay({kind:"profile",handle})} onCollection={id=>setOverlay({kind:"collection",id})} onCollect={collect} />}
+       {tab === "write" && <Writer onPublished={async post=>{ setFeed(v=>[post,...v]); setTab("today"); notify("문장이 남겨졌습니다."); await refreshCore(); }} />}
+-      {tab === "library" && <Library collections={collections} onRefresh={async()=>setCollections((await api.collections()).items)} onOpen={post=>setOverlay({kind:"post",post})} onProfile={handle=>setOverlay({kind:"profile",handle})} />}
++      {tab === "library" && <Library collections={collections} onRefresh={refreshCore} onOpen={post=>setOverlay({kind:"post",post})} onProfile={handle=>setOverlay({kind:"profile",handle})} />}
+       {tab === "me" && <Me session={session} insights={insights} revision={contentRevision} onOpen={post=>setOverlay({kind:"post",post})} onSessionChanged={async user=>{const next={...session,user};await persistSession(next);setSession(next)}} />}
+     </main>
+@@ -144,7 +144,7 @@
+   </section>;
+ }
+ 
+-function Library({collections,onRefresh,onOpen,onProfile}:{collections:Collection[];onRefresh:()=>void;onOpen:(p:Post)=>void;onProfile:(h:string)=>void}) {
++function Library({collections,onRefresh,onOpen,onProfile}:{collections:Collection[];onRefresh:()=>Promise<void>;onOpen:(p:Post)=>void;onProfile:(h:string)=>void}) {
+   const [selected,setSelected]=useState<Collection|null>(null);
+   const [title,setTitle]=useState(""); const [description,setDescription]=useState(""); const [visibility,setVisibility]=useState<'private'|'public'>('private');
+   const [editing,setEditing]=useState(false); const [editTitle,setEditTitle]=useState(""); const [editDescription,setEditDescription]=useState(""); const [editVisibility,setEditVisibility]=useState<'private'|'public'>('private');
