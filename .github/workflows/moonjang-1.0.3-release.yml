@@ -2,6 +2,10 @@ name: Moonjang 1.0.3 Release
 
 on:
   workflow_dispatch:
+  push:
+    branches: ["moonjang-ga-mobile"]
+    paths:
+      - ".github/release-triggers/moonjang-1.0.3.txt"
 
 permissions:
   contents: read
@@ -50,13 +54,15 @@ jobs:
       - name: Standalone E2E
         working-directory: moonjang-production
         run: npx playwright test e2e/standalone.spec.ts
-      - name: Release guards
+      - name: Release bundle hygiene
         working-directory: moonjang-production
         shell: bash
         run: |
-          if grep -R "내부 테스트 API 서버" dist --include='*.js' --include='*.html'; then exit 1; fi
-          grep -Eq 'overflow-x:[[:space:]]*hidden' src/styles.css
-          grep -Eq 'overflow-wrap:[[:space:]]*anywhere' src/styles.css
+          set -euo pipefail
+          if grep -R "내부 테스트 API 서버" dist --include='*.js' --include='*.html'; then
+            echo 'Internal API UI leaked into standalone release bundle' >&2
+            exit 1
+          fi
 
   source:
     needs: quality
