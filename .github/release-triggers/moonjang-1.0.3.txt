@@ -1,0 +1,2 @@
+Moonjang 1.0.3 standalone release trigger
+Quality gate: run 37179973296 SUCCESS
